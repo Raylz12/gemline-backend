@@ -143,7 +143,7 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .img-spinner{width:30px;height:30px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin:20px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 .card-img-wrap{position:absolute;inset:0;overflow:hidden;border-radius:7px;z-index:1}
-.no-img .initials{opacity:1}.card-img-wrap+.initials{display:none}.card-img-wrap+.initials+.nm{display:none}.card-img-wrap+.initials+.nm+.vr{display:none}
+.has-img .initials,.has-img .nm,.has-img .vr{opacity:0;pointer-events:none}
 /* price range bar */
 .range-wrap{margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
 .range-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:5px}
@@ -483,6 +483,36 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .toast.warn .ti{background:var(--down)}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media(max-width:760px){.credit-packs{grid-template-columns:1fr}.trade-build{grid-template-columns:1fr}.trade-mid{transform:rotate(90deg)}.trade-body{grid-template-columns:1fr}.trade-mid .swap{margin:4px auto}}
+
+/* ══════════════════════ AUTH SCREEN ══════════════════════ */
+#authScreen{position:fixed;inset:0;z-index:9999;background:#080B12;display:flex;align-items:center;justify-content:center;padding:20px}
+#authScreen.hidden{display:none}
+.auth-box{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line-2);border-radius:20px;padding:36px 32px;box-shadow:0 40px 100px -30px #000}
+.auth-logo{display:flex;align-items:center;gap:11px;margin-bottom:28px}
+.auth-logo .mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,var(--gold),#b8851f);display:grid;place-items:center;color:#000;font-family:var(--disp);font-weight:800;font-size:22px;box-shadow:0 0 0 1px rgba(232,179,57,.3),0 6px 18px -6px rgba(232,179,57,.5)}
+.auth-logo .name{font-family:var(--disp);font-weight:800;font-size:22px;letter-spacing:-.02em}
+.auth-logo .name span{color:var(--gold)}
+.auth-title{font-family:var(--disp);font-weight:800;font-size:24px;letter-spacing:-.02em;margin-bottom:6px}
+.auth-sub{color:var(--muted);font-size:13.5px;margin-bottom:26px}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;letter-spacing:.02em}
+.auth-field input{width:100%;background:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:11px 13px;color:var(--txt);font-size:14px;outline:none;box-sizing:border-box;transition:.15s}
+.auth-field input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(232,179,57,.12)}
+.auth-btn{width:100%;padding:13px;border-radius:11px;background:var(--gold);color:#000;font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.01em;cursor:pointer;border:none;margin-top:6px;transition:.15s}
+.auth-btn:hover{background:#f0c040}
+.auth-btn:disabled{opacity:.6;cursor:not-allowed}
+.auth-toggle{text-align:center;margin-top:18px;font-size:13px;color:var(--muted)}
+.auth-toggle a{color:var(--gold);cursor:pointer;font-weight:500}
+.auth-toggle a:hover{text-decoration:underline}
+.auth-err{background:rgba(255,82,82,.12);border:1px solid rgba(255,82,82,.3);border-radius:8px;padding:10px 12px;font-size:13px;color:#ff6b6b;margin-bottom:14px;display:none}
+.auth-err.show{display:block}
+#appWrap{display:none}
+#appWrap.ready{display:block}
+/* user pill in header */
+.user-pill{display:flex;align-items:center;gap:7px;padding:5px 10px;background:var(--panel);border:1px solid var(--line);border-radius:9px;font-size:12.5px;font-weight:500;cursor:pointer;transition:.15s}
+.user-pill:hover{border-color:var(--line-2)}
+.user-pill .av{width:22px;height:22px;border-radius:6px;background:linear-gradient(145deg,var(--gold),#b8851f);display:grid;place-items:center;color:#000;font-size:10px;font-weight:800}
+
 </style>
 
 <!-- ============ TICKER ============ -->
@@ -1405,9 +1435,10 @@ const popFmt=n=>n==null?"—":Number(n).toLocaleString();
 let LIVE=false, me=null;
 function initials(p){const a=String(p||"?").split(/\s+/).filter(Boolean);return a.length<2?a[0].slice(0,4).toUpperCase():(a[0][0]+a[a.length-1][0]).toUpperCase()}
 function themeFor(s){return SPORT_THEME[s]||["#1a2030","#3a4660"]}
+function authHeaders(){const t=localStorage.getItem('gemline_token');return t?{"Content-Type":"application/json","Authorization":"Bearer "+t}:{"Content-Type":"application/json"}}
 const api={
-  async post(path,body){const r=await fetch(API_BASE+path,{method:"POST",mode:"cors",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});if(!r.ok){let m="request failed";try{m=(await r.json()).error||m}catch{}throw new Error(m)}return r.json()},
-  async get(path){const r=await fetch(API_BASE+path,{mode:"cors"});if(!r.ok)throw new Error("request failed");return r.json()},
+  async post(path,body){const r=await fetch(API_BASE+path,{method:"POST",mode:"cors",headers:authHeaders(),body:JSON.stringify(body||{})});if(!r.ok){let m="request failed";try{const d=await r.json();m=d.error||m;if(d.code==='UNAUTHENTICATED'){showAuthScreen();return}}catch{}throw new Error(m)}return r.json()},
+  async get(path){const r=await fetch(API_BASE+path,{mode:"cors",headers:authHeaders()});if(!r.ok){if(r.status===401){showAuthScreen();throw new Error('Please log in')}throw new Error("request failed")}return r.json()},
 };
 function setDataMode(live){const el=$("#dataMode");if(!el)return;
   if(live){el.textContent="● LIVE DATA";el.style.color="var(--up)";el.style.borderColor="var(--up)"}
@@ -1444,6 +1475,9 @@ function mapTrade(o){return {id:o.id, with:o.withHandle, when:o.when||"recent",
 async function loadState(){
   const d=await api.get("/api/state");
   me=d.me; LIVE=true;
+  // Update header user pill
+  const h=document.getElementById('userHandle');const av=document.getElementById('userAv');
+  if(h&&me)h.textContent=me.handle;if(av&&me)av.textContent=me.handle[0].toUpperCase();
   CARDS=d.listings.map(buildLiveCard);
   wallet.credits=d.balance;
   trades.incoming=(d.trades.incoming||[]).map(mapTrade);
@@ -1452,8 +1486,59 @@ async function loadState(){
 }
 async function bootSession(){
   try{ await api.post("/api/session"); await loadState(); }
-  catch(e){ LIVE=false; try{ await hydrateFromBackend(); }catch(_){ setDataMode(false) } }
+  catch(e){
+    if(e.message&&e.message.includes('log in')){showAuthScreen();return;}
+    LIVE=false; setDataMode(false);
+  }
 }
+function showAuthScreen(){document.getElementById('authScreen').classList.remove('hidden');document.getElementById('appWrap').classList.remove('ready');}
+function hideAuthScreen(){document.getElementById('authScreen').classList.add('hidden');document.getElementById('appWrap').classList.add('ready');}
+function showLogin(){document.getElementById('loginForm').style.display='';document.getElementById('signupForm').style.display='none';clearAuthErr();}
+function showSignup(){document.getElementById('loginForm').style.display='none';document.getElementById('signupForm').style.display='';clearAuthErr();}
+function clearAuthErr(){const el=document.getElementById('authErrMsg');el.textContent='';el.classList.remove('show');}
+function showAuthErr(msg){const el=document.getElementById('authErrMsg');el.textContent=msg;el.classList.add('show');}
+async function doLogin(){
+  const email=document.getElementById('loginEmail').value.trim();
+  const pw=document.getElementById('loginPw').value;
+  const btn=document.getElementById('loginBtn');
+  clearAuthErr();btn.disabled=true;btn.textContent='Signing in…';
+  try{
+    const d=await fetch(API_BASE+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw})}).then(r=>r.json());
+    if(d.error){showAuthErr(d.error);return;}
+    localStorage.setItem('gemline_token',d.token);
+    localStorage.setItem('gemline_user',JSON.stringify(d.user));
+    hideAuthScreen();bootSession();
+  }catch(e){showAuthErr('Connection error. Try again.');}
+  finally{btn.disabled=false;btn.textContent='Sign in';}
+}
+async function doSignup(){
+  const handle=document.getElementById('signupHandle').value.trim();
+  const email=document.getElementById('signupEmail').value.trim();
+  const pw=document.getElementById('signupPw').value;
+  const btn=document.getElementById('signupBtn');
+  clearAuthErr();btn.disabled=true;btn.textContent='Creating account…';
+  try{
+    const d=await fetch(API_BASE+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw,handle})}).then(r=>r.json());
+    if(d.error){showAuthErr(d.error);return;}
+    localStorage.setItem('gemline_token',d.token);
+    localStorage.setItem('gemline_user',JSON.stringify(d.user));
+    hideAuthScreen();bootSession();
+  }catch(e){showAuthErr('Connection error. Try again.');}
+  finally{btn.disabled=false;btn.textContent='Create account';}
+}
+function doLogout(){
+  const token=localStorage.getItem('gemline_token');
+  if(token)fetch(API_BASE+'/api/auth/logout',{method:'POST',headers:{'Authorization':'Bearer '+token}}).catch(()=>{});
+  localStorage.removeItem('gemline_token');localStorage.removeItem('gemline_user');
+  showAuthScreen();CARDS=[];LIVE=false;me=null;
+}
+// Enter key support for auth forms
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(document.getElementById('loginForm').style.display!=='none'&&document.getElementById('authScreen')&&!document.getElementById('authScreen').classList.contains('hidden'))doLogin();
+    else if(document.getElementById('signupForm').style.display!=='none'&&!document.getElementById('authScreen').classList.contains('hidden'))doSignup();
+  }
+});
 async function hydrateFromBackend(){ // arbitrage /feed fallback when /api isn't up
   try{const r=await fetch(API_BASE+"/feed",{mode:"cors"});if(!r.ok)throw 0;const d=await r.json();
     if(d.mode==="live"&&Array.isArray(d.cards)&&d.cards.length){CARDS=d.cards;reRenderCurrent();setDataMode(true)}else setDataMode(false);
@@ -1462,9 +1547,18 @@ async function hydrateFromBackend(){ // arbitrage /feed fallback when /api isn't
 $("#dataMode")&&$("#dataMode").addEventListener("click",bootSession);
 
 /* ============================ BOOT ============================ */
-buildTape();buildFacets();renderGrid();
-renderWallet();seedTrades();
-bootSession();
+// Check for existing session
+(function(){
+  const token=localStorage.getItem('gemline_token');
+  if(token){
+    hideAuthScreen();
+    buildTape();buildFacets();renderGrid();renderWallet();seedTrades();
+    bootSession();
+  } else {
+    showAuthScreen();
+    buildTape();buildFacets();renderGrid();renderWallet();seedTrades();
+  }
+})();
 for(let i=0;i<8;i++)setTimeout(()=>liveTick(),i*120);
 setInterval(liveTick,2200);
 setInterval(timerTick,1000);
