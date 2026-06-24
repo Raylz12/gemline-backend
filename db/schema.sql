@@ -7,7 +7,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ─────────────────────────── enums (state vocab) ───────────────────────────
-CREATE TYPE user_role          AS ENUM ('buyer','seller','admin','authenticator');
+CREATE TYPE user_role          AS ENUM ('buyer','seller','admin','authenticator','member');
 CREATE TYPE listing_kind       AS ENUM ('buy_now','auction');
 CREATE TYPE listing_status     AS ENUM ('active','sold','cancelled');
 CREATE TYPE fulfillment_method AS ENUM ('direct','authenticated','vault');
@@ -36,7 +36,8 @@ CREATE TABLE users (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   handle            text UNIQUE NOT NULL,
   email             text UNIQUE NOT NULL,
-  role              user_role NOT NULL DEFAULT 'buyer',
+  password_hash     text,
+  role              user_role NOT NULL DEFAULT 'member',
   stripe_account_id text,                       -- Stripe Connect connected acct
   rating            numeric(3,2) DEFAULT 0,
   created_at        timestamptz NOT NULL DEFAULT now()
@@ -211,7 +212,7 @@ CREATE TABLE credit_ledger (
   balance_after int NOT NULL,
   reason        text NOT NULL,
   ref_type      text,                            -- 'purchase' | 'boost'
-  ref_id        uuid,
+  ref_id        text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_ledger_user ON credit_ledger (user_id, created_at DESC);
