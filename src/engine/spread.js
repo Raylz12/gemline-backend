@@ -1,5 +1,9 @@
 // Spread engine: merges multi-source offers into a single GEMLINE card shape.
 // Edge % = (hi_ask - lo_ask) / lo_ask * 100, rounded to 1 decimal.
+// When live sources aren't configured, falls back to the static catalog so
+// the frontend always shows real-looking data on load.
+
+import { CATALOG } from '../data/catalog.js';
 
 let _seq = 0;
 export function resetIds() { _seq = 0; }
@@ -23,4 +27,24 @@ export function buildCard({ player, sport, set, variant, num, grader, grade, fmv
     comps: comps.slice(0, 5),
     history: history.slice(0, 10),
   };
+}
+
+// Builds the catalog-based feed. Used when live adapters return nothing.
+// Returns a realistic spread feed from hardcoded market data.
+export function buildCatalogFeed() {
+  resetIds();
+  const cards = CATALOG.map(entry => {
+    const { asks, comps: compPrices, fmv, trend, ...meta } = entry;
+    const offers = [
+      { source: 'market_fmv', price: fmv, kind: 'guide' },
+      { source: 'market_lo',  price: asks[0], kind: 'ask' },
+      { source: 'market_hi',  price: asks[1], kind: 'ask' },
+    ];
+    const comps = (compPrices || []).map(p => ({ price: p, source: 'comp' }));
+    return buildCard({ ...meta, fmv, offers, comps });
+  }).filter(Boolean);
+
+  // Sort by edge descending — highest arbitrage opportunity first.
+  cards.sort((a, b) => b.edge - a.edge);
+  return { cards, sources: { catalog: true }, mode: 'catalog', generatedAt: new Date().toISOString() };
 }
