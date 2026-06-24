@@ -572,8 +572,8 @@ footer{border-top:1px solid var(--line);margin-top:60px}
         <div class="railsplit"></div>
         <h4>Max Price</h4>
         <div class="rangewrap">
-          <div class="lab"><span>$0</span><span id="priceLab">$50,000</span></div>
-          <input type="range" id="priceRange" min="100" max="50000" step="100" value="50000">
+          <div class="lab"><span>$0</span><span id="priceLab">$2,000,000</span></div>
+          <input type="range" id="priceRange" min="100" max="2000000" step="100" value="50000">
         </div>
         <div class="railsplit"></div>
         <h4>Listing</h4>
@@ -820,6 +820,42 @@ const SPORT_THEME={
   WNBA:["#3a1530","#d6478f"], "F1":["#3a1212","#e23b3b"], UFC:["#2a2a2a","#888"], Golf:["#1f3326","#4a9d5e"], College:["#2a1f3a","#6a4dd6"]
 };
 function rnd(a,b){return Math.random()*(b-a)+a}
+// Player image map — NBA/ESPN/Pokémon CDN (free, official)
+const PLAYER_IMG={
+  "Victor Wembanyama":"https://cdn.nba.com/headshots/nba/latest/1040x760/1641709.png",
+  "LeBron James":"https://cdn.nba.com/headshots/nba/latest/1040x760/2544.png",
+  "Luka Dončić":"https://cdn.nba.com/headshots/nba/latest/1040x760/1629029.png",
+  "Michael Jordan":"https://a.espncdn.com/i/headshots/nba/players/full/1025.png",
+  "Stephen Curry":"https://cdn.nba.com/headshots/nba/latest/1040x760/201939.png",
+  "Anthony Edwards":"https://cdn.nba.com/headshots/nba/latest/1040x760/1630162.png",
+  "Ja Morant":"https://cdn.nba.com/headshots/nba/latest/1040x760/1629630.png",
+  "Jayson Tatum":"https://cdn.nba.com/headshots/nba/latest/1040x760/1628369.png",
+  "Patrick Mahomes":"https://a.espncdn.com/i/headshots/nfl/players/full/3139477.png",
+  "Tom Brady":"https://a.espncdn.com/i/headshots/nfl/players/full/2330.png",
+  "Josh Allen":"https://a.espncdn.com/i/headshots/nfl/players/full/3918298.png",
+  "Justin Jefferson":"https://a.espncdn.com/i/headshots/nfl/players/full/4241478.png",
+  "C.J. Stroud":"https://a.espncdn.com/i/headshots/nfl/players/full/4361529.png",
+  "Travis Hunter":"https://a.espncdn.com/i/headshots/nfl/players/full/4432772.png",
+  "Caitlin Clark":"https://cdn.wnba.com/headshots/wnba/latest/1040x760/1642011.png",
+  "Mike Trout":"https://a.espncdn.com/i/headshots/mlb/players/full/30836.png",
+  "Shohei Ohtani":"https://a.espncdn.com/i/headshots/mlb/players/full/33218.png",
+  "Ronald Acuña Jr.":"https://a.espncdn.com/i/headshots/mlb/players/full/41728.png",
+  "Bryce Harper":"https://a.espncdn.com/i/headshots/mlb/players/full/30936.png",
+  "Juan Soto":"https://a.espncdn.com/i/headshots/mlb/players/full/40936.png",
+  "Connor McDavid":"https://a.espncdn.com/i/headshots/nhl/players/full/3114727.png",
+  "Auston Matthews":"https://a.espncdn.com/i/headshots/nhl/players/full/3895074.png",
+  "Lionel Messi":"https://a.espncdn.com/i/headshots/soccer/players/full/45843.png",
+  "Erling Haaland":"https://a.espncdn.com/i/headshots/soccer/players/full/267921.png",
+  "Kylian Mbappé":"https://a.espncdn.com/i/headshots/soccer/players/full/189340.png",
+  "Max Verstappen":"https://a.espncdn.com/i/headshots/f1/drivers/full/4479.png",
+  "Lewis Hamilton":"https://a.espncdn.com/i/headshots/f1/drivers/full/793.png",
+  "Tiger Woods":"https://a.espncdn.com/i/headshots/golf/players/full/462.png",
+  "Jon Jones":"https://a.espncdn.com/i/headshots/mma/athletes/full/3058648.png",
+  "Charizard":"https://images.pokemontcg.io/base1/4_hires.png",
+  "Pikachu":"https://images.pokemontcg.io/base1/58_hires.png",
+  "Umbreon":"https://images.pokemontcg.io/swsh7/215_hires.png",
+  "Lugia":"https://images.pokemontcg.io/neo1/9_hires.png",
+};
 function spark(base,n=24,vol=.08){let v=base,out=[v];for(let i=1;i<n;i++){v=Math.max(base*.6,v*(1+rnd(-vol,vol)));out.push(v)}return out}
 
 const NAMES=[
@@ -852,7 +888,22 @@ const NAMES=[
  ["Anthony Edwards","Basketball","2020 Prizm","Silver RC","#258","PSA","10",1240,"ANT"],
  ["Ja Morant","Basketball","2019 Prizm","Silver RC","#249","BGS","9.5",560,"JA12"],
  ["Bryce Harper","Baseball","2012 Bowman Chrome","RC Auto","#BCP10","PSA","10",1980,"HARP"],
- ["Travis Hunter","College","2024 Bowman U","Chrome RC","#1","PSA","10",640,"HUNT"]
+ ["Travis Hunter","College","2024 Bowman U","Chrome RC","#1","PSA","10",640,"HUNT"],
+ ["Giannis Antetokounmpo","Basketball","2013 Panini Prizm","RC","#290","PSA","10",980,"GIA"],
+ ["Nikola Jokić","Basketball","2015 Panini Prizm","RC Silver","#78","PSA","10",1240,"JOKI"],
+ ["Caleb Williams","Football","2024 Panini Prizm","Silver RC","#1","PSA","10",480,"CALE"],
+ ["Jayden Daniels","Football","2024 Panini Prizm","Silver RC","#1","PSA","10",390,"JAYD"],
+ ["Aaron Judge","Baseball","2017 Topps","RC","#287","PSA","10",840,"JUDG"],
+ ["Fernando Tatis Jr.","Baseball","2019 Topps Chrome","RC","#149","PSA","10",620,"FTJ"],
+ ["David Pastrnak","Hockey","2013 Upper Deck","Young Guns RC","#216","PSA","10",580,"PAST"],
+ ["Neymar Jr.","Soccer","2012 Panini Prizm","RC","#69","PSA","9",760,"NEYM"],
+ ["Vinicius Jr.","Soccer","2020 Topps Chrome","RC","#44","PSA","10",490,"VINI"],
+ ["Pikachu Illustrator","Pokémon","1998 CoroCoro","Promo","#","PSA","7",85000,"PIKA_I"],
+ ["Mewtwo","Pokémon","1999 Base Set","Holo 1st Edition","#10","PSA","9",4200,"MEWT"],
+ ["Rayquaza","Pokémon","2003 Skyridge","Holo","#107","PSA","9",8900,"RAYQ"],
+ ["Saquon Barkley","Football","2018 Panini Prizm","Silver RC","#212","PSA","10",720,"BRKL"],
+ ["CeeDee Lamb","Football","2020 Panini Prizm","Silver RC","#332","PSA","10",560,"CDL"],
+ ["Cade Cunningham","Basketball","2021 Panini Prizm","Silver RC","#1","PSA","10",480,"CADE"]
 ];
 const sellers=["VaultGrade","SlabCity","PristineCo","HobbyDesk","TopLoaderTom","GemRack","CardLab","ArbitrageAce"];
 let nextId=1;
@@ -955,7 +1006,7 @@ function buildTape(){
 }
 
 /* ============================ MARKETPLACE ============================ */
-let filters={sport:"All",grade:"All",type:"All",maxPrice:50000,edge:"all",sort:"edge",q:""};
+let filters={sport:"All",grade:"All",type:"All",maxPrice:2000000,edge:"all",sort:"edge",q:""};
 function buildFacets(){
   const sports=["All",...Object.keys(SPORT_THEME)];
   const counts=s=>s==="All"?CARDS.length:CARDS.filter(c=>c.sport===s).length;
