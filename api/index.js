@@ -1,15 +1,16 @@
-// Vercel serverless entry point — full GEMLINE Express app.
+// Vercel serverless entry — full GEMLINE Express app.
 import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { cached } from '../src/cache.js';
-import { buildCard, buildCatalogFeed, resetIds } from '../src/engine/spread.js';
+import { buildCard, resetIds } from '../src/engine/spread.js';
 import * as cardhedge from '../src/adapters/cardhedge.js';
 import * as ebay from '../src/adapters/ebay.js';
 import * as apify from '../src/adapters/apify.js';
 import * as schq from '../src/adapters/sportscardhq.js';
 import * as ebayScraper from '../src/adapters/ebay-scraper.js';
+import { resolveImages } from '../src/adapters/images.js';
 import { makeRepo, stripeStub } from '../src/store/repo.js';
 import { settlementRouter } from '../src/routes/settlement.js';
 import { appRouter } from '../src/routes/app.js';
@@ -17,7 +18,7 @@ import { CATALOG } from '../src/data/catalog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ENRICH_LIMIT = Number(process.env.ENRICH_LIMIT || 8);
-const CACHE_TTL = Number(process.env.CACHE_TTL || 300);
+const CACHE_TTL    = Number(process.env.CACHE_TTL    || 600); // 10 min — real scrapes are expensive
 
 const app = express();
 app.use(cors());
@@ -26,45 +27,47 @@ app.use(express.static(join(__dirname, '..', 'public')));
 
 function activeSources() {
   return {
-    cardHedge: cardhedge.cardHedgeEnabled(),
-    ebay: ebay.ebayEnabled(),
-    apify: apify.apifyEnabled(),
+    cardHedge:   cardhedge.cardHedgeEnabled(),
+    ebay:        ebay.ebayEnabled(),
+    apify:       apify.apifyEnabled(),
     ebayScraper: ebayScraper.ebayScraperEnabled(),
     sportsCardHQ: schq.schqEnabled(),
   };
 }
 
-// Enrich a catalog card with live eBay sold comps + active asks via Apify scraper.
-async function enrichWithLive(entry) {
-  const q = [entry.player, entry.set, entry.variant, entry.grader, entry.grade].filter(Boolean).join(' ');
+// ── Live enrichment: fetch real prices + image for one catalog entry ──────────
+async function enrichEntry(entry, imageUrl) {
+  const q = entry.ebayQuery;
 
-  const [soldData, activeAsk, whatnot] = await Promise.all([
-    ebayScraper.soldComps(q, 3),
-    ebayScraper.activeLowestAsk(q),
-    apify.whatnotLowest(q),
+  // Parallel: sold comps + active ask + whatnot
+  const [soldComps, activeAsk, whatnot] = await Promise.all([
+    ebayScraper.soldComps(q, 5).catch(() => []),
+    ebayScraper.activeLowestAsk(q).catch(() => null),
+    apify.whatnotLowest(q).catch(() => null),
   ]);
 
-  const offers = [
-    { source: 'market_fmv', price: entry.fmv, kind: 'guide' },
-    { source: 'market_lo',  price: entry.asks[0], kind: 'ask' },
-    { source: 'market_hi',  price: entry.asks[1], kind: 'ask' },
-  ];
+  const offers = [];
 
+  // Active asks (what you can buy right now)
   if (activeAsk) offers.push(activeAsk);
-  if (whatnot) offers.push(whatnot);
+  if (whatnot)   offers.push(whatnot);
 
-  const comps = [
-    ...entry.comps.map(p => ({ price: p, source: 'est_comp' })),
-    ...soldData.map(s => ({ price: s.price, source: 'ebay_sold', url: s.url })),
-  ];
+  // Sold comps (what it actually sold for — highest is the ceiling)
+  for (const c of soldComps) offers.push({ ...c, kind: 'comp' });
 
-  return buildCard({ ...entry, offers, comps });
+  // Need at least 2 data points to show a spread; skip if empty
+  if (offers.length < 2) return null;
+
+  const comps = soldComps.map(s => ({ price: s.price, source: 'ebay_sold', url: s.url }));
+
+  return buildCard({ ...entry, offers, comps, imageUrl });
 }
 
+// ── Build full feed ───────────────────────────────────────────────────────────
 async function buildFeed() {
   resetIds();
 
-  // Try Card Hedge as primary source first.
+  // 1. Card Hedge (primary — if key configured)
   if (cardhedge.cardHedgeEnabled()) {
     try {
       const seeds = await cardhedge.topMovers(40);
@@ -75,12 +78,9 @@ async function buildFeed() {
           const offers = ch?.offers ? [...ch.offers] : [];
           if (cards.length < ENRICH_LIMIT) {
             const q = [seed.year, seed.player, seed.set, seed.variant, seed.grader, seed.grade].filter(Boolean).join(' ');
-            const [eb, wn, sc] = await Promise.all([
-              ebay.lowestAsk(q), apify.whatnotLowest(q), schq.guidePrice(q, seed.grade),
-            ]);
+            const [eb, wn] = await Promise.all([ebay.lowestAsk(q), apify.whatnotLowest(q)]);
             if (eb) offers.push(eb);
             if (wn) offers.push(wn);
-            if (sc) offers.push(sc);
           }
           const card = buildCard({ ...seed, offers, comps: ch?.comps || [], history: ch?.history || [], fmv: seed.fmv ?? ch?.fmv });
           if (card) cards.push(card);
@@ -93,32 +93,31 @@ async function buildFeed() {
     } catch { /* fall through */ }
   }
 
-  // Enrich the static catalog with live eBay data (top N cards to keep Apify cost low).
+  // 2. Live scrape: catalog identity + eBay real prices + card images
   if (ebayScraper.ebayScraperEnabled() || apify.apifyEnabled()) {
     try {
-      const top = CATALOG.slice(0, ENRICH_LIMIT);
-      const rest = CATALOG.slice(ENRICH_LIMIT);
+      // Fetch images for all catalog cards in parallel
+      const imageUrls = await resolveImages(CATALOG, ENRICH_LIMIT).catch(() => CATALOG.map(() => null));
 
-      const enriched = await Promise.all(top.map(e => enrichWithLive(e).catch(() => null)));
-      const restCards = rest.map(entry => {
-        const offers = [
-          { source: 'market_fmv', price: entry.fmv, kind: 'guide' },
-          { source: 'market_lo',  price: entry.asks[0], kind: 'ask' },
-          { source: 'market_hi',  price: entry.asks[1], kind: 'ask' },
-        ];
-        return buildCard({ ...entry, offers, comps: entry.comps.map(p => ({ price: p, source: 'est_comp' })) });
-      });
+      // Enrich top N with live eBay data; rest get no data (excluded from feed)
+      const enrichPromises = CATALOG.slice(0, ENRICH_LIMIT).map((entry, i) =>
+        enrichEntry(entry, imageUrls[i] ?? null).catch(() => null)
+      );
+      const enriched = await Promise.all(enrichPromises);
+      const cards = enriched.filter(Boolean);
 
-      const cards = [...enriched.filter(Boolean), ...restCards.filter(Boolean)];
-      cards.sort((a, b) => b.edge - a.edge);
-      return { cards, sources: activeSources(), mode: 'enriched', generatedAt: new Date().toISOString() };
+      if (cards.length > 0) {
+        cards.sort((a, b) => b.edge - a.edge);
+        return { cards, sources: activeSources(), mode: 'live_scraped', generatedAt: new Date().toISOString() };
+      }
     } catch { /* fall through */ }
   }
 
-  // Pure catalog fallback — always works, no API keys needed.
-  return buildCatalogFeed();
+  // 3. No data — return empty so frontend uses its built-in demo
+  return { cards: [], sources: activeSources(), mode: 'demo', generatedAt: new Date().toISOString() };
 }
 
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({ ok: true, sources: activeSources(), enrichLimit: ENRICH_LIMIT, cacheTtl: CACHE_TTL });
 });
@@ -129,25 +128,17 @@ app.get('/feed', async (_req, res) => {
     res.json(payload);
   } catch (e) {
     console.error('[feed] error:', e);
-    res.json(buildCatalogFeed());
+    res.json({ cards: [], mode: 'demo', error: e.message, sources: activeSources() });
   }
 });
 
-// Lazy-init repo
+// Settlement + app routes
 let repo;
 async function getRepo() {
   if (!repo) repo = await makeRepo();
   return repo;
 }
-
-app.use('/api', async (req, res, next) => {
-  const r = await getRepo();
-  settlementRouter(r, stripeStub)(req, res, next);
-});
-
-app.use('/api', async (req, res, next) => {
-  const r = await getRepo();
-  appRouter(r, stripeStub)(req, res, next);
-});
+app.use('/api', async (req, res, next) => { const r = await getRepo(); settlementRouter(r, stripeStub)(req, res, next); });
+app.use('/api', async (req, res, next) => { const r = await getRepo(); appRouter(r, stripeStub)(req, res, next); });
 
 export default app;

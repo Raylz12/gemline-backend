@@ -136,6 +136,16 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .inner-card::before{content:"";position:absolute;inset:0;background:var(--cardbg);opacity:.92}
 .inner-card::after{content:"";position:absolute;inset:0;background:
    linear-gradient(125deg,transparent 30%,rgba(255,255,255,.22) 45%,transparent 60%);mix-blend-mode:overlay;opacity:.6}
+.card-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:7px;z-index:1;opacity:.88;transition:opacity .2s}
+.card-img-wrap{position:absolute;inset:0;overflow:hidden;border-radius:7px;z-index:1}
+.no-img .initials{opacity:1}.card-img-wrap+.initials{display:none}.card-img-wrap+.initials+.nm{display:none}.card-img-wrap+.initials+.nm+.vr{display:none}
+/* price range bar */
+.range-wrap{margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+.range-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:5px}
+.range-labels .fmv{color:var(--gold);font-size:10px}
+.range-track{height:4px;background:var(--panel-2);border-radius:2px;position:relative;overflow:visible}
+.range-fill{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,var(--up),var(--gold));border-radius:2px}
+.range-dot{position:absolute;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:var(--gold);border:2px solid var(--ink);z-index:2}
 .inner-card .num{position:absolute;top:9px;left:10px;font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.7);z-index:2}
 .inner-card .sportmark{position:absolute;top:8px;right:9px;font-family:var(--disp);font-weight:800;font-size:11px;color:rgba(255,255,255,.55);z-index:2;letter-spacing:.04em}
 .inner-card .initials{font-family:var(--disp);font-weight:800;font-size:40px;color:rgba(255,255,255,.92);z-index:2;line-height:.9;text-shadow:0 2px 14px rgba(0,0,0,.4)}
@@ -898,7 +908,8 @@ function cardArticle(c){
       <button class="watch ${w}" data-watch="${c.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="${w?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .9-4 2-1-1.1-2.3-2-4-2A5.5 5.5 0 0 0 3 8.5c0 2.3 1.5 4 3 5.5l6 6Z"/></svg></button>
       <div class="slab">
         <div class="label"><span>${c.grader} ${c.grade}</span><span class="gd">${c.set.split(' ')[0]}</span></div>
-        <div class="inner-card" style="${slabStyle(c)}">
+        <div class="inner-card ${c.imageUrl?'':'no-img'}" style="${slabStyle(c)}">
+          ${c.imageUrl?`<div class="card-img-wrap"><img class="card-img" src="${c.imageUrl}" alt="${c.player}" loading="lazy" onerror="this.parentElement.remove()"></div>`:''}
           <span class="num">${c.num}</span><span class="sportmark">${c.sport.slice(0,3).toUpperCase()}</span>
           <span class="initials">${c.ini.length>5?c.ini.slice(0,4):c.ini}</span>
           <span class="nm">${c.player}</span><span class="vr">${c.variant}</span>
@@ -908,6 +919,10 @@ function cardArticle(c){
         <div class="pn">${c.player}</div>
         <div class="meta">${c.set} · ${c.variant}</div>
         <div class="priceline"><span class="ask mono">${fmt(c.ask)}</span>${chTxt(c.ch)}</div>
+        ${c.range&&c.range.hi>c.range.lo?`<div class="range-wrap">
+          <div class="range-labels"><span>${fmt(c.range.lo)}</span><span class="fmv">FMV ${fmt(c.range.mid)}</span><span>${fmt(c.range.hi)}</span></div>
+          <div class="range-track"><div class="range-fill" style="width:${Math.round(((c.range.mid-c.range.lo)/(c.range.hi-c.range.lo||1))*100)}%"></div><div class="range-dot" style="left:${Math.round(((c.range.mid-c.range.lo)/(c.range.hi-c.range.lo||1))*100)}%"></div></div>
+        </div>`:''}
         ${sparkSVG(c.sp)}
         <div class="microdata"><span title="Sales per week">${c.vel??'—'}/wk</span><span title="Liquidity score">liq ${c.liq??'—'}</span><span title="Watchers">♥ ${c.watchers??0}</span></div>
         <div class="cardfoot"><span class="seller"><span class="sv">${c.seller[0]}</span>${c.seller}</span>${typ}</div>
@@ -1323,10 +1338,10 @@ function buildLiveCard(l){
   plats[0].price=Math.round(market*rnd(.92,1.04));
   const lo=Math.min(...plats.map(p=>p.price)),hi=Math.max(...plats.map(p=>p.price));
   return {
-    id:l.listingId, listingId:l.listingId, cardId:l.cardId, vaultItemId:l.vaultItemId||null, sellerId:l.sellerId, vaulted:!!l.vaultItemId,
+    id:l.listingId, listingId:l.listingId, cardId:l.cardId, vaultItemId:l.vaultItemId||null, sellerId:l.sellerId, vaulted:!!l.vaultItemId, imageUrl:l.imageUrl||null,
     player:l.player, sport:l.sport||"Card", set:l.set||"", variant:l.variant||"", num:l.num||"",
     grader:l.grader||"RAW", grade:l.grade||"", ask:plats[0].price, market, plats, lo, hi,
-    edge:lo>0?+(((hi-lo)/lo)*100).toFixed(1):0, ch:+rnd(-12,20).toFixed(1), sp:spark(market,24,.06),
+    edge:lo>0?+(((hi-lo)/lo)*100).toFixed(1):0, range:{lo,mid:market,hi}, ch:+rnd(-12,20).toFixed(1), sp:spark(market,24,.06),
     seller:l.ownedByMe?"You":(l.sellerHandle||"Seller"), ini:initials(l.player), theme:themeFor(l.sport),
     type:"buy", owned:l.ownedByMe, listed:l.ownedByMe, boost:l.boost_rank?BOOST_BY_RANK[l.boost_rank]:null,
     costBasis:l.ownedByMe?Math.round(market*.7):null,
