@@ -264,3 +264,21 @@ ALTER TABLE listings   ADD CONSTRAINT fk_listing_vault   FOREIGN KEY (vault_item
 ALTER TABLE escrow_holds ADD CONSTRAINT fk_escrow_order  FOREIGN KEY (order_id) REFERENCES orders(id);
 ALTER TABLE escrow_holds ADD CONSTRAINT fk_escrow_trade  FOREIGN KEY (trade_id) REFERENCES trades(id);
 ALTER TABLE vault_items ADD CONSTRAINT fk_vault_shipment FOREIGN KEY (intake_shipment_id) REFERENCES shipments(id);
+
+-- ─────────────────────────── portfolios ───────────────────────────
+-- A user's personal card collection. Cards they physically own (or have
+-- in transit). Each item can be listed on the marketplace or offered in trades.
+CREATE TABLE IF NOT EXISTS portfolios (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  card_id        uuid NOT NULL REFERENCES cards(id),
+  purchase_price numeric(12,2),
+  cert_number    text,
+  notes          text,
+  is_listed      boolean NOT NULL DEFAULT false,
+  listing_id     uuid,
+  acquired_at    timestamptz NOT NULL DEFAULT now(),
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolios (user_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_card ON portfolios (card_id);

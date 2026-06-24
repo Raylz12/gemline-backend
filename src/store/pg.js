@@ -5,7 +5,7 @@ const TABLE = {
   users: 'users', cards: 'cards', listings: 'listings', bids: 'bids', orders: 'orders',
   trades: 'trades', tradeItems: 'trade_items', vault: 'vault_items', shipments: 'shipments',
   auth: 'authentications', ledger: 'credit_ledger', boosts: 'boosts', disputes: 'disputes',
-  escrow: 'escrow_holds', events: 'events',
+  escrow: 'escrow_holds', events: 'events', portfolios: 'portfolios',
 };
 
 export async function pgRepo(connectionString) {

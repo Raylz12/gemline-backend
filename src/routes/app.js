@@ -2,6 +2,7 @@
 // All routes require authentication — req.userId is set by requireAuth middleware.
 import { Router } from 'express';
 import * as orders from '../domain/orders.js';
+import * as portfolio from '../domain/portfolio.js';
 import { ensureSeed } from '../domain/seed.js';
 
 function rel(iso) {
@@ -84,6 +85,34 @@ export function appRouter(repo, stripe) {
 
   r.get('/state', wrap(async (req) => buildState(req.userId)));
 
+  // ── Portfolio ─────────────────────────────────────────────────────────────
+  r.get('/portfolio', wrap(async (req) => {
+    return portfolio.list(repo, req.userId);
+  }));
+
+  r.get('/catalog/search', wrap(async (req) => {
+    return portfolio.searchCatalog(repo, req.query.q);
+  }));
+
+  r.post('/portfolio/add', wrap(async (req) => {
+    const { cardId, customCard, purchasePrice, certNumber, notes } = req.body;
+    return portfolio.add(repo, { userId: req.userId, cardId, customCard, purchasePrice, certNumber, notes });
+  }));
+
+  r.post('/portfolio/list', wrap(async (req) => {
+    const { portfolioItemId, price } = req.body;
+    return portfolio.listCard(repo, { userId: req.userId, portfolioItemId, price });
+  }));
+
+  r.post('/portfolio/delist', wrap(async (req) => {
+    return portfolio.delistCard(repo, { userId: req.userId, portfolioItemId: req.body.portfolioItemId });
+  }));
+
+  r.delete('/portfolio/:id', wrap(async (req) => {
+    return portfolio.remove(repo, { userId: req.userId, portfolioItemId: req.params.id });
+  }));
+
+  // ── Buy ───────────────────────────────────────────────────────────────────
   r.post('/buy', wrap(async (req) => {
     const l = await repo.listings.get(req.body.listingId);
     if (!l) { const e = new Error('listing not found'); e.code = 'NOT_FOUND'; throw e; }
