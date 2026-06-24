@@ -109,11 +109,18 @@ const MARKETPLACE_SELLERS = ['VaultGrade', 'SlabCity', 'PristineCo', 'GemRack', 
 export async function ensureCatalog(repo) {
   const existing = await repo.cards.list({});
   if (existing.length >= CATALOG.length) {
-    // Already seeded — return lookup map
-    const map = new Map();
+    // Already seeded — rebuild map with { card, basePrice } pairs from CATALOG
+    const cardLookup = new Map();
     for (const c of existing) {
-      if (!map.has(c.player)) map.set(c.player, []);
-      map.get(c.player).push(c);
+      cardLookup.set(`${c.player}|${c.card_set}|${c.grader}|${c.grade}`, c);
+    }
+    const map = new Map();
+    for (const [player,, set,, , grader, grade, basePrice] of CATALOG) {
+      const card = cardLookup.get(`${player}|${set}|${grader}|${grade}`);
+      if (card) {
+        if (!map.has(player)) map.set(player, []);
+        map.get(player).push({ card, basePrice });
+      }
     }
     return map;
   }
