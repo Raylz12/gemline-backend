@@ -1,8 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { fileURLToPath } from 'url';
-import { join, dirname } from 'path';
 import { cached } from './src/cache.js';
 import { buildCard, resetIds } from './src/engine/spread.js';
 import * as cardhedge from './src/adapters/cardhedge.js';
@@ -13,7 +11,6 @@ import { makeRepo, stripeStub } from './src/store/repo.js';
 import { settlementRouter } from './src/routes/settlement.js';
 import { appRouter } from './src/routes/app.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8787;
 const ENRICH_LIMIT = Number(process.env.ENRICH_LIMIT || 12);
 const CACHE_TTL = Number(process.env.CACHE_TTL || 300);
@@ -21,9 +18,6 @@ const CACHE_TTL = Number(process.env.CACHE_TTL || 300);
 const app = express();
 app.use(cors({ origin: (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim()) }));
 app.use(express.json());
-
-// Serve the frontend HTML
-app.use(express.static(join(__dirname, 'public')));
 
 function activeSources() {
   return {
@@ -34,6 +28,8 @@ function activeSources() {
   };
 }
 
+// Build the live arbitrage feed: Card Hedge universe → enrich top cards with
+// live eBay + Whatnot asks → merge into cross-platform spreads.
 async function buildFeed() {
   resetIds();
   const seeds = await cardhedge.topMovers(40);
@@ -44,6 +40,7 @@ async function buildFeed() {
     const ch = await cardhedge.enrich(seed);
     const offers = ch?.offers ? [...ch.offers] : [];
 
+    // Enrich the most volatile cards with live asks from eBay + Whatnot.
     if (cards.length < ENRICH_LIMIT) {
       const q = [seed.year, seed.player, seed.set, seed.variant, seed.grader, seed.grade]
         .filter(Boolean).join(' ');
@@ -54,7 +51,13 @@ async function buildFeed() {
       if (sc) offers.push(sc);
     }
 
-    const card = buildCard({ ...seed, offers, comps: ch?.comps || [], history: ch?.history || [], fmv: seed.fmv ?? ch?.fmv });
+    const card = buildCard({
+      ...seed,
+      offers,
+      comps: ch?.comps || [],
+      history: ch?.history || [],
+      fmv: seed.fmv ?? ch?.fmv,
+    });
     if (card) cards.push(card);
   }
 
@@ -70,7 +73,10 @@ app.get('/feed', async (_req, res) => {
   try {
     const payload = await cached('feed', CACHE_TTL, buildFeed);
     if (!payload.cards.length) {
-      return res.json({ cards: [], mode: 'demo', sources: activeSources(), note: 'No sources configured — GEMLINE will use built-in demo data.' });
+      return res.json({
+        cards: [], mode: 'demo', sources: activeSources(),
+        note: 'No sources returned data. Add keys in .env (Card Hedge is the spine). GEMLINE will use its built-in demo data.',
+      });
     }
     res.json({ ...payload, mode: 'live' });
   } catch (e) {
@@ -79,6 +85,8 @@ app.get('/feed', async (_req, res) => {
   }
 });
 
+// Settlement engine: orders, trades, escrow, vault, credits. In-memory by
+// default; set DATABASE_URL to back it with Postgres (db/schema.sql).
 const repo = await makeRepo();
 app.use('/api', settlementRouter(repo, stripeStub));
 app.use('/api', appRouter(repo, stripeStub));
@@ -86,8 +94,9 @@ app.use('/api', appRouter(repo, stripeStub));
 app.listen(PORT, () => {
   const s = activeSources();
   console.log(`\nGEMLINE backend on http://localhost:${PORT}`);
-  console.log(`  Card Hedge: ${s.cardHedge ? 'on' : 'off'}   eBay: ${s.ebay ? 'on' : 'off'}   Apify: ${s.apify ? 'on' : 'off'}   SportsCardHQ: ${s.sportsCardHQ ? 'on' : 'off'}`);
-  console.log(`  Store: ${repo.kind}  |  Frontend: http://localhost:${PORT}/gemline.html\n`);
+  console.log(`  Card Hedge: ${s.cardHedge ? 'on' : 'off'}   eBay: ${s.ebay ? 'on' : 'off'}   Apify/Whatnot: ${s.apify ? 'on' : 'off'}   SportsCardHQ: ${s.sportsCardHQ ? 'on' : 'off'}`);
+  console.log(`  Settlement store: ${repo.kind}  (orders/trades/escrow/vault at /api/*)`);
+  if (!s.cardHedge && !s.ebay && !s.apify) {
+    console.log('  No sources configured — /feed will return demo mode. Copy .env.example → .env and add keys.\n');
+  } else { console.log(''); }
 });
-
-export default app;
