@@ -136,7 +136,12 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .inner-card::before{content:"";position:absolute;inset:0;background:var(--cardbg);opacity:.92}
 .inner-card::after{content:"";position:absolute;inset:0;background:
    linear-gradient(125deg,transparent 30%,rgba(255,255,255,.22) 45%,transparent 60%);mix-blend-mode:overlay;opacity:.6}
-.card-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:7px;z-index:1;opacity:.88;transition:opacity .2s}
+.card-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:7px;z-index:1;opacity:.88;transition:opacity .3s}
+.card-img.loading{opacity:0}.card-img.loaded{opacity:.9}
+.modal-card-img{width:100%;max-width:240px;border-radius:12px;display:block;margin:0 auto 16px;box-shadow:0 12px 40px -12px rgba(0,0,0,.8);transition:opacity .3s}
+.modal-img-wrap{text-align:center;margin-bottom:16px;min-height:80px;display:flex;align-items:center;justify-content:center}
+.img-spinner{width:30px;height:30px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin:20px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
 .card-img-wrap{position:absolute;inset:0;overflow:hidden;border-radius:7px;z-index:1}
 .no-img .initials{opacity:1}.card-img-wrap+.initials{display:none}.card-img-wrap+.initials+.nm{display:none}.card-img-wrap+.initials+.nm+.vr{display:none}
 /* price range bar */
@@ -849,6 +854,54 @@ let CARDS=NAMES.map((r,i)=>{
 });
 
 /* ============================ HELPERS ============================ */
+/* ── image cache + lazy loader ── */
+const _imgCache=new Map();
+async function fetchImage(c){
+  const key=c.player+'|'+c.set+'|'+c.variant+'|'+c.grader+'|'+c.grade;
+  if(_imgCache.has(key)) return _imgCache.get(key);
+  // 1. Try imageUrl already on card (from backend)
+  if(c.imageUrl){_imgCache.set(key,c.imageUrl);return c.imageUrl;}
+  // 2. Pokémon: call TCG API directly (CORS-enabled, free)
+  if(c.sport==='Pokémon'){
+    try{
+      const name=c.player.split(' ')[0].toLowerCase();
+      const r=await fetch(`https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(c.player)}"&pageSize=3`,{headers:{'X-Api-Key':''}});
+      if(r.ok){const d=await r.json();const url=d.data?.[0]?.images?.large||null;_imgCache.set(key,url);return url;}
+    }catch{}
+  }
+  // 3. Sports: ask backend to scrape eBay thumbnail
+  try{
+    const q=encodeURIComponent(`${c.player} ${c.set} ${c.grader} ${c.grade}`);
+    const r=await fetch(API_BASE+`/api/image?q=${q}`,{mode:'cors'});
+    if(r.ok){const d=await r.json();const url=d.url||null;_imgCache.set(key,url);return url;}
+  }catch{}
+  _imgCache.set(key,null);return null;
+}
+function setCardImg(el,url){
+  if(!url){el.classList.add('no-img');return;}
+  el.classList.add('has-img');
+  const wrap=el.querySelector('.card-img-wrap');
+  if(!wrap){
+    const w=document.createElement('div');w.className='card-img-wrap';
+    const img=document.createElement('img');img.className='card-img loading';img.alt='';
+    img.onload=()=>img.classList.replace('loading','loaded');
+    img.onerror=()=>{w.remove();el.classList.remove('has-img');el.classList.add('no-img')};
+    img.src=url;w.appendChild(img);el.insertBefore(w,el.firstChild);
+  } else {
+    const img=wrap.querySelector('img');
+    if(img){img.classList.add('loading');img.onload=()=>img.classList.replace('loading','loaded');img.src=url;}
+  }
+}
+/* lazy-load images for all visible cards */
+async function lazyLoadImages(){
+  const arts=document.querySelectorAll('.card[data-id]');
+  for(const art of arts){
+    const id=art.dataset.id;const c=CARDS.find(x=>String(x.id)===String(id));if(!c)continue;
+    const inner=art.querySelector('.inner-card');if(!inner)continue;
+    if(inner.classList.contains('has-img')||inner.classList.contains('no-img'))continue;
+    fetchImage(c).then(url=>setCardImg(inner,url));
+  }
+}
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const fmt=n=>"$"+Math.round(n).toLocaleString();
 const watch=new Set();
@@ -934,6 +987,7 @@ function renderGrid(){
   $("#resultCount").textContent=`${r.length} slab${r.length!==1?'s':''}`;
   $("#cardGrid").innerHTML=r.map(cardArticle).join("");
   renderFeatured();
+  requestAnimationFrame(lazyLoadImages);
 }
 function renderFeatured(){
   const strip=$("#featuredStrip");if(!strip)return;
@@ -1050,6 +1104,21 @@ function renderPortfolio(){
 /* ============================ MODAL ============================ */
 function openCard(id){
   const c=CARDS.find(x=>x.id==id);if(!c)return;
+  // Build big slab for modal left panel (with real image or gradient fallback)
+  const bigRange=c.range&&c.range.hi>c.range.lo?`<div class="range-wrap" style="margin-top:14px">
+    <div class="range-labels"><span class="mono" style="font-size:11px">${fmt(c.range.lo)}</span><span class="fmv mono" style="font-size:11px">FMV ${fmt(c.range.mid)}</span><span class="mono" style="font-size:11px">${fmt(c.range.hi)}</span></div>
+    <div class="range-track"><div class="range-fill" style="width:${Math.round(((c.range.mid-c.range.lo)/(c.range.hi-c.range.lo||1))*100)}%"></div><div class="range-dot" style="left:${Math.round(((c.range.mid-c.range.lo)/(c.range.hi-c.range.lo||1))*100)}%"></div></div>
+  </div>`:'';
+  const big=`<div class="slab bigslab">
+    <div class="label"><span>${c.grader} ${c.grade}</span><span class="gd">${c.set.split(' ')[0]}</span></div>
+    <div class="inner-card" style="${slabStyle(c)}">
+      <span class="num">${c.num||''}</span><span class="sportmark">${(c.sport||'').slice(0,3).toUpperCase()}</span>
+      <span class="initials" style="${c.imageUrl?'opacity:0':''}">${c.ini.length>5?c.ini.slice(0,4):c.ini}</span>
+      <span class="nm">${c.player}</span><span class="vr">${c.variant||''}</span>
+    </div>
+  </div>
+  <div class="modal-img-wrap" id="modalImgWrap"><div class="img-spinner" id="modalSpinner"></div></div>
+  ${bigRange}`;
   const sorted=[...c.plats].sort((a,b)=>a.price-b.price);
   const cross=sorted.map((p,i)=>{
     const tag=i===0?`<span class="tag" style="background:var(--up-soft);color:var(--up)">lowest</span>`:i===sorted.length-1?`<span class="tag" style="background:var(--down-soft);color:var(--down)">highest</span>`:`<span class="tag" style="background:var(--panel);color:var(--muted)">${'+'+(((p.price-c.lo)/c.lo*100).toFixed(0))}%</span>`;
@@ -1096,6 +1165,23 @@ function openCard(id){
       <div class="mr-section"><h4>Recent sales</h4><div class="comps">${comps}</div></div>
     </div>`;
   $("#overlay").classList.add("on");document.body.style.overflow="hidden";
+  // Lazy-load real card image into modal
+  fetchImage(c).then(url=>{
+    const wrap=$("#modalImgWrap");const spinner=$("#modalSpinner");
+    if(!wrap)return;
+    if(url){
+      const img=document.createElement('img');
+      img.className='modal-card-img loading';img.alt=c.player;
+      img.onload=()=>{img.classList.replace('loading','loaded');if(spinner)spinner.remove();}
+      img.onerror=()=>{wrap.remove();}
+      img.src=url;wrap.innerHTML='';wrap.appendChild(img);
+      // Also update the inner-card gradient overlay
+      const inner=wrap.closest('.modal-left')?.querySelector('.inner-card');
+      if(inner)setCardImg(inner,url);
+    } else {
+      wrap.remove();
+    }
+  });
 }
 function closeModal(){$("#overlay").classList.remove("on");document.body.style.overflow=""}
 

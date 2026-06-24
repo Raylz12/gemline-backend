@@ -132,6 +132,40 @@ app.get('/feed', async (_req, res) => {
   }
 });
 
+// ── /api/image — lazy card image lookup (cached) ─────────────────────────────
+const _imageEndpointCache = new Map();
+app.get('/api/image', async (req, res) => {
+  const q = req.query.q || '';
+  if (!q) return res.json({ url: null });
+  if (_imageEndpointCache.has(q)) return res.json({ url: _imageEndpointCache.get(q) });
+
+  try {
+    // Pokemon: use TCG API
+    if (q.toLowerCase().includes('pokémon') || q.toLowerCase().includes('pokemon') ||
+        ['charizard','pikachu','umbreon','mewtwo','rayquaza'].some(p => q.toLowerCase().includes(p))) {
+      const name = q.split(' ')[0];
+      const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=1`);
+      if (r.ok) {
+        const d = await r.json();
+        const url = d.data?.[0]?.images?.large || null;
+        _imageEndpointCache.set(q, url);
+        return res.json({ url });
+      }
+    }
+
+    // Sports: eBay thumbnail via Apify
+    const { ebayThumbnail } = await import('../src/adapters/images.js');
+    // ebayThumbnail is not exported directly — use resolveImage with a fake entry
+    const { resolveImage } = await import('../src/adapters/images.js');
+    const entry = { sport: 'Sports', player: q, set: '', variant: '', grader: '', grade: '', ebayQuery: q };
+    const url = await resolveImage(entry);
+    _imageEndpointCache.set(q, url);
+    res.json({ url });
+  } catch (e) {
+    res.json({ url: null });
+  }
+});
+
 // Settlement + app routes
 let repo;
 async function getRepo() {
