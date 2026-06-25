@@ -5,14 +5,21 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "start:api": "node server.js",
+    "dev:api": "node --watch server.js",
     "test": "node test/lifecycle.test.js",
     "migrate": "psql \"$DATABASE_URL\" -f db/schema.sql"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "stripe": "^22.2.3"
   },
   "optionalDependencies": {
     "pg": "^8.22.0"
@@ -21,3 +28,4 @@
     "node": ">=18"
   }
 }
+
