@@ -98,7 +98,10 @@ export default function ProfilePage() {
 
   // Fetch all badges for detail view
   useEffect(() => {
-    fetch('/api/badges').then(r => r.json()).then(d => setAllBadgesList(d.badges || [])).catch(() => {});
+    fetch('/api/badges', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.json())
+      .then(d => { if (d.badges) setAllBadgesList(d.badges); })
+      .catch(() => {});
   }, []);
 
   const toggleShowcase = async (cardId, type = 'digital') => {
@@ -173,7 +176,7 @@ export default function ProfilePage() {
     (BADGE_TIER_ORDER[a.tier] ?? 4) - (BADGE_TIER_ORDER[b.tier] ?? 4)
   );
   const featured = featuredKeys.length > 0
-    ? featuredKeys.map(k => allBadges.find(b => b.key === k)).filter(Boolean)
+    ? featuredKeys.map(k => allBadges.find(b => b.key === k || b.name === k)).filter(Boolean)
     : allBadges.slice(0, 6);
   const digitalShowcase = profile.digitalShowcase || [];
   const physicalShowcase = profile.physicalShowcase || [];
@@ -558,7 +561,7 @@ export default function ProfilePage() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {sorted.map(b => {
-                    const earned = allBadges.some(eb => eb.key === b.key);
+                    const earned = allBadges.some(eb => eb.key === b.key || eb.name === b.name);
                     const tierColor = { diamond: '#B9F2FF', gold: '#E8B339', silver: '#C0C0C0', bronze: '#CD7F32' }[b.tier] || 'var(--dim)';
                     return (
                       <div key={b.key} onClick={() => setSelectedBadge({ ...b, earned })}

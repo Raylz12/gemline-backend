@@ -239,7 +239,7 @@ const DEMO_POSTS = [
     text: 'Looking to trade my BGS 9.5 Wembanyama for a PSA 10 LeBron rookie. DM me!',
     likes: 7, comments: 5 },
   { id: 3, user: '@SlabKing', avatar: 'S', time: '1h ago', type: 'sale',
-    text: 'Just sold my PSA 8 Ken Griffey Jr. '89 Upper Deck for $87 — finally got the price I wanted',
+    text: 'Just sold my PSA 8 Ken Griffey Jr. \x2789 Upper Deck for $87 — finally got the price I wanted',
     likes: 22, comments: 8 },
   { id: 4, user: '@VaultCollector', avatar: 'V', time: '3h ago', type: 'pull',
     text: 'Opened 3 hobby boxes today. Biggest hit: 1/1 logoman Jalen Brunson 🤯',
