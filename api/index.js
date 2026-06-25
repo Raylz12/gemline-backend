@@ -36,6 +36,59 @@ async function getRepo() {
   return repo;
 }
 
+// ── eBay Marketplace Account Deletion Notifications ──────────────────────────
+// Required by eBay Developer Program for all apps using eBay APIs.
+// GET: responds to eBay's challenge code for endpoint verification.
+// POST: receives and acknowledges deletion/closure notifications.
+//
+// Set in Vercel env vars:
+//   EBAY_VERIFICATION_TOKEN  — 32-80 chars, alphanumeric + _ and -
+//   EBAY_ENDPOINT_URL        — full public URL of this endpoint, e.g. https://gemlinecards.com/api/ebay/notifications
+{
+  const { createHash } = await import('crypto');
+  const EBAY_TOKEN    = process.env.EBAY_VERIFICATION_TOKEN || 'gemline_ebay_verify_token_v1_2024';
+  const EBAY_ENDPOINT = process.env.EBAY_ENDPOINT_URL       || 'https://gemlinecards.com/api/ebay/notifications';
+
+  // Challenge verification — eBay sends GET ?challenge_code=xxx
+  app.get('/api/ebay/notifications', (req, res) => {
+    const challengeCode = req.query.challenge_code;
+    if (!challengeCode) return res.status(400).json({ error: 'missing challenge_code' });
+
+    // Hash in exact order: challengeCode + verificationToken + endpoint
+    const hash = createHash('sha256');
+    hash.update(challengeCode);
+    hash.update(EBAY_TOKEN);
+    hash.update(EBAY_ENDPOINT);
+    const challengeResponse = hash.digest('hex');
+
+    // Must use JSON library (not string concat) to avoid BOM issues
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json({ challengeResponse });
+  });
+
+  // Notification receiver — eBay sends POST with deletion payload
+  app.post('/api/ebay/notifications', express.json({ type: '*/*' }), (req, res) => {
+    const notification = req.body;
+    const topic = notification?.metadata?.topic || notification?.notification?.notificationId || 'unknown';
+    console.log('[ebay-notification] received:', topic, JSON.stringify(notification).slice(0, 200));
+
+    // If this is a MARKETPLACE_ACCOUNT_DELETION event, handle user data deletion
+    if (topic === 'MARKETPLACE_ACCOUNT_DELETION' || topic?.includes('deletion')) {
+      const userId = notification?.notification?.data?.userId
+        || notification?.notification?.data?.username
+        || null;
+      if (userId) {
+        console.log(`[ebay-notification] deletion request for eBay user: ${userId}`);
+        // GEMLINE uses Browse API only (client credentials) — no eBay user PII stored.
+        // No action needed, but log for compliance audit trail.
+      }
+    }
+
+    // eBay requires a 200 OK acknowledgment — no body needed
+    res.status(200).send();
+  });
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({
   ok: true,
