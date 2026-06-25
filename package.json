@@ -1,7 +1,7 @@
 {
   "name": "gemline-backend",
   "version": "1.0.0",
-  "description": "GEMLINE trading card exchange — settlement engine + arbitrage feed backend",
+  "description": "GEMLINE trading card exchange \u2014 settlement engine + arbitrage feed backend",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -28,4 +28,3 @@
     "node": ">=18"
   }
 }
-

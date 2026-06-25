@@ -5,3 +5,4 @@ node_modules/
 .env.production.local
 .vercel
 public/gemline.html.bak
+.next/
