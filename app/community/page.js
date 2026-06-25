@@ -228,6 +228,119 @@ function AchievementsChecklist({ token }) {
   );
 }
 
+
+/* ─── Community Activity Feed ─── */
+const DEMO_POSTS = [
+  { id: 1, user: '@CardRipper', avatar: 'C', time: '2m ago', type: 'pull',
+    text: 'Just ripped a pack and pulled a PSA 10 Cooper Flagg! 🔥',
+    card: { name: 'Cooper Flagg', grade: 'PSA 10', value: '$268', img: null, sport: '🏀' },
+    likes: 14, comments: 3 },
+  { id: 2, user: '@PackShark6903', avatar: 'P', time: '18m ago', type: 'trade',
+    text: 'Looking to trade my BGS 9.5 Wembanyama for a PSA 10 LeBron rookie. DM me!',
+    likes: 7, comments: 5 },
+  { id: 3, user: '@SlabKing', avatar: 'S', time: '1h ago', type: 'sale',
+    text: 'Just sold my PSA 8 Ken Griffey Jr. '89 Upper Deck for $87 — finally got the price I wanted',
+    likes: 22, comments: 8 },
+  { id: 4, user: '@VaultCollector', avatar: 'V', time: '3h ago', type: 'pull',
+    text: 'Opened 3 hobby boxes today. Biggest hit: 1/1 logoman Jalen Brunson 🤯',
+    card: { name: 'Jalen Brunson', grade: 'RAW', value: '1/1', img: null, sport: '🏀' },
+    likes: 41, comments: 17 },
+  { id: 5, user: '@PokeMasterJ', avatar: 'P', time: '5h ago', type: 'pull',
+    text: 'Hit a CGC 10 Pristine Charizard from the new Mega Evolution set 🐉',
+    card: { name: 'Charizard', grade: 'CGC 10 PRISTINE', value: '$340+', img: null, sport: '🃏' },
+    likes: 88, comments: 29 },
+];
+
+const TYPE_META = {
+  pull: { label: 'Pack Pull', color: 'var(--gold)', icon: '🎴' },
+  trade: { label: 'Trade Offer', color: 'var(--blue)', icon: '🤝' },
+  sale: { label: 'Sale', color: 'var(--up)', icon: '💰' },
+};
+
+function FeedPost({ post }) {
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.likes);
+  const meta = TYPE_META[post.type] || TYPE_META.pull;
+  return (
+    <div style={{
+      background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '16px 18px',
+      marginBottom: 12, transition: '.15s',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+          background: 'linear-gradient(135deg,var(--gold),#b8851f)',
+          display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16, color: '#000',
+        }}>{post.avatar}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>{post.user}</div>
+          <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>{post.time}</div>
+        </div>
+        <div style={{
+          fontSize: 10, fontWeight: 600, fontFamily: 'var(--mono)',
+          color: meta.color, background: 'rgba(0,0,0,.3)', border: `1px solid ${meta.color}33`,
+          padding: '3px 9px', borderRadius: 20, letterSpacing: '.08em',
+        }}>{meta.icon} {meta.label}</div>
+      </div>
+
+      {/* Post text */}
+      <p style={{ fontSize: 13, lineHeight: 1.55, marginBottom: post.card ? 12 : 14, color: 'var(--txt)' }}>
+        {post.text}
+      </p>
+
+      {/* Card attachment */}
+      {post.card && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: 'var(--panel-2)', border: '1px solid var(--line)',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 14,
+        }}>
+          <div style={{
+            width: 36, height: 48, borderRadius: 5, background: 'linear-gradient(135deg,#1a1f35,#2a3050)',
+            display: 'grid', placeItems: 'center', fontSize: 20, flexShrink: 0,
+          }}>{post.card.sport}</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{post.card.name}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              {post.card.grade} · <span style={{ color: 'var(--gold)' }}>{post.card.value}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <button onClick={() => { setLiked(!liked); setLikeCount(n => liked ? n - 1 : n + 1); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
+            fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)', cursor: 'pointer' }}>
+          <span style={{ fontSize: 14 }}>{liked ? '❤️' : '🤍'}</span> {likeCount}
+        </button>
+        <button style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
+          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
+          <span style={{ fontSize: 14 }}>💬</span> {post.comments}
+        </button>
+        <button style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
+          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', marginLeft: 'auto' }}>
+          <span style={{ fontSize: 14 }}>↗</span> Share
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CommunityFeed() {
+  return (
+    <div style={{ marginBottom: 28 }}>
+      {DEMO_POSTS.map(p => <FeedPost key={p.id} post={p} />)}
+      <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--dim)', fontFamily: 'var(--mono)', fontSize: 11 }}>
+        Full activity feed available when signed in
+      </div>
+    </div>
+  );
+}
+/* ─── /Community Feed ─── */
+
 export default function CommunityPage() {
   const { user, token, authFetch } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,7 +350,7 @@ export default function CommunityPage() {
   const [myFollowing, setMyFollowing] = useState([]);
   const [myFollowers, setMyFollowers] = useState([]);
   const [followingSet, setFollowingSet] = useState(new Set());
-  const [tab, setTab] = useState('discover');
+  const [tab, setTab] = useState('feed');
 
   // Load suggested users
   useEffect(() => {
@@ -315,6 +428,9 @@ export default function CommunityPage() {
       {/* Tabs */}
       {!searchQuery && (
         <div className="seg" style={{ marginBottom: 20 }}>
+          <button className={tab === 'feed' ? 'on' : ''} onClick={() => setTab('feed')}>
+            🔥 Feed
+          </button>
           <button className={tab === 'discover' ? 'on' : ''} onClick={() => setTab('discover')}>
             Discover
           </button>
@@ -340,7 +456,9 @@ export default function CommunityPage() {
         </div>
       )}
 
-      <div className="community-grid">
+      {tab === 'feed' && !searchQuery && <CommunityFeed />}
+
+      {tab !== 'feed' && <div className="community-grid">
         {displayUsers.map(u => (
           <UserCard
             key={u.id}
@@ -350,7 +468,7 @@ export default function CommunityPage() {
             followingSet={followingSet}
           />
         ))}
-      </div>
+      </div>}
 
       {!searchQuery && tab === 'discover' && suggested.length === 0 && (
         <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center' }}>

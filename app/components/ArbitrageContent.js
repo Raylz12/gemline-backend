@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 
 function fmtP(n) {
@@ -9,242 +9,181 @@ function fmtP(n) {
   return '$' + Number(n).toFixed(2);
 }
 
-function fmtPct(n) {
-  if (!n) return null;
-  const abs = Math.abs(Number(n));
-  return { sign: n > 0 ? '+' : '-', val: abs.toFixed(1) + '%', positive: n > 0 };
+function StatTile({ label, value, sub, accent }) {
+  return (
+    <div style={{
+      background: 'var(--panel)', border: `1px solid var(--line)`,
+      borderLeft: `3px solid ${accent || 'var(--gold)'}`,
+      borderRadius: 12, padding: '14px 18px', flex: 1, minWidth: 120,
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{ position: 'absolute', right: -14, top: -14, width: 60, height: 60, borderRadius: '50%', background: `radial-gradient(circle, ${accent || 'rgba(232,179,57,.12)'}, transparent 70%)` }} />
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.12em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 22, color: accent || 'var(--gold)', letterSpacing: '-.01em' }}>{value}</div>
+      {sub && <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)', marginTop: 3 }}>{sub}</div>}
+    </div>
+  );
 }
 
-// Deduplicate by cardhedge_id+grader — keeps the one with raw grader normalized
-function dedupe(arr) {
-  const seen = new Map();
-  return arr.filter(c => {
-    const key = (c.cardhedge_id || '') + '_' + (c.grader || '').toLowerCase().replace('raw ungraded', 'raw') + '_' + (c.grade || '').toLowerCase();
+function EdgeMeter({ pct, color }) {
+  const width = Math.min(Math.abs(pct || 0), 100);
+  const bg = color || (pct > 0 ? 'var(--up)' : 'var(--down)');
+  return (
+    <div style={{ height: 4, background: 'var(--panel-2)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+      <div style={{ height: '100%', width: `${width}%`, background: bg, borderRadius: 2, transition: 'width .4s ease' }} />
+    </div>
+  );
+}
+
+function CardRow({ card, onClick, rank }) {
+  const gain = Number(card.gain7d || 0);
+  const gainColor = gain > 0 ? 'var(--up)' : gain < 0 ? 'var(--down)' : 'var(--dim)';
+  const gainBg = gain > 0 ? 'var(--up-soft)' : gain < 0 ? 'var(--down-soft)' : 'rgba(255,255,255,.04)';
+  const gainStr = gain > 0 ? `+${gain.toFixed(1)}%` : `${gain.toFixed(1)}%`;
+
+  return (
+    <div onClick={() => onClick?.(card)} style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px',
+      background: 'var(--panel)', borderRadius: 10, border: '1px solid var(--line)',
+      cursor: 'pointer', transition: '.15s',
+    }}
+    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold)'}
+    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}>
+
+      {rank !== undefined && (
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)', width: 18, textAlign: 'center', flexShrink: 0 }}>{rank}</div>
+      )}
+
+      {/* Card thumbnail */}
+      <div style={{
+        width: 40, height: 54, borderRadius: 5, flexShrink: 0, overflow: 'hidden',
+        background: card.thumbnail
+          ? `url(${card.thumbnail}) center/contain no-repeat var(--panel-2)`
+          : 'linear-gradient(135deg,#1a1f35,#2a3050)',
+      }} />
+
+      {/* Name + set */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 5 }}>
+          {card.player}
+          {card.rookie && <span style={{ fontSize: 9, fontWeight: 700, background: 'rgba(91,141,239,.2)', color: '#5B8DEF', padding: '1px 5px', borderRadius: 4, letterSpacing: '.06em' }}>RC</span>}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {card.grader && card.grade ? `${card.grader} ${card.grade}` : (card.grader || 'Raw')}
+          {' · '}{card.year} {(card.set || '').replace(/^\d{4}\s+/, '')}
+        </div>
+        {/* Volume bar */}
+        <EdgeMeter pct={Math.min((card.sales7d || 0) / 3, 100)} color="rgba(91,141,239,.6)" />
+      </div>
+
+      {/* Price */}
+      <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
+        <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14 }}>{fmtP(card.market)}</div>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', marginTop: 2 }}>{card.sales7d || 0} sales/wk</div>
+      </div>
+
+      {/* Change pill */}
+      {gain !== 0 && (
+        <div style={{
+          fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700,
+          color: gainColor, background: gainBg,
+          padding: '4px 9px', borderRadius: 7, flexShrink: 0, minWidth: 60, textAlign: 'center',
+        }}>{gainStr}</div>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, emoji, subtitle, cards, onClick, color, maxInitial = 8 }) {
+  const [showAll, setShowAll] = useState(false);
+  const display = showAll ? cards : cards.slice(0, maxInitial);
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 18 }}>{emoji}</span>
+        <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 17, color: color || 'var(--txt)' }}>{title}</h3>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', background: 'var(--panel)', border: '1px solid var(--line)', padding: '2px 7px', borderRadius: 20 }}>{cards.length}</span>
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>{subtitle}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {display.map((c, i) => <CardRow key={c.id || i} card={c} onClick={onClick} rank={i + 1} />)}
+      </div>
+      {cards.length > maxInitial && !showAll && (
+        <button onClick={() => setShowAll(true)} style={{
+          marginTop: 8, padding: '8px 20px', borderRadius: 8, fontSize: 12,
+          background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--muted)',
+          cursor: 'pointer', width: '100%', transition: '.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold)'}
+        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}>
+          Show all {cards.length} →
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TerminalHeader({ lastUpdate, onRefresh, loading }) {
+  return (
+    <div style={{
+      background: '#060910', border: '1px solid var(--line)', borderRadius: 12,
+      padding: '14px 20px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 14,
+      fontFamily: 'var(--mono)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(52,216,138,.12)', padding: '4px 10px', borderRadius: 6 }}>
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#34D88A', boxShadow: '0 0 8px #34D88A', animation: 'pulse 1.4s infinite' }} />
+        <span style={{ fontSize: 10, fontWeight: 600, color: '#34D88A', letterSpacing: '.12em' }}>LIVE FEED</span>
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: '.06em', color: 'var(--gold)', flex: 1, textAlign: 'center' }}>
+        GEMLINE ARB DESK
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--dim)', marginRight: 8 }}>
+        {lastUpdate ? `Updated ${lastUpdate}` : 'Loading…'}
+      </div>
+      <button onClick={onRefresh} disabled={loading} style={{
+        fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)',
+        border: '1px solid var(--gold)', borderRadius: 6, padding: '5px 12px',
+        background: 'none', cursor: loading ? 'default' : 'pointer', opacity: loading ? .5 : 1,
+        transition: '.15s',
+      }}>
+        {loading ? '↻ ...' : '↻ Refresh'}
+      </button>
+    </div>
+  );
+}
+
+function dedup(cards) {
+  // Deduplicate by cardhedge_id + grader + grade combination
+  const seen = new Set();
+  return (cards || []).filter(c => {
+    const key = `${c.cardhedge_id}|${c.grader}|${c.grade}`.toLowerCase().replace(/raw|ungraded/g, 'raw');
     if (seen.has(key)) return false;
-    seen.set(key, true);
+    seen.add(key);
     return true;
   });
 }
 
-// ── Terminal Header ─────────────────────────────────────────────────────────
-function TerminalHeader({ lastFetch }) {
-  const [time, setTime] = useState('');
-  useEffect(() => {
-    const tick = () => setTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-      background: 'linear-gradient(90deg, rgba(10,13,20,1), rgba(20,25,40,1))',
-      border: '1px solid rgba(232,179,57,.2)', borderRadius: 10, marginBottom: 16,
-      fontFamily: 'var(--mono)', fontSize: 11,
-    }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{
-          width: 7, height: 7, borderRadius: '50%', background: '#34d88a',
-          boxShadow: '0 0 6px #34d88a', animation: 'pulse-live 2s ease-in-out infinite',
-          display: 'inline-block', flexShrink: 0,
-        }} />
-        <span style={{ color: '#34d88a', fontWeight: 700, letterSpacing: '.06em' }}>LIVE FEED</span>
-      </span>
-      <span style={{ color: 'rgba(232,179,57,.7)', fontWeight: 700, fontSize: 13, letterSpacing: '.04em', marginRight: 'auto' }}>
-        GEMLINE ARB DESK
-      </span>
-      <span style={{ color: 'var(--muted)' }}>
-        {time}
-      </span>
-    </div>
-  );
-}
-
-// ── Stat Tile ───────────────────────────────────────────────────────────────
-function StatTile({ label, value, sub, color }) {
-  return (
-    <div style={{
-      flex: 1, minWidth: 100, padding: '12px 14px',
-      background: 'var(--panel)', border: '1px solid var(--line)',
-      borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 2,
-    }}>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: color || 'var(--txt)' }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--dim)' }}>{sub}</div>}
-    </div>
-  );
-}
-
-// ── Card Row (Bloomberg terminal style) ──────────────────────────────────────
-function CardRow({ card, maxGain, onClick }) {
-  const pct = fmtPct(card.gain7d);
-  const barW = card.gain7d ? Math.min(100, Math.abs(card.gain7d) / (maxGain || 100) * 100) : 0;
-  const barColor = card.gain7d > 0
-    ? 'linear-gradient(90deg, #34d88a, rgba(52,216,138,.4))'
-    : 'linear-gradient(90deg, #ff5c6c, rgba(255,92,108,.4))';
-
-  return (
-    <div
-      onClick={() => onClick?.(card)}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '44px 1fr auto auto',
-        alignItems: 'center',
-        gap: 10,
-        padding: '9px 12px',
-        background: 'var(--panel)',
-        borderRadius: 10,
-        border: '1px solid var(--line)',
-        cursor: 'pointer',
-        transition: '.15s',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(232,179,57,.4)'; e.currentTarget.style.background = 'var(--panel-2)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--panel)'; }}
-    >
-      {/* Momentum bar across bottom */}
-      {barW > 0 && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, height: 2,
-          width: barW + '%', background: barColor, borderRadius: '0 2px 0 0',
-        }} />
-      )}
-
-      {/* Thumbnail */}
-      <div style={{
-        width: 44, height: 58, borderRadius: 6, flexShrink: 0, overflow: 'hidden',
-        background: card.thumbnail
-          ? `url(${card.thumbnail}) center/contain no-repeat var(--panel-2)`
-          : 'linear-gradient(135deg, #2a2a2a, #555)',
-      }} />
-
-      {/* Card info */}
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {card.player}
-          {card.rookie && <span style={{ marginLeft: 5, fontSize: 9, color: '#f59e0b', background: 'rgba(245,158,11,.15)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--mono)', fontWeight: 700, letterSpacing: '.05em' }}>RC</span>}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
-          <span style={{
-            display: 'inline-block', padding: '1px 6px', borderRadius: 4,
-            background: card.grader === 'PSA' ? 'rgba(91,141,239,.18)' : card.grader === 'BGS' ? 'rgba(155,123,255,.15)' : 'rgba(255,255,255,.07)',
-            color: card.grader === 'PSA' ? '#7aa3f5' : card.grader === 'BGS' ? '#c4b5fd' : 'var(--muted)',
-            fontWeight: 600, fontSize: 10, marginRight: 5,
-          }}>
-            {card.grader}{card.grade ? ' ' + card.grade : ''}
-          </span>
-          {card.set}
-        </div>
-        {/* Volume bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5 }}>
-          <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: Math.min(100, (card.sales7d || 0) / 300 * 100) + '%',
-              background: 'linear-gradient(90deg, rgba(232,179,57,.6), rgba(232,179,57,.2))',
-              borderRadius: 2,
-            }} />
-          </div>
-          <span style={{ fontSize: 9, color: 'var(--dim)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{card.sales7d || 0}/wk</span>
-        </div>
-      </div>
-
-      {/* Price + change */}
-      <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 68 }}>
-        <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 15 }}>{fmtP(card.market)}</div>
-        {pct && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 2,
-            fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600,
-            color: pct.positive ? 'var(--up)' : 'var(--down)',
-            background: pct.positive ? 'rgba(52,216,138,.1)' : 'rgba(255,92,108,.1)',
-            padding: '1px 6px', borderRadius: 4, marginTop: 2,
-          }}>
-            {pct.sign}{pct.val}
-          </div>
-        )}
-      </div>
-
-      {/* Edge badge */}
-      <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 52 }}>
-        {card.edge > 0 ? (
-          <div style={{
-            fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
-            color: '#000', background: 'var(--gold)',
-            padding: '2px 7px', borderRadius: 5, textAlign: 'center',
-          }}>
-            {Number(card.edge).toFixed(0)}% edge
-          </div>
-        ) : (
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', textAlign: 'right' }}>
-            —
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Section ─────────────────────────────────────────────────────────────────
-function Section({ title, emoji, subtitle, cards, onClick, color }) {
-  const [showAll, setShowAll] = useState(false);
-  const display = showAll ? cards : cards.slice(0, 10);
-  const maxGain = Math.max(...cards.map(c => Math.abs(c.gain7d || 0)), 1);
-
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 20 }}>{emoji}</span>
-        <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 18, color: color || 'var(--txt)' }}>{title}</h3>
-        <span style={{
-          marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10,
-          color: 'var(--dim)', letterSpacing: '.06em',
-        }}>{cards.length} cards</span>
-      </div>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>{subtitle}</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {display.map((c, i) => (
-          <CardRow key={c.id || i} card={c} onClick={onClick} maxGain={maxGain} />
-        ))}
-      </div>
-      {cards.length > 10 && !showAll && (
-        <button onClick={() => setShowAll(true)} style={{
-          marginTop: 8, padding: '8px 20px', borderRadius: 8, fontSize: 12,
-          background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer',
-          width: '100%',
-        }}>Show all {cards.length} →</button>
-      )}
-    </div>
-  );
-}
-
-// ── Main Component ───────────────────────────────────────────────────────────
 export default function ArbitrageContent({ onSelectCard }) {
   const { token } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(null);
   const [subStatus, setSubStatus] = useState(null);
   const [subLoading, setSubLoading] = useState(true);
-  const [lastFetch, setLastFetch] = useState(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
+    setLoading(true);
     fetch('/api/market/arb')
       .then(r => r.json())
-      .then(raw => {
-        // Deduplicate all arrays
-        setData({
-          undervalued: dedupe(raw.undervalued || []),
-          gainers: dedupe(raw.gainers || []),
-          losers: dedupe(raw.losers || []),
-          mostTraded: dedupe(raw.mostTraded || []),
-        });
-        setLastFetch(new Date());
+      .then(d => {
+        setData(d);
+        setLastUpdate(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       })
       .catch(err => console.error('Arb fetch error:', err))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     if (!token) { setSubStatus(false); setSubLoading(false); return; }
@@ -263,7 +202,7 @@ export default function ArbitrageContent({ onSelectCard }) {
     const normalized = {
       ...card,
       ini: (card.player || '').split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase(),
-      theme: ['#2a2a2a', '#555'],
+      theme: ['#1a1f35', '#2a3050'],
     };
     onSelectCard?.(normalized);
   };
@@ -282,7 +221,18 @@ export default function ArbitrageContent({ onSelectCard }) {
     } catch { alert('Failed to start checkout'); }
   };
 
-  if (loading) {
+  // Deduplicated data
+  const undervalued = dedup(data?.undervalued);
+  const gainers = dedup(data?.gainers);
+  const losers = dedup(data?.losers);
+  const mostTraded = dedup(data?.mostTraded);
+
+  // Stats
+  const topGain = gainers[0]?.gain7d;
+  const topLoss = losers[0]?.gain7d;
+  const totalVol = mostTraded.reduce((s, c) => s + (c.sales7d || 0), 0);
+
+  if (loading && !data) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
         <div className="scout-spin" style={{ width: 24, height: 24, margin: '0 auto 12px' }} />
@@ -291,33 +241,31 @@ export default function ArbitrageContent({ onSelectCard }) {
     );
   }
 
-  // Paywall gate — show terminal header + blurred preview + subscribe CTA
+  // Paywall gate
   if (!subLoading && !subStatus) {
     return (
       <div>
-        <TerminalHeader lastFetch={lastFetch} />
-        {/* Preview: blurred */}
+        <TerminalHeader lastUpdate={lastUpdate} onRefresh={fetchData} loading={loading} />
         <div style={{ position: 'relative' }}>
-          <div style={{ filter: 'blur(3px)', pointerEvents: 'none', maxHeight: 500, overflow: 'hidden' }}>
-            {data?.undervalued?.length > 0 && (
-              <Section title="Undervalued Radar" emoji="🎯"
-                subtitle="Cards with the biggest price spreads and real trading volume"
-                cards={data.undervalued.slice(0, 5)} color="var(--gold)" />
+          <div style={{ filter: 'blur(3px)', pointerEvents: 'none', maxHeight: 480, overflow: 'hidden' }}>
+            {undervalued.length > 0 && (
+              <Section title="Undervalued Radar" emoji="🎯" subtitle="Cards with the biggest price spreads and real trading volume"
+                cards={undervalued.slice(0, 5)} color="var(--gold)" maxInitial={5} />
             )}
           </div>
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'linear-gradient(to bottom, transparent, rgba(10,13,20,.95) 50%)',
+            background: 'linear-gradient(to bottom, transparent, rgba(10,13,20,.97) 45%)',
           }}>
-            <div style={{ textAlign: 'center', padding: 32 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📊</div>
+            <div style={{ textAlign: 'center', padding: 32, maxWidth: 420 }}>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>📊</div>
               <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 800, fontSize: 24, marginBottom: 8 }}>Arbitrage Pro</h3>
-              <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20, maxWidth: 360, lineHeight: 1.5 }}>
-                Undervalued cards, price spreads, gainers, losers, and volume leaders — updated every 5 minutes.
+              <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
+                Undervalued cards, price movers, gainers, losers, and volume leaders — updated every 5 minutes.
               </p>
               <button onClick={handleSubscribe} style={{
-                padding: '14px 32px', borderRadius: 10, fontSize: 15, fontWeight: 700,
-                background: 'var(--gold)', color: '#000', cursor: 'pointer', border: 'none',
+                padding: '14px 36px', borderRadius: 10, fontSize: 15, fontWeight: 700,
+                background: 'var(--gold)', color: '#000', cursor: 'pointer', border: 'none', transition: '.15s',
               }}>
                 Unlock for $7.99/mo
               </button>
@@ -329,63 +277,39 @@ export default function ArbitrageContent({ onSelectCard }) {
     );
   }
 
-  // ── Stat tiles ──────────────────────────────────────────────────────────────
-  const allCards = [...(data?.undervalued || []), ...(data?.gainers || []), ...(data?.losers || []), ...(data?.mostTraded || [])];
-  const totalVol = allCards.reduce((s, c) => s + (c.sales7d || 0), 0);
-  const topGainer = data?.gainers?.[0];
-  const topLoser = data?.losers?.[0];
-  const topTraded = data?.mostTraded?.[0];
-
   return (
     <div>
-      <TerminalHeader lastFetch={lastFetch} />
+      <TerminalHeader lastUpdate={lastUpdate} onRefresh={fetchData} loading={loading} />
 
       {/* Stat tiles */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        <StatTile
-          label="Weekly Volume"
-          value={totalVol.toLocaleString()}
-          sub="sales across all cards"
-          color="var(--gold)"
-        />
-        <StatTile
-          label="Top Gainer"
-          value={topGainer ? '+' + Math.abs(Number(topGainer.gain7d)).toFixed(0) + '%' : '—'}
-          sub={topGainer?.player}
-          color="var(--up)"
-        />
-        <StatTile
-          label="Top Loser"
-          value={topLoser ? '-' + Math.abs(Number(topLoser.gain7d)).toFixed(0) + '%' : '—'}
-          sub={topLoser?.player}
-          color="var(--down)"
-        />
-        <StatTile
-          label="Most Traded"
-          value={topTraded ? topTraded.sales7d + '/wk' : '—'}
-          sub={topTraded?.player}
-        />
-      </div>
-
-      {data?.undervalued?.length > 0 && (
-        <Section title="Undervalued Radar" emoji="🎯"
-          subtitle="Biggest price edge × trading volume — cards where the spread suggests opportunity"
-          cards={data.undervalued} onClick={handleCardClick} color="var(--gold)" />
+      {data && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
+          <StatTile label="Top Gainer" value={topGain ? `+${Number(topGain).toFixed(0)}%` : '—'} sub={gainers[0]?.player || '—'} accent="var(--up)" />
+          <StatTile label="Top Loser" value={topLoss ? `${Number(topLoss).toFixed(0)}%` : '—'} sub={losers[0]?.player || '—'} accent="var(--down)" />
+          <StatTile label="Vol Leaders" value={totalVol.toLocaleString()} sub="total sales/wk (top 25)" accent="rgba(91,141,239,.8)" />
+          <StatTile label="Cards Tracked" value={(undervalued.length + gainers.length + losers.length + mostTraded.length).toLocaleString()} sub="across all sections" accent="var(--gold)" />
+        </div>
       )}
-      {data?.gainers?.length > 0 && (
+
+      {undervalued.length > 0 && (
+        <Section title="Undervalued Radar" emoji="🎯"
+          subtitle="Biggest price opportunity × trading volume — where the spread suggests a move"
+          cards={undervalued} onClick={handleCardClick} color="var(--gold)" />
+      )}
+      {gainers.length > 0 && (
         <Section title="7-Day Gainers" emoji="📈"
           subtitle="Cards with the biggest price increases this week"
-          cards={data.gainers} onClick={handleCardClick} color="var(--up)" />
+          cards={gainers} onClick={handleCardClick} color="var(--up)" />
       )}
-      {data?.losers?.length > 0 && (
+      {losers.length > 0 && (
         <Section title="7-Day Losers" emoji="📉"
           subtitle="Cards losing value — potential buy-the-dip opportunities"
-          cards={data.losers} onClick={handleCardClick} color="var(--down)" />
+          cards={losers} onClick={handleCardClick} color="var(--down)" />
       )}
-      {data?.mostTraded?.length > 0 && (
+      {mostTraded.length > 0 && (
         <Section title="Most Traded" emoji="🔥"
-          subtitle="Highest volume cards this week — where the action is"
-          cards={data.mostTraded} onClick={handleCardClick} />
+          subtitle="Highest volume cards this week — where all the action is"
+          cards={mostTraded} onClick={handleCardClick} />
       )}
     </div>
   );
