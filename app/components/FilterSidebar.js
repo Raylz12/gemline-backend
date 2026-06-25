@@ -27,7 +27,8 @@ export default function FilterSidebar({ filters, setFilters, cards, sportCounts,
 
   const countMap = {};
   (sportCounts || []).forEach(s => { countMap[s.sport] = s.count; });
-  const sportCount = (s) => s === 'All' ? (totalCards || cards.length) : (countMap[s] || cards.filter(c => c.sport === s).length);
+  const dbTotal = (sportCounts || []).reduce((sum, s) => sum + Number(s.count), 0);
+  const sportCount = (s) => s === 'All' ? (dbTotal || totalCards || cards.length) : (countMap[s] || cards.filter(c => c.sport === s).length);
 
   return (
     <aside className="rail">
