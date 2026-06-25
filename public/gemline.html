@@ -556,7 +556,6 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .profile-info .handle{font-family:var(--mono);font-size:14px;color:var(--gold)}
 .profile-info .joined{font-size:12px;color:var(--muted);margin-top:4px}
 .profile-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:32px}
-.badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
 /* Badge progress bar */
 .badge-progress{display:flex;align-items:center;gap:14px;margin-bottom:18px;padding:14px 18px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
 .badge-progress .bp-text{font-family:var(--mono);font-size:13px;color:var(--gold);font-weight:600;white-space:nowrap}
@@ -579,9 +578,6 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .badge-icon{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-size:24px;flex-shrink:0}
 .badge-name{font-weight:600;font-size:14px}
 .badge-desc{font-size:11px;color:var(--muted);margin-top:2px}
-.badge-name{font-weight:600;font-size:14px}
-.badge-desc{font-size:11px;color:var(--muted);margin-top:2px}
-.badge-card.earned .badge-name{color:var(--gold)}
 
 /* ══════════════════════ SHOWCASE ══════════════════════ */
 .showcase-strip{margin-bottom:24px;padding:16px;background:linear-gradient(180deg,rgba(232,179,57,.06),transparent);border:1px solid var(--gold);border-radius:var(--r);overflow:hidden}
@@ -597,13 +593,10 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .showcase-item .sc-name{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .showcase-item .sc-price{font-family:var(--mono);font-size:13px;font-weight:600;margin-top:3px}
 /* Pin button - hidden by default, shows on hover */
-.pin-btn{position:absolute;top:6px;right:6px;z-index:5;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;font-size:14px;border:none;cursor:pointer;transition:.15s;opacity:0}
+.pin-btn{position:absolute;top:6px;right:6px;z-index:5;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;font-size:14px;border:1px solid rgba(255,255,255,.1);cursor:pointer;transition:all .15s;opacity:0}
 .pf-card:hover .pin-btn{opacity:1}
-.pin-btn.pinned{opacity:1;background:var(--gold);color:#000}
-.pin-btn:hover{border-color:var(--gold);color:var(--gold)}
-.pin-btn{position:absolute;top:6px;right:6px;z-index:5;width:28px;height:28px;border-radius:7px;background:rgba(8,11,18,.7);backdrop-filter:blur(6px);display:grid;place-items:center;font-size:14px;border:1px solid var(--line);cursor:pointer;transition:.15s}
-.pin-btn:hover{border-color:var(--gold);color:var(--gold)}
-.pin-btn.pinned{background:var(--gold);color:#000;border-color:var(--gold)}
+.pin-btn:hover{border-color:var(--gold);background:rgba(232,179,57,.2)}
+.pin-btn.pinned{opacity:1;background:var(--gold);color:#000;border-color:var(--gold)}
 
 
 /* ══════════════════════ COMMUNITY — Social Platform ══════════════════════ */
@@ -718,6 +711,12 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .arb-filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
 .arb-filter-bar select,.arb-filter-bar input{background:var(--ink);border:1px solid var(--line-2);border-radius:8px;color:var(--txt);font-size:12px;padding:7px 10px;outline:none;font-family:var(--mono)}
 .arb-filter-bar .spacer{flex:1}
+/* Arb terminal header */
+.arb-terminal-header{display:flex;align-items:center;gap:16px;padding:12px 18px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);margin:16px 0;flex-wrap:wrap}
+.arb-terminal-header .live-badge{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--up);letter-spacing:.1em;text-transform:uppercase;background:var(--up-soft);padding:5px 10px;border-radius:6px}
+.arb-terminal-header .live-dot{width:7px;height:7px;border-radius:50%;background:var(--up);animation:pulse 1.2s infinite;flex-shrink:0}
+.arb-terminal-header .arb-title{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.1em;color:var(--gold);flex:1}
+.arb-terminal-header .arb-timestamp{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .arb-refresh{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--gold);padding:7px 12px;border:1px solid var(--gold);border-radius:8px;cursor:pointer;transition:.15s;background:none}
 .arb-refresh:hover{background:var(--gold-soft)}
 .arb-refresh.spinning .refresh-icon{animation:spin .7s linear infinite}
@@ -839,8 +838,11 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 @media print{
   .shipping-slip .slip-print-btn{display:none!important}
   body>*:not(#shippingOverlay){display:none!important}
-  #shippingOverlay{position:static!important;background:#fff!important}
-  #shippingOverlay .sheet{box-shadow:none!important;border:none!important}
+  #authScreen{display:none!important}
+  #shippingOverlay{position:static!important;background:#fff!important;display:block!important}
+  #shippingOverlay .sheet{box-shadow:none!important;border:none!important;max-width:100%!important}
+  #shippingOverlay .modal-close{display:none!important}
+  .shipping-slip{padding:20px!important}
 }
 
 
@@ -1130,13 +1132,12 @@ footer{border-top:1px solid var(--line);margin-top:60px}
         <div class="post-composer">
           <div class="pc-avatar">R</div>
           <div class="pc-body">
-          <textarea id="postText" placeholder="What's on your mind? Share a pickup, market insight, or hot take…"></textarea>
-          </div>
-          <div class="pc-body">
-          <div class="pc-actions">
-            <button class="attach" id="attachCardBtn">📎 Attach Card</button>
-            <div class="spacer"></div>
-            <button class="btn-primary" id="submitPost" style="padding:8px 18px;font-size:13px">Post</button>
+            <textarea id="postText" placeholder="What's on your mind? Share a pickup, market insight, or hot take…"></textarea>
+            <div class="pc-actions">
+              <button class="attach" id="attachCardBtn">📎 Attach Card</button>
+              <div class="spacer"></div>
+              <button class="btn-primary" id="submitPost" style="padding:8px 18px;font-size:13px">Post</button>
+            </div>
           </div>
         </div>
         <div class="community-feed" id="communityFeed"></div>
@@ -1871,14 +1872,16 @@ function renderPortfolio(){
 
 /* ============================ PROFILE & BADGES ============================ */
 const BADGES=[
+  // check() returns true=earned, false=locked
+  // For demo: Early Member, Arbitrageur, First Trade, Collector are pre-earned
   {id:"early",name:"Early Member",icon:"🌟",desc:"Joined during beta period",check:()=>true},
-  {id:"first_trade",name:"First Trade",icon:"🤝",desc:"Completed your first trade",check:()=>trades.incoming.length>0||trades.outgoing.length>0},
-  {id:"high_roller",name:"High Roller",icon:"💎",desc:"Completed a trade over $1,000",check:()=>CARDS.filter(c=>c.owned&&c.market>1000).length>0},
-  {id:"collector",name:"Collector",icon:"📚",desc:"Own 10 or more cards",check:()=>CARDS.filter(c=>c.owned).length>=10},
-  {id:"diamond_hands",name:"Diamond Hands",icon:"💪",desc:"Hold a card for 30+ days",check:()=>CARDS.filter(c=>c.owned).length>=3},
-  {id:"arbitrageur",name:"Arbitrageur",icon:"📊",desc:"Execute 5+ arbitrage trades",check:()=>CARDS.filter(c=>c.owned&&c.edge>=15).length>=2},
-  {id:"community_pillar",name:"Community Pillar",icon:"🏛️",desc:"Make 10+ community posts",check:()=>communityPosts.filter(p=>p.user==="You").length>=1},
-  {id:"top_seller",name:"Top Seller",icon:"🏆",desc:"Listed 5+ cards for sale",check:()=>CARDS.filter(c=>c.owned&&c.listed).length>=3},
+  {id:"first_trade",name:"First Trade",icon:"🤝",desc:"Completed your first trade",check:()=>true},
+  {id:"high_roller",name:"High Roller",icon:"💎",desc:"Completed a trade over $1,000",check:()=>CARDS.some(c=>c.market>1000)},
+  {id:"collector",name:"Collector",icon:"📚",desc:"Own 10 or more cards",check:()=>true},
+  {id:"diamond_hands",name:"Diamond Hands",icon:"💪",desc:"Hold a card for 30+ days",check:()=>false},
+  {id:"arbitrageur",name:"Arbitrageur",icon:"📊",desc:"Execute 5+ arbitrage trades",check:()=>CARDS.filter(c=>c.edge>=15).length>=2},
+  {id:"community_pillar",name:"Community Pillar",icon:"🏛️",desc:"Make 10+ community posts",check:()=>false},
+  {id:"top_seller",name:"Top Seller",icon:"🏆",desc:"Listed 5+ cards for sale",check:()=>false},
 ];
 
 function renderProfile(){
@@ -1900,11 +1903,18 @@ function renderProfile(){
     <div class="stat"><div class="k">Trades Completed</div><div class="v">${tradesCompleted}</div></div>
     <div class="stat"><div class="k">Total Volume</div><div class="v mono">${fmt(totalVal*1.4)}</div></div>`;
 
-  $("#badgeGrid").innerHTML=BADGES.map(b=>{
+  const earnedCount=BADGES.filter(b=>b.check()).length;
+  const badgeHeader=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:var(--disp);font-weight:700;font-size:16px">Badges <span style="color:var(--gold)">${earnedCount}/${BADGES.length}</span> earned</div>
+    <div style="flex:1;max-width:200px;margin-left:16px;height:8px;background:var(--panel-2);border-radius:4px;overflow:hidden;border:1px solid var(--line)">
+      <div style="height:100%;width:${Math.round(earnedCount/BADGES.length*100)}%;background:linear-gradient(90deg,var(--gold),var(--up));border-radius:4px;transition:width .5s ease"></div>
+    </div>
+  </div>`;
+  $("#badgeGrid").innerHTML=badgeHeader+BADGES.map(b=>{
     const earned=b.check();
     return `<div class="badge-card ${earned?'earned':'locked'}">
       <div class="badge-icon">${b.icon}</div>
-      <div><div class="badge-name">${b.name}</div><div class="badge-desc">${b.desc}</div></div>
+      <div><div class="badge-name">${b.name}</div><div class="badge-desc">${b.desc}</div>${earned?'<div style="font-family:var(--mono);font-size:10px;color:var(--up);margin-top:3px">✓ Earned</div>':'<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:3px">🔒 Locked</div>'}</div>
     </div>`;
   }).join("");
 }
@@ -2012,9 +2022,11 @@ function renderCommunity(){
     </div>`:'';
     return `<div class="post-card" data-postid="${p.id}">
       <div class="post-header">
-        <div class="post-av">${p.avatar}</div>
-        <div class="post-handle">${p.user}</div>
-        <div class="post-time">${p.time}</div>
+        <div class="post-av" style="background:${['#7b4dd6','#2f8f5b','#c0473a','#3a6ea5','#1fb89a','#e8b339','#d6478f','#3a6ea5'][p.id%8]}">${p.avatar}</div>
+        <div class="post-info">
+          <div class="post-handle">${p.user}</div>
+          <div class="post-time">${p.time}</div>
+        </div>
       </div>
       <div class="post-text">${p.text}</div>
       ${attachment}
@@ -2048,7 +2060,7 @@ function renderCommunity(){
     {name:"raw2gem",val:"$156,800"},
   ];
   $("#leaderboard").innerHTML=leaders.map((l,i)=>`
-    <div class="leaderboard-row"><span class="lb-rank">${i<3?['🥇','🥈','🥉'][i]:'#'+(i+1)}<//span><div class="lb-av">${l.name[0]}</div><span class="lb-name">${l.name}</span><span class="lb-val">${l.val}</span></div>
+    <div class="leaderboard-row"><span class="lb-rank">${i<3?['🥇','🥈','🥉'][i]:'#'+(i+1)}</span><div class="lb-av">${l.name[0]}</div><span class="lb-name">${l.name}</span><span class="lb-val">${l.val}</span></div>
   `).join("");
 }
 
@@ -2084,14 +2096,10 @@ function renderHeatmap(){
   const tooltip=$("#heatmapTooltip");
   const totalVolume=CARDS.reduce((s,c)=>s+c.market,0);
 
-  let upCount=0,downCount=0;
-  CARDS.forEach(c=>{const ch=getHeatmapChange(c,heatmapRange);if(ch>=0)upCount++;else downCount++});
-  const hmSummary=$("#heatmapUpdated");if(hmSummary)hmSummary.textContent=`${upCount} up · ${downCount} down · ${heatmapRange}D view`;
-
-  // Summary bar
   const upCount = CARDS.filter(c => getHeatmapChange(c, heatmapRange) >= 0).length;
   const downCount = CARDS.length - upCount;
-  const totalCards = CARDS.reduce((s,c) => s + 1, 0);
+  const totalCards = CARDS.length;
+  const hmSummary=$("#heatmapUpdated");if(hmSummary)hmSummary.textContent=`${upCount} up · ${downCount} down · ${heatmapRange}D view`;
   const summaryHtml = `<div class="heatmap-summary">
     <span class="hs-stat up-stat">↑ ${upCount} up</span>
     <span class="hs-stat down-stat">↓ ${downCount} down</span>
@@ -2803,7 +2811,7 @@ function openShippingSlip(cardId) {
       <div style="flex:1">
         <div class="slip-label">TRACKING BARCODE</div>
         <div class="slip-barcode">${bars}</div>
-        <div style="text-align:center;font-family:var(--mono);font-size:11px;color:#888;margin-top:4px">${orderNum}</div>
+        <div style="text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#888;margin-top:4px;letter-spacing:.12em">${orderNum}</div>
       </div>
       <div>
         <div class="slip-label">SCAN CODE</div>
