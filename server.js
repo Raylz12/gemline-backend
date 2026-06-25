@@ -79,6 +79,57 @@ app.get('/feed', async (_req, res) => {
   }
 });
 
+// ── CardHedge proxy endpoints (public, no auth) ──────────────────────────────
+app.get('/api/cardhedge/top-movers', async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 60);
+    const movers = await cardhedge.topMovers(limit);
+    res.json({ cards: movers });
+  } catch (e) {
+    res.json({ cards: [], error: e.message });
+  }
+});
+
+app.post('/api/cardhedge/search', async (req, res) => {
+  try {
+    const { query, sort, limit, offset, sport, variant } = req.body || {};
+    const data = await cardhedge.searchCards({
+      query: query || '', sort, limit: Math.min(Number(limit) || 40, 100),
+      offset: Number(offset) || 0, sport, variant,
+    });
+    res.json(data);
+  } catch (e) {
+    res.json({ cards: [], total: 0, error: e.message });
+  }
+});
+
+app.post('/api/cardhedge/card-fmv', async (req, res) => {
+  try {
+    const data = await cardhedge.cardFMV(req.body.card_id);
+    res.json(data || { error: 'no data' });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+app.post('/api/cardhedge/all-prices', async (req, res) => {
+  try {
+    const data = await cardhedge.allPricesByCard(req.body.card_id);
+    res.json(data || { error: 'no data' });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+app.post('/api/cardhedge/comps', async (req, res) => {
+  try {
+    const data = await cardhedge.comps(req.body.card_id, { limit: req.body.limit || 10 });
+    res.json(data || { comps: [] });
+  } catch (e) {
+    res.json({ comps: [], error: e.message });
+  }
+});
+
 const repo = await makeRepo();
 app.use('/api', settlementRouter(repo, stripeStub));
 app.use('/api', appRouter(repo, stripeStub));

@@ -810,10 +810,6 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 
       <div>
         <div class="hot-strip" id="hotStrip" style="display:none">
-          <div class="hs-head"><span class="hs-title">🔥 Hot Right Now</span><span class="hs-sub">Cards with 15%+ cross-platform edge</span></div>
-          <div class="hs-track" id="hotTrack"></div>
-        </div>
-        <div class="hot-strip" id="hotStrip" style="display:none">
           <div class="hs-head"><span class="hs-title">🔥 Hot Right Now</span><span class="hs-sub">Cards with edge ≥ 15% — buy low, sell high</span></div>
           <div class="hs-track" id="hotTrack"></div>
         </div>
@@ -974,82 +970,6 @@ footer{border-top:1px solid var(--line);margin-top:60px}
   </section>
 
   <!-- ===================== PROFILE ===================== -->
-  <section class="view" id="view-profile">
-    <div class="eyebrow">Your Profile</div>
-    <div class="profile-header">
-      <div class="profile-avatar" id="profileAvatar">R</div>
-      <div class="profile-info">
-        <h2 id="profileName">Collector</h2>
-        <div class="handle" id="profileHandle">@collector</div>
-        <div class="joined" id="profileJoined">Member since June 2024</div>
-      </div>
-      <button class="btn-ghost" onclick="doLogout()" style="margin-left:auto">Sign out</button>
-    </div>
-    <div class="profile-stats" id="profileStats"></div>
-    <div style="margin-bottom:14px"><div class="eyebrow">Badges &amp; Achievements</div></div>
-    <div class="badge-grid" id="badgeGrid"></div>
-  </section>
-
-  <!-- ===================== COMMUNITY ===================== -->
-  <section class="view" id="view-community">
-    <div class="eyebrow">Community · The Hobby Hub</div>
-    <h1 class="page">Talk cards, share pickups.</h1>
-    <p class="sub">Discuss deals, show off your latest grabs, and connect with fellow collectors.</p>
-    <div class="community-layout" style="margin-top:22px">
-      <div>
-        <div class="post-composer">
-          <textarea id="postInput" placeholder="What's on your mind? Share a pickup, market insight, or question…"></textarea>
-          <div class="pc-actions">
-            <button class="attach" id="attachCardBtn">+ Attach Card</button>
-            <div class="spacer"></div>
-            <button class="btn-primary" id="postBtn" style="padding:8px 18px;font-size:13px">Post</button>
-          </div>
-        </div>
-        <div class="community-feed" id="communityFeed"></div>
-      </div>
-      <div class="trending-sidebar">
-        <div class="trending-panel">
-          <h4>🔥 Trending Now</h4>
-          <div id="trendingList"></div>
-        </div>
-        <div class="trending-panel">
-          <h4>🏆 Top Collectors</h4>
-          <div id="leaderboardList"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== HEATMAP ===================== -->
-  <section class="view" id="view-heatmap">
-    <div class="eyebrow">Market Intelligence</div>
-    <h1 class="page">Market Heatmap</h1>
-    <p class="sub">Visualize the entire card market at a glance. Cell size = volume, color = price change. Bloomberg terminal vibes.</p>
-    <div class="heatmap-container">
-      <div class="heatmap-controls">
-        <div class="seg" id="heatmapRange">
-          <button class="on" data-range="1">1D</button>
-          <button data-range="7">7D</button>
-          <button data-range="30">30D</button>
-        </div>
-        <span class="pill" id="heatmapSummary">Loading…</span>
-      </div>
-      <div class="treemap" id="treemap"></div>
-      <div class="heatmap-legend">
-        <span class="hl-label">-15%</span>
-        <div class="hl-bar">
-          <span style="background:#c0392b"></span>
-          <span style="background:#e74c3c"></span>
-          <span style="background:#7f8c8d"></span>
-          <span style="background:#27ae60"></span>
-          <span style="background:#2ecc71"></span>
-        </div>
-        <span class="hl-label">+15%</span>
-      </div>
-    </div>
-    <div class="heatmap-tooltip" id="heatmapTooltip"></div>
-  </section>
-
   <!-- ===================== PROFILE ===================== -->
   <section class="view" id="view-profile">
     <div class="profile-header">
@@ -1443,14 +1363,25 @@ function setCardImg(el,url){
     if(img){img.classList.add('loading');img.onload=()=>img.classList.replace('loading','loaded');img.src=url;}
   }
 }
-/* lazy-load images for all visible cards */
+/* lazy-load images via IntersectionObserver */
+const _imgObserver=new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(!entry.isIntersecting)return;
+    const art=entry.target;
+    const id=art.dataset.id;const c=CARDS.find(x=>String(x.id)===String(id));if(!c)return;
+    const inner=art.querySelector('.inner-card');if(!inner)return;
+    if(inner.classList.contains('has-img')||inner.classList.contains('no-img'))return;
+    fetchImage(c).then(url=>setCardImg(inner,url));
+    _imgObserver.unobserve(art);
+  });
+},{rootMargin:'200px'});
+
 async function lazyLoadImages(){
   const arts=document.querySelectorAll('.card[data-id]');
   for(const art of arts){
-    const id=art.dataset.id;const c=CARDS.find(x=>String(x.id)===String(id));if(!c)continue;
     const inner=art.querySelector('.inner-card');if(!inner)continue;
     if(inner.classList.contains('has-img')||inner.classList.contains('no-img'))continue;
-    fetchImage(c).then(url=>setCardImg(inner,url));
+    _imgObserver.observe(art);
   }
 }
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
@@ -1476,7 +1407,7 @@ function buildTape(){
 }
 
 /* ============================ MARKETPLACE ============================ */
-let filters={sport:"All",grade:"All",type:"All",maxPrice:2000000,edge:"all",sort:"edge",q:""};
+let filters={sport:"All",grade:"All",type:"All",maxPrice:2000000,edge:"all",sort:"edge",q:"",variant:"all"};
 function buildFacets(){
   const sports=["All",...Object.keys(SPORT_THEME)];
   const counts=s=>s==="All"?CARDS.length:CARDS.filter(c=>c.sport===s).length;
@@ -1492,7 +1423,8 @@ function applyFilters(){
     (filters.type==="All"||c.type===filters.type)&&
     (c.ask<=filters.maxPrice)&&
     (filters.edge==="all"||filters.edge==="hot"&&c.edge>=15||filters.edge==="new"&&c.isNew)&&
-    (filters.q===""||(c.player+c.set+c.variant+c.sport).toLowerCase().includes(filters.q))
+    (filters.q===""||(c.player+c.set+c.variant+c.sport).toLowerCase().includes(filters.q))&&
+    (filters.variant==="all"||(c.variant||'').toLowerCase().includes(filters.variant.toLowerCase()))
   );
   const sorters={edge:(a,b)=>b.edge-a.edge,lo:(a,b)=>a.ask-b.ask,hi:(a,b)=>b.ask-a.ask,mov:(a,b)=>Math.abs(b.ch)-Math.abs(a.ch)};
   r.sort((a,b)=>{
@@ -1533,10 +1465,21 @@ function cardArticle(c){
       </div>
     </article>`;
 }
+let _firstGridRender=true;
+function skeletonCards(n){return Array.from({length:n},()=>`<div class="skeleton-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line"></div><div class="sk-line short"></div><div class="sk-line price"></div></div></div>`).join("")}
 function renderGrid(){
+  const grid=$("#cardGrid");
+  if(_firstGridRender){
+    grid.innerHTML=skeletonCards(12);
+    _firstGridRender=false;
+    setTimeout(()=>{_renderGridInner();},150);
+  } else {
+    _renderGridInner();
+  }
+}
+function _renderGridInner(){
   const r=applyFilters();
   $("#resultCount").textContent=`${r.length} slab${r.length!==1?'s':''}`;
-  // Show skeleton briefly then render
   const grid=$("#cardGrid");
   grid.classList.add('grid-loading');
   grid.innerHTML=r.map(cardArticle).join("");
@@ -1734,6 +1677,7 @@ function renderLive(){
 /* ============================ PORTFOLIO ============================ */
 function renderPortfolio(){
   // line chart
+  if(!$("#pfChart")||!$("#holdings"))return; // old portfolio elements removed
   const data=spark(60000,60,.04).map((v,i)=>v*(1+i*0.006));
   const w=720,h=220,mn=Math.min(...data),mx=Math.max(...data),rg=mx-mn;
   const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-mn)/rg)*(h-20)-10}`);
@@ -1788,10 +1732,10 @@ function renderProfile(){
   $("#profileJoined").textContent="Member since June 2024";
 
   $("#profileStats").innerHTML=`
-    <div class="pf-stat"><div class="label">Cards Owned</div><div class="value">${owned.length}</div></div>
-    <div class="pf-stat"><div class="label">Portfolio Value</div><div class="value">${fmt(totalVal)}</div></div>
-    <div class="pf-stat"><div class="label">Trades Completed</div><div class="value">${tradesCompleted}</div></div>
-    <div class="pf-stat"><div class="label">Total Volume</div><div class="value">${fmt(totalVal*1.4)}</div></div>`;
+    <div class="stat"><div class="k">Cards Owned</div><div class="v">${owned.length}</div></div>
+    <div class="stat"><div class="k">Portfolio Value</div><div class="v mono">${fmt(totalVal)}</div></div>
+    <div class="stat"><div class="k">Trades Completed</div><div class="v">${tradesCompleted}</div></div>
+    <div class="stat"><div class="k">Total Volume</div><div class="v mono">${fmt(totalVal*1.4)}</div></div>`;
 
   $("#badgeGrid").innerHTML=BADGES.map(b=>{
     const earned=b.check();
@@ -2019,6 +1963,43 @@ function renderHeatmap(){
   });
 }
 
+/* ============================ GRADES TABLE ============================ */
+function buildGradesTable(c){
+  // Simulated grades for demo mode; in LIVE mode, fetched from CardHedge
+  const grades=c.grades||[
+    {grader:'PSA',grade:'10',price:Math.round(c.market*1.35),label:'GEM MINT'},
+    {grader:'PSA',grade:'9',price:Math.round(c.market*0.85),label:'MINT'},
+    {grader:'BGS',grade:'9.5',price:Math.round(c.market*1.15),label:'GEM MINT'},
+    {grader:'PSA',grade:'8',price:Math.round(c.market*0.55),label:'NM-MT'},
+    {grader:'SGC',grade:'10',price:Math.round(c.market*1.1),label:'PRISTINE'},
+    {grader:'RAW',grade:'—',price:Math.round(c.market*0.35),label:'Ungraded'},
+  ];
+  return grades.map(g=>{
+    const cls=g.grader==='PSA'?'psa':g.grader==='BGS'?'bgs':g.grader==='SGC'?'sgc':'raw';
+    const isActive=g.grader===c.grader&&String(g.grade)===String(c.grade);
+    return `<div class="cross-row" style="${isActive?'border-color:var(--gold);background:var(--gold-soft)':''}">
+      <div class="plat"><span class="grade ${cls}" style="margin-right:4px">${g.grader} ${g.grade}</span>${g.label}</div>
+      <div class="p mono">${fmt(g.price)}</div>
+      ${isActive?'<span class="tag" style="background:var(--gold-soft);color:var(--gold)">current</span>':'<span class="tag" style="background:var(--panel);color:var(--muted)">'+((g.price>c.market?'+':'')+((g.price/c.market*100-100).toFixed(0)))+'%</span>'}
+    </div>`;
+  }).join("");
+}
+
+// Fetch grade prices from CardHedge when in live mode
+async function fetchGradePrices(c){
+  if(!c.cardId)return;
+  try{
+    const data=await api.post('/api/cardhedge/all-prices',{card_id:c.cardId});
+    if(data&&data.grades){
+      const tbl=document.getElementById('gradesTbl');
+      if(tbl){
+        c.grades=data.grades;
+        tbl.innerHTML=buildGradesTable(c);
+      }
+    }
+  }catch{}
+}
+
 /* ============================ MODAL ============================ */
 function openCard(id){
   const c=CARDS.find(x=>x.id==id);if(!c)return;
@@ -2073,6 +2054,7 @@ function openCard(id){
       <div class="mr-price"><span class="ask mono">${fmt(c.ask)}</span>${chTxt(c.ch)}<span style="color:var(--muted);font-size:12px;font-family:var(--mono);padding-bottom:7px">market ${fmt(c.market)}</span></div>
       <div class="mr-actions">${ownerActions}<button class="offer watch ${watch.has(String(c.id))?'on':''}" data-watch="${c.id}" style="width:auto">♥</button></div>
       <div class="mr-section"><h4>Cross-platform prices</h4><div class="cross">${cross}</div></div>
+      <div class="mr-section"><h4>Grade Tiers & Prices</h4><div id="gradesTbl" class="cross">${buildGradesTable(c)}</div></div>
       ${analytics}
       <div class="mr-section"><h4>Population report · ${c.grader}</h4><div class="pop">
         <div class="cell gem"><div class="g">GEM 10</div><div class="n mono">${popFmt(c.popGem)}</div></div>
@@ -2083,6 +2065,8 @@ function openCard(id){
       <div class="mr-section"><h4>Recent sales</h4><div class="comps">${comps}</div></div>
     </div>`;
   $("#overlay").classList.add("on");document.body.style.overflow="hidden";
+  // Fetch live grade prices if in live mode
+  if(LIVE)fetchGradePrices(c);
   // Lazy-load real card image into modal
   fetchImage(c).then(url=>{
     const wrap=$("#modalImgWrap");const spinner=$("#modalSpinner");
@@ -2287,6 +2271,7 @@ document.addEventListener("click",e=>{
 });
 $("#priceRange").addEventListener("input",e=>{filters.maxPrice=+e.target.value;$("#priceLab").textContent=fmt(+e.target.value);renderGrid()});
 $("#sortSel").addEventListener("change",e=>{filters.sort=e.target.value;renderGrid()});
+const vf=$("#variantFilter");if(vf)vf.addEventListener("change",e=>{filters.variant=e.target.value;renderGrid()});
 $("#searchbox").addEventListener("input",e=>{filters.q=e.target.value.toLowerCase();renderGrid()});
 $("#bidBtn").addEventListener("click",()=>{curBid+=100;$("#curBid").textContent=fmt(curBid);$("#bidBtn").textContent="Bid "+fmt(curBid+100);addMsg(`<span class="u">you</span> placed a bid <span class="amt">${fmt(curBid)}</span>`,"bid")});
 document.addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement.tagName!=="INPUT"){e.preventDefault();$("#searchbox").focus()}if(e.key==="Escape")closeModal()});
@@ -2372,6 +2357,7 @@ document.addEventListener("click",e=>{
 });
 
 // Arb refresh button
+function refreshArb(){const btn=$("#arbRefreshBtn");if(btn)btn.click()}
 $("#arbRefreshBtn")&&$("#arbRefreshBtn").addEventListener("click",function(){
   this.classList.add("spinning");
   CARDS.forEach(c=>{
