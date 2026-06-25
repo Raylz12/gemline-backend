@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/heatmap/layout,_N_T_/heatmap/page,_N_T_/heatmap"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/heatmap/__PAGE__",
+    "/heatmap",
+    "/_index",
+    "/_head"
+  ]
+}

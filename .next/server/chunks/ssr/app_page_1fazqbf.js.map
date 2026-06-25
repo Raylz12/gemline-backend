@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../../app/page.js"],"sourcesContent":["'use client';\n// Root page — always shows the landing page\n// Marketplace lives at /market\nexport default function HomePage() {\n  return null; // Landing is rendered by ClientLayout when pathname === '/'\n}\n"],"names":["HomePage"],"mappings":"wDAGe,SAASA,EACtB,OAAO,IACT,EADe,4DAA4D"}

@@ -329,12 +329,55 @@ function FeedPost({ post }) {
   );
 }
 
-function CommunityFeed() {
+function CommunityFeed({ user }) {
+  const [composing, setComposing] = useState(false);
+  const [draft, setDraft] = useState('');
   return (
     <div style={{ marginBottom: 28 }}>
+      {/* Post Composer */}
+      <div style={{
+        background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12,
+        padding: '14px 16px', marginBottom: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+            background: 'linear-gradient(135deg,var(--gold),#b8851f)',
+            display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 14, color: '#000',
+          }}>{user ? (user.handle || 'U')[0].toUpperCase() : 'G'}</div>
+          <div style={{ flex: 1 }}>
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onFocus={() => setComposing(true)}
+              placeholder="Share a pull, trade, or find..."
+              style={{
+                width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)',
+                borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13,
+                resize: 'none', minHeight: composing ? 80 : 40, outline: 'none',
+                fontFamily: 'inherit', lineHeight: 1.5, transition: 'min-height .2s',
+              }}
+            />
+            {composing && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => { setComposing(false); setDraft(''); }} style={{
+                  padding: '7px 16px', borderRadius: 8, fontSize: 12, background: 'none',
+                  border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer',
+                }}>Cancel</button>
+                <button style={{
+                  padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  background: 'var(--gold)', border: 'none', color: '#000', cursor: 'pointer',
+                }}>Post</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Feed posts */}
       {DEMO_POSTS.map(p => <FeedPost key={p.id} post={p} />)}
       <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--dim)', fontFamily: 'var(--mono)', fontSize: 11 }}>
-        Full activity feed available when signed in
+        ↑ Showing demo activity · Sign in to see your real feed
       </div>
     </div>
   );
@@ -399,14 +442,21 @@ export default function CommunityPage() {
   const raw = searchQuery ? searchResults : (tab === 'discover' ? suggested : tab === 'following' ? myFollowing : myFollowers);
   const displayUsers = user ? raw.filter(u => u.id !== user.id) : raw;
 
+  const TRENDING_CARDS = [
+    { name: 'Cooper Flagg', sport: '🏀', change: '+49%', grade: 'PSA 10' },
+    { name: 'Meowth', sport: '🃏', change: '+288', sub: 'sales/wk', grade: 'PSA 10' },
+    { name: 'Ken Griffey Jr.', sport: '⚾', change: '+2400%', grade: 'Raw' },
+    { name: 'Victor Wembanyama', sport: '🏀', change: '299 sales', grade: 'Raw' },
+  ];
+
   return (
     <>
       <div className="eyebrow">Social</div>
       <h1 className="page">Community</h1>
-      <p className="sub">Find collectors, follow portfolios, and propose trades.</p>
+      <p className="sub">Pack pulls, trades, and collectors all in one place.</p>
 
       {/* Search bar */}
-      <div className="community-search" style={{ marginTop: 20, marginBottom: 24 }}>
+      <div style={{ marginTop: 20, marginBottom: 20 }}>
         <div style={{ position: 'relative', maxWidth: 440 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)' }}>
             <circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" />
@@ -428,51 +478,97 @@ export default function CommunityPage() {
       {/* Tabs */}
       {!searchQuery && (
         <div className="seg" style={{ marginBottom: 20 }}>
-          <button className={tab === 'feed' ? 'on' : ''} onClick={() => setTab('feed')}>
-            🔥 Feed
-          </button>
-          <button className={tab === 'discover' ? 'on' : ''} onClick={() => setTab('discover')}>
-            Discover
-          </button>
+          <button className={tab === 'feed' ? 'on' : ''} onClick={() => setTab('feed')}>🔥 Feed</button>
+          <button className={tab === 'discover' ? 'on' : ''} onClick={() => setTab('discover')}>Discover</button>
           {user && (
             <>
               <button className={tab === 'following' ? 'on' : ''} onClick={() => setTab('following')}>
-                Following <span>{myFollowing.length}</span>
+                Following <span style={{ marginLeft:4, background:'var(--panel-2)', padding:'1px 6px', borderRadius:10, fontSize:10 }}>{myFollowing.length}</span>
               </button>
               <button className={tab === 'followers' ? 'on' : ''} onClick={() => setTab('followers')}>
-                Followers <span>{myFollowers.length}</span>
+                Followers <span style={{ marginLeft:4, background:'var(--panel-2)', padding:'1px 6px', borderRadius:10, fontSize:10 }}>{myFollowers.length}</span>
               </button>
             </>
           )}
         </div>
       )}
 
-      {/* Results */}
+      {/* 2-column layout for feed, 1-col for others */}
       {searching && <div style={{ color: 'var(--muted)', fontSize: 13, padding: 20, textAlign: 'center' }}>Searching...</div>}
-
       {searchQuery && !searching && searchResults.length === 0 && (
-        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center' }}>
-          No users found for &ldquo;{searchQuery}&rdquo;
+        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center' }}>No users found for &ldquo;{searchQuery}&rdquo;</div>
+      )}
+
+      {tab === 'feed' && !searchQuery && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+          {/* Main feed */}
+          <CommunityFeed user={user} />
+
+          {/* Sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Trending now */}
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🔥 Trending Now</div>
+              {TRENDING_CARDS.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < TRENDING_CARDS.length-1 ? '1px solid var(--line)' : 'none' }}>
+                  <span style={{ fontSize: 20 }}>{c.sport}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{c.grade}</div>
+                  </div>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--up)', fontWeight: 600 }}>{c.change}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Suggested users */}
+            {suggested.slice(0, 4).length > 0 && (
+              <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>👥 Who to Follow</div>
+                {suggested.slice(0, 4).map(u => (
+                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,var(--gold),#b8851f)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13, color: '#000', flexShrink: 0 }}>
+                      {(u.handle || 'U')[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>@{u.handle}</div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{Number(u.card_count) || 0} cards</div>
+                    </div>
+                    <button onClick={() => toggleFollow(u.id, followingSet.has(u.id))} style={{
+                      padding: '5px 12px', borderRadius: 16, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      background: followingSet.has(u.id) ? 'var(--panel-2)' : 'var(--gold)',
+                      color: followingSet.has(u.id) ? 'var(--muted)' : '#000',
+                      border: '1px solid var(--line)',
+                    }}>{followingSet.has(u.id) ? 'Following' : 'Follow'}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Community stats */}
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📊 This Week</div>
+              {[['Pack pulls shared', '142'], ['Trades proposed', '38'], ['Cards sold', '97'], ['New members', '24']].map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,.03)', fontSize: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>{k}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--gold)' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {tab === 'feed' && !searchQuery && <CommunityFeed />}
-
-      {tab !== 'feed' && <div className="community-grid">
-        {displayUsers.map(u => (
-          <UserCard
-            key={u.id}
-            user={u}
-            currentUserId={user?.id}
-            onToggleFollow={toggleFollow}
-            followingSet={followingSet}
-          />
-        ))}
-      </div>}
-
-      {!searchQuery && tab === 'discover' && suggested.length === 0 && (
-        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center' }}>
-          No users yet. Be the first to build a portfolio!
+      {tab !== 'feed' && (
+        <div className="community-grid">
+          {displayUsers.map(u => (
+            <UserCard key={u.id} user={u} currentUserId={user?.id} onToggleFollow={toggleFollow} followingSet={followingSet} />
+          ))}
+          {!searchQuery && tab === 'discover' && suggested.length === 0 && (
+            <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center', gridColumn: '1/-1' }}>
+              No users yet. Be the first to build a portfolio!
+            </div>
+          )}
         </div>
       )}
     </>

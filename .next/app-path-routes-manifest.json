@@ -1,0 +1,17 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/analytics/page": "/analytics",
+  "/arbitrage/page": "/arbitrage",
+  "/community/page": "/community",
+  "/heatmap/page": "/heatmap",
+  "/live/page": "/live",
+  "/market/page": "/market",
+  "/packs/page": "/packs",
+  "/page": "/",
+  "/portfolio/page": "/portfolio",
+  "/profile/[handle]/page": "/profile/[handle]",
+  "/sell/page": "/sell",
+  "/trades/page": "/trades",
+  "/user/[handle]/page": "/user/[handle]"
+}

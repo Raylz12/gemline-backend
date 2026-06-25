@@ -1,0 +1,17 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/analytics/page": "app/analytics/page.js",
+  "/arbitrage/page": "app/arbitrage/page.js",
+  "/community/page": "app/community/page.js",
+  "/heatmap/page": "app/heatmap/page.js",
+  "/live/page": "app/live/page.js",
+  "/market/page": "app/market/page.js",
+  "/packs/page": "app/packs/page.js",
+  "/page": "app/page.js",
+  "/portfolio/page": "app/portfolio/page.js",
+  "/profile/[handle]/page": "app/profile/[handle]/page.js",
+  "/sell/page": "app/sell/page.js",
+  "/trades/page": "app/trades/page.js",
+  "/user/[handle]/page": "app/user/[handle]/page.js"
+}
