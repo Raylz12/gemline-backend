@@ -427,7 +427,7 @@ app.get('/api/market/feed', async (req, res) => {
     const brand = req.query.brand || null;
 
     // Build cache key — trending uses RANDOM() so cache for 5min, others 15min
-    const isTrending = !['price_asc','price_desc','player','gain','sales','newest'].includes(sort);
+    const isTrending = !['price_asc','price_desc','player','gain','loss','sales','newest'].includes(sort);
     const cacheKey = `${sport || 'all'}_${search || ''}_${brand || ''}_${sort}_${page}_${limit}`;
     const cacheTTL = isTrending ? 300_000 : 900_000;
     if (app._feedCache && app._feedCache.key === cacheKey && app._feedCache.expires > Date.now())
@@ -453,6 +453,7 @@ app.get('/api/market/feed', async (req, res) => {
       case 'price_desc': orderBy = 'catalog_price DESC NULLS LAST'; break;
       case 'player': orderBy = 'player ASC'; break;
       case 'gain': orderBy = 'gain_7d DESC NULLS LAST'; break;
+      case 'loss': orderBy = 'gain_7d ASC NULLS LAST'; break;
       case 'sales': orderBy = 'sales_30d DESC NULLS LAST'; break;
       case 'newest': orderBy = 'year DESC NULLS LAST'; break;
       default:

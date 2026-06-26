@@ -251,27 +251,42 @@ export default function ArbitrageContent({ onSelectCard }) {
   }, []);
 
   useEffect(() => {
-    fetch('/api/market/feed?limit=200&sort=gain')
-      .then(r => r.json())
-      .then(data => setCards((data.feed || []).map(c => ({
-        id: c.cardId, player: c.player, sport: c.sport, set: c.set,
-        grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
-        num: c.num, market: Number(c.marketPrice) || 0,
-        lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
-        confidence: c.confidence, thumbnail: c.thumbnail,
-        rookie: c.rookie,
-        sales7d: Number(c.sales7d) || Number(c.sales_7d) || 0,
-        sales30d: Number(c.sales30d) || Number(c.sales_30d) || 0,
-        gain7d: Number(c.gain7d) || 0,
-        cardhedge_id: c.cardhedge_id || null,
-        theme: ['#1a1d28', '#252838'],
-        ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-      }))))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const mapCard = c => ({
+      id: c.cardId, player: c.player, sport: c.sport, set: c.set,
+      grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
+      num: c.num, market: Number(c.marketPrice) || 0,
+      lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
+      confidence: c.confidence, thumbnail: c.thumbnail,
+      rookie: c.rookie,
+      sales7d: Number(c.sales7d) || Number(c.sales_7d) || 0,
+      sales30d: Number(c.sales30d) || Number(c.sales_30d) || 0,
+      gain7d: Number(c.gain7d) || 0,
+      cardhedge_id: c.cardhedge_id || null,
+      theme: ['#f0f2f5', '#e8eaed'],
+      ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+    });
+
+    // Fetch gainers + losers + volume in parallel — separate queries so each sort is correct
+    Promise.all([
+      fetch('/api/market/feed?limit=100&sort=gain').then(r => r.json()),
+      fetch('/api/market/feed?limit=100&sort=loss').then(r => r.json()),
+      fetch('/api/market/feed?limit=100&sort=sales').then(r => r.json()),
+    ]).then(([gainData, lossData, salesData]) => {
+      const seen = new Set();
+      const merge = (feeds) => {
+        const out = [];
+        for (const f of feeds) {
+          for (const c of (f.feed || [])) {
+            if (!seen.has(c.cardId)) { seen.add(c.cardId); out.push(mapCard(c)); }
+          }
+        }
+        return out;
+      };
+      setCards(merge([gainData, lossData, salesData]));
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  // Derived slices
+  // Derived slices — data already pre-sorted from server, just slice
   const withEdge = useMemo(() => cards
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
     .map(c => ({ ...c, edge: +((( c.hi - c.lo) / c.lo) * 100).toFixed(1), spread: +(c.hi - c.lo).toFixed(2) }))
@@ -280,7 +295,7 @@ export default function ArbitrageContent({ onSelectCard }) {
   const gainers   = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0).sort((a, b) => b.gain7d - a.gain7d).slice(0, 14), [cards]);
   const losers    = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0).sort((a, b) => a.gain7d - b.gain7d).slice(0, 14), [cards]);
   const byVol     = useMemo(() => [...cards].filter(c => c.sales30d > 0).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [cards]);
-  const heat      = useMemo(() => [...cards].filter(c => c.gain7d !== 0).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 28), [cards]);
+  const heat      = useMemo(() => [...cards].filter(c => c.gain7d !== 0).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 32), [cards]);
   const ticker    = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);
   const volMax    = byVol[0]?.sales30d || 1;
 
@@ -329,32 +344,41 @@ export default function ArbitrageContent({ onSelectCard }) {
       </div>
 
       {/* ── 4-panel grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 1, padding: '1px 6px' }}>
+      <div style={{ display: 'flex', gap: 1, padding: '1px 6px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {/* Gainers */}
-        <Panel title="7D Gainers" dot="#34D88A" badge={`${gainers.length}`}>
-          <div style={{ overflowY: 'auto', maxHeight: 300 }}>
+        <Panel title="7D Gainers" dot="#34D88A" badge={`${gainers.length}`} style={{ flex: '0 0 260px', minWidth: 220 }}>
+          <div style={{ overflowY: 'auto', maxHeight: 300, WebkitOverflowScrolling: 'touch' }}>
             {gainers.map((c, i) => <MoverRow key={c.id} card={c} rank={i + 1} onClick={() => select(c)} />)}
           </div>
         </Panel>
 
         {/* Losers */}
-        <Panel title="7D Losers" dot="#FF5C6C" badge={`${losers.length}`}>
-          <div style={{ overflowY: 'auto', maxHeight: 300 }}>
+        <Panel title="7D Losers" dot="#FF5C6C" badge={`${losers.length}`} style={{ flex: '0 0 260px', minWidth: 220 }}>
+          <div style={{ overflowY: 'auto', maxHeight: 300, WebkitOverflowScrolling: 'touch' }}>
             {losers.map((c, i) => <MoverRow key={c.id} card={c} rank={i + 1} onClick={() => select(c)} />)}
           </div>
         </Panel>
 
         {/* Volume */}
-        <Panel title="30D Volume Leaders" dot="#E8B339" right="TRANSACTIONS">
-          <div style={{ overflowY: 'auto', maxHeight: 300 }}>
+        <Panel title="30D Volume Leaders" dot="#E8B339" right="TRANSACTIONS" style={{ flex: '0 0 260px', minWidth: 220 }}>
+          <div style={{ overflowY: 'auto', maxHeight: 300, WebkitOverflowScrolling: 'touch' }}>
             {byVol.map((c, i) => <VolBar key={c.id} card={c} rank={i + 1} max={volMax} onClick={() => select(c)} />)}
           </div>
         </Panel>
 
         {/* Heatmap */}
-        <Panel title="Momentum Heatmap" dot="#9B7BFF" right="CLICK TO DRILL">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, padding: 8, maxHeight: 300, overflowY: 'auto' }}>
-            {heat.map(c => <HeatCell key={c.id} card={c} onClick={() => select(c)} />)}
+        <Panel title="Momentum Heatmap" dot="#9B7BFF" right="CLICK TO DRILL" style={{ flex: '0 0 260px', minWidth: 220 }}>
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 3, padding: 8,
+            maxHeight: 300, overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+          }}>
+            {heat.map(c => (
+              <div key={c.id} style={{ width: 'calc(25% - 3px)', minWidth: 56, flexShrink: 0 }}>
+                <HeatCell card={c} onClick={() => select(c)} />
+              </div>
+            ))}
           </div>
         </Panel>
       </div>
