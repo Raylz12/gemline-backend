@@ -1129,8 +1129,8 @@ input, select, textarea { font-size: 16px !important; }
 .pack-reveal{display:none;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:520px}
 .pack-reveal.on{display:grid}
 .pcard{aspect-ratio:1/1.32;perspective:700px;cursor:pointer}
-.pcard-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateY(180deg);transition:transform .6s cubic-bezier(.2,.8,.2,1)}
-.pcard.flip .pcard-inner{transform:rotateY(0)}
+.pcard-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateY(0deg);transition:transform .65s cubic-bezier(.2,.8,.2,1)}
+.pcard.flip .pcard-inner{transform:rotateY(180deg)}
 .pcard .face{position:absolute;inset:0;border-radius:9px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
 .pcard .pf-back{background:linear-gradient(150deg,#141925,#0a0e16);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--gold);font-family:var(--disp);font-weight:800;font-size:24px;border:1px solid rgba(232,179,57,.25)}
 .pcard .pf-front{transform:rotateY(180deg);display:flex;flex-direction:column;justify-content:flex-end;padding:9px}

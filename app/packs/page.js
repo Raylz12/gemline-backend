@@ -70,7 +70,7 @@ function Confetti({ active }) {
 
 export default function PacksPage() {
   const { user, token, authFetch } = useAuth();
-  const { allCards, wallet, setWallet } = useCardStore();
+  const { allCards, wallet, setWallet, watch, toggleWatch } = useCardStore();
   const [packType, setPackType] = useState(0);
   const [phase, setPhase] = useState('pick'); // pick | ripping | reveal
   const [packCards, setPackCards] = useState([]);
@@ -257,7 +257,13 @@ export default function PacksPage() {
                   <div key={idx} className={`pcard ${isFlipped ? 'flip' : ''} ${isFlipped && isHit ? 'hit' : ''}`}
                     onClick={() => !isFlipped ? flipCard(idx) : setSelectedCard(c)}>
                     <div className="pcard-inner">
-                      <div className="face pf-back"><span style={{ fontFamily: "var(--disp)", fontSize: 28, fontWeight: 800, letterSpacing: 2, color: "var(--gold)" }}>GEM<span style={{ color: "#fff" }}>LINE</span></span><span style={{ fontSize: 8, letterSpacing: 3, textTransform: "uppercase", color: "var(--dim)", marginTop: 4 }}>The Card Exchange</span></div>
+                      {/* Logo back — shows BEFORE flip */}
+                      <div className="face pf-back" style={{ flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontFamily: 'var(--disp)', fontSize: 28, fontWeight: 800, letterSpacing: 2, color: 'var(--gold)' }}>GEM<span style={{ color: '#fff' }}>LINE</span></span>
+                        <span style={{ fontSize: 8, letterSpacing: 3, textTransform: 'uppercase', color: 'rgba(255,255,255,.3)' }}>The Card Exchange</span>
+                        <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', marginTop: 8 }}>TAP TO REVEAL</span>
+                      </div>
+                      {/* Card front — reveals AFTER flip */}
                       <div className="face pf-front" style={{ '--cardbg': `linear-gradient(135deg,${theme[0]},${theme[1]})` }}>
                         {c.thumbnail && (
                           <img src={c.thumbnail} alt="" style={{
@@ -266,6 +272,23 @@ export default function PacksPage() {
                           }} />
                         )}
                         {isHit && <div className="foil2" />}
+                        {/* Pin button — top right corner */}
+                        <button
+                          onClick={e => { e.stopPropagation(); toggleWatch(c.id); }}
+                          style={{
+                            position: 'absolute', top: 6, right: 6, zIndex: 10,
+                            width: 28, height: 28, borderRadius: 6,
+                            background: watch.has(String(c.id)) ? 'var(--gold)' : 'rgba(0,0,0,.55)',
+                            border: '1px solid rgba(255,255,255,.2)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', backdropFilter: 'blur(4px)',
+                          }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24"
+                            fill={watch.has(String(c.id)) ? '#000' : 'none'}
+                            stroke={watch.has(String(c.id)) ? '#000' : '#fff'} strokeWidth="2">
+                            <path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .9-4 2-1-1.1-2.3-2-4-2A5.5 5.5 0 0 0 3 8.5c0 2.3 1.5 4 3 5.5l6 6Z" />
+                          </svg>
+                        </button>
                         <div style={{ position: 'relative', zIndex: 2, background: 'rgba(0,0,0,.7)', borderRadius: 6, padding: '5px 7px', marginTop: 'auto' }}>
                           <div className="nm">{c.player}</div>
                           <div className="pr">{c.grader} {c.grade} · {fmtP(c.market)}</div>

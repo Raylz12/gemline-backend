@@ -62,11 +62,15 @@ export default function CardItem({ card: c, onClick }) {
               src={c.thumbnail}
               alt={c.player}
               className="card-thumb"
-              loading="lazy"
               decoding="async"
               width={220}
               height={308}
-              style={{ display: imgLoaded ? 'block' : 'none' }}
+              style={{
+                opacity: imgLoaded ? 1 : 0,
+                transition: 'opacity .25s ease',
+                position: imgLoaded ? 'relative' : 'absolute',
+                inset: 0,
+              }}
               onLoad={() => setImgLoaded(true)}
               onError={() => setImgError(true)}
             />
