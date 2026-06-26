@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { fmt, fmtDisplay, fmtRange, gradeClass } from '../lib/data';
 import { useCardStore } from './CardStore';
 import { useAuth } from './AuthContext';
@@ -66,38 +66,224 @@ function DealBadge({ listingPrice, card }) {
   return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--panel)', color: 'var(--muted)' }}>Fair</span>;
 }
 
-function PriceChart({ prices }) {
+function PriceChart({ prices, comps = [], lo, hi, currentPrice }) {
+  const svgRef = useRef(null);
+  const [tooltip, setTooltip] = useState(null); // { x, y, price, date, idx }
+
   if (!prices || prices.length < 2) return null;
-  const w = 280, h = 80, pad = 4;
-  const vals = prices.map(p => p.price).filter(v => v > 0);
-  if (vals.length < 2) return null;
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const range = max - min || 1;
+  const validPrices = prices.filter(p => p.price > 0);
+  if (validPrices.length < 2) return null;
+
+  const W = 560, H = 200, padL = 52, padR = 16, padT = 16, padB = 32;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const vals = validPrices.map(p => p.price);
+  const rawMin = Math.min(...vals);
+  const rawMax = Math.max(...vals);
+  // Expand range so the line doesn't hug the edges
+  const pad5 = (rawMax - rawMin) * 0.15 || rawMax * 0.1;
+  const minV = Math.max(0, rawMin - pad5);
+  const maxV = rawMax + pad5;
+  const range = maxV - minV || 1;
+
   const up = vals[vals.length - 1] >= vals[0];
-  const color = up ? '#34D88A' : '#FF5C6C';
-  const points = prices.map((p, i) => {
-    const x = pad + (i / (prices.length - 1)) * (w - pad * 2);
-    const y = pad + (1 - (p.price - min) / range) * (h - pad * 2);
-    return `${x},${y}`;
-  }).join(' ');
-  // Dates for x axis
-  const firstDate = prices[0]?.date ? new Date(prices[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-  const lastDate = prices[prices.length - 1]?.date ? new Date(prices[prices.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  const lineColor = up ? '#34D88A' : '#FF5C6C';
+  const fillColor = up ? 'rgba(52,216,138,0.08)' : 'rgba(255,92,108,0.08)';
+
+  const cx = i => padL + (i / (validPrices.length - 1)) * chartW;
+  const cy = v => padT + (1 - (v - minV) / range) * chartH;
+
+  const linePts = validPrices.map((p, i) => `${cx(i)},${cy(p.price)}`).join(' ');
+  const areaPts = `${padL},${padT + chartH} ${linePts} ${padL + chartW},${padT + chartH}`;
+
+  // Y-axis ticks (4 gridlines)
+  const ticks = 4;
+  const yTicks = Array.from({ length: ticks + 1 }, (_, i) => {
+    const v = minV + (range * i) / ticks;
+    return { v, y: cy(v) };
+  });
+
+  // X-axis labels (show ~5 dates)
+  const xStep = Math.max(1, Math.floor(validPrices.length / 5));
+  const xLabels = validPrices
+    .map((p, i) => ({ i, date: p.date }))
+    .filter((_, i) => i % xStep === 0 || i === validPrices.length - 1);
+
+  // Lo/Hi band
+  const loY = lo ? cy(Math.min(lo, maxV)) : null;
+  const hiY = hi ? cy(Math.max(hi, minV)) : null;
+
+  // Current price dashed line
+  const curY = currentPrice ? cy(Math.min(Math.max(currentPrice, minV), maxV)) : null;
+
+  const handleMouseMove = useCallback((e) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const relX = mx - padL;
+    if (relX < 0 || relX > chartW) { setTooltip(null); return; }
+    const idx = Math.round((relX / chartW) * (validPrices.length - 1));
+    const clamped = Math.min(Math.max(idx, 0), validPrices.length - 1);
+    const p = validPrices[clamped];
+    setTooltip({ x: cx(clamped), y: cy(p.price), price: p.price, date: p.date, idx: clamped });
+  }, [validPrices, chartW]);
+
+  const fmtTooltipDate = (d) => {
+    if (!d) return '';
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const fmtPrice = (v) => {
+    if (!v) return '—';
+    if (v >= 1000) return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return '$' + Number(v).toFixed(2);
+  };
+
+  const pctChange = vals.length >= 2
+    ? (((vals[vals.length - 1] - vals[0]) / vals[0]) * 100).toFixed(1)
+    : null;
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} style={{ display: 'block' }}>
-        <polyline fill="none" stroke={color} strokeWidth="2" points={points} strokeLinejoin="round" strokeLinecap="round" />
-        {/* Fill area under line */}
-        <polygon
-          fill={up ? 'rgba(52,216,138,0.1)' : 'rgba(255,92,108,0.1)'}
-          points={`${pad},${h - pad} ${points} ${w - pad},${h - pad}`}
-        />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--dim)', marginTop: 2 }}>
-        <span>{firstDate}</span>
-        <span>{lastDate}</span>
+    <div style={{ position: 'relative' }}>
+      {/* Header: price delta */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>
+          {validPrices.length} data points
+        </span>
+        {pctChange !== null && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: Number(pctChange) >= 0 ? 'var(--up)' : 'var(--down)' }}>
+            {Number(pctChange) >= 0 ? '▲' : '▼'} {Math.abs(pctChange)}%
+          </span>
+        )}
       </div>
+
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        style={{ display: 'block', cursor: 'crosshair', userSelect: 'none' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        {/* Gridlines + Y labels */}
+        {yTicks.map(({ v, y }) => (
+          <g key={y}>
+            <line x1={padL} y1={y} x2={padL + chartW} y2={y}
+              stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+            <text x={padL - 6} y={y + 4} textAnchor="end"
+              fontSize="10" fill="rgba(255,255,255,0.35)" fontFamily="monospace">
+              {v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k' : '$' + Math.round(v)}
+            </text>
+          </g>
+        ))}
+
+        {/* Lo/Hi range band */}
+        {loY !== null && hiY !== null && (
+          <rect
+            x={padL} y={Math.min(loY, hiY)}
+            width={chartW} height={Math.abs(loY - hiY)}
+            fill="rgba(155,123,255,0.07)" rx="2"
+          />
+        )}
+
+        {/* Current price dashed line */}
+        {curY !== null && (
+          <>
+            <line x1={padL} y1={curY} x2={padL + chartW} y2={curY}
+              stroke="rgba(232,179,57,0.5)" strokeWidth="1" strokeDasharray="4 3" />
+            <text x={padL + chartW + 4} y={curY + 4} fontSize="9"
+              fill="rgba(232,179,57,0.8)" fontFamily="monospace">NOW</text>
+          </>
+        )}
+
+        {/* Area fill */}
+        <polygon points={areaPts} fill={fillColor} />
+
+        {/* Main line */}
+        <polyline
+          fill="none"
+          stroke={lineColor}
+          strokeWidth="2"
+          points={linePts}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* Sale dots on the line */}
+        {validPrices.map((p, i) => (
+          <circle
+            key={i}
+            cx={cx(i)} cy={cy(p.price)} r="2.5"
+            fill={lineColor} opacity="0.6"
+          />
+        ))}
+
+        {/* Comp sale dots (eBay/other actual sales) */}
+        {comps.filter(c => c.price >= minV && c.price <= maxV && c.date).map((c, i) => {
+          // Position by date relative to price range dates
+          const dates = validPrices.map(p => new Date(p.date).getTime()).filter(Boolean);
+          if (!dates.length) return null;
+          const dMin = Math.min(...dates), dMax = Math.max(...dates);
+          const cTime = new Date(c.date).getTime();
+          if (cTime < dMin || cTime > dMax) return null;
+          const xPos = padL + ((cTime - dMin) / (dMax - dMin || 1)) * chartW;
+          const yPos = cy(c.price);
+          return (
+            <circle key={`comp-${i}`} cx={xPos} cy={yPos} r="4"
+              fill="var(--gold)" opacity="0.8" stroke="var(--ink)" strokeWidth="1.5" />
+          );
+        })}
+
+        {/* X-axis labels */}
+        {xLabels.map(({ i, date }) => (
+          <text key={i}
+            x={cx(i)} y={H - 6}
+            textAnchor="middle" fontSize="9"
+            fill="rgba(255,255,255,0.3)" fontFamily="monospace">
+            {date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+          </text>
+        ))}
+
+        {/* Tooltip vertical line + dot */}
+        {tooltip && (
+          <>
+            <line
+              x1={tooltip.x} y1={padT}
+              x2={tooltip.x} y2={padT + chartH}
+              stroke="rgba(255,255,255,0.25)" strokeWidth="1" strokeDasharray="3 2"
+            />
+            <circle cx={tooltip.x} cy={tooltip.y} r="5"
+              fill={lineColor} stroke="var(--ink)" strokeWidth="2" />
+          </>
+        )}
+      </svg>
+
+      {/* Tooltip box */}
+      {tooltip && (
+        <div style={{
+          position: 'absolute',
+          top: 28,
+          left: `calc(${(tooltip.x / W) * 100}% + 8px)`,
+          transform: tooltip.x > W * 0.6 ? 'translateX(-110%)' : 'none',
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          padding: '6px 10px',
+          pointerEvents: 'none',
+          zIndex: 10,
+          minWidth: 110,
+        }}>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: lineColor }}>
+            {fmtPrice(tooltip.price)}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+            {fmtTooltipDate(tooltip.date)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -136,7 +322,11 @@ export default function CardDetail({ card: c, onClose }) {
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [buying, setBuying] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
+  const [priceComps, setPriceComps] = useState([]);
+  const [priceStats, setPriceStats] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [chartDays, setChartDays] = useState(30);
+  const [chartGrade, setChartGrade] = useState(null); // null = use card's own grade
   const [cardWants, setCardWants] = useState([]);
   const [showBidForm, setShowBidForm] = useState(false);
   const [bidFormAmount, setBidFormAmount] = useState('');
@@ -187,18 +377,22 @@ export default function CardDetail({ card: c, onClose }) {
     finally { setSubmittingBid(false); }
   };
 
-  // Fetch price history from Card Hedge
+  // Fetch price history from Card Hedge — re-runs when grade or days changes
   useEffect(() => {
     const chId = c.cardhedge_id;
     if (!chId) return;
     setHistoryLoading(true);
-    const grade = c.grader && c.grade ? `${c.grader} ${c.grade}` : 'PSA 10';
-    fetch(`/api/cards/${chId}/history?grade=${encodeURIComponent(grade)}&days=30`)
+    const activeGrade = chartGrade || (c.grader && c.grade ? `${c.grader} ${c.grade}` : 'PSA 10');
+    fetch(`/api/cards/${chId}/history?grade=${encodeURIComponent(activeGrade)}&days=${chartDays}`)
       .then(r => r.json())
-      .then(d => setPriceHistory(d.prices || []))
+      .then(d => {
+        setPriceHistory(d.prices || []);
+        setPriceComps(d.comps || []);
+        setPriceStats(d.stats || null);
+      })
       .catch(() => {})
       .finally(() => setHistoryLoading(false));
-  }, [c.cardhedge_id, c.grader, c.grade]);
+  }, [c.cardhedge_id, c.grader, c.grade, chartDays, chartGrade]);
 
   const handleBuy = async (listing) => {
     if (!token) { toast('Please log in first', true); return; }
@@ -307,16 +501,103 @@ export default function CardDetail({ card: c, onClose }) {
 
             {/* Price History Chart */}
             {c.cardhedge_id && (
-              <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>📈 30-Day Price History</h4>
+              <div className="mr-section" style={{ marginBottom: 20 }}>
+                {/* Chart header: title + range tabs */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <h4 style={{ margin: 0 }}>📈 Price History</h4>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {[7, 30, 90].map(d => (
+                      <button key={d} onClick={() => setChartDays(d)} style={{
+                        fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                        padding: '3px 8px', borderRadius: 5, cursor: 'pointer', border: 'none',
+                        background: chartDays === d ? 'var(--violet)' : 'var(--panel-2)',
+                        color: chartDays === d ? '#fff' : 'var(--muted)',
+                        transition: 'background .15s',
+                      }}>{d}D</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Grade selector — show if card has multiple grades */}
+                {c.grades && c.grades.length > 1 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    <button onClick={() => setChartGrade(null)} style={{
+                      fontFamily: 'var(--mono)', fontSize: 9, padding: '2px 7px',
+                      borderRadius: 4, cursor: 'pointer', border: 'none',
+                      background: !chartGrade ? 'var(--gold)' : 'var(--panel-2)',
+                      color: !chartGrade ? '#000' : 'var(--muted)',
+                    }}>
+                      {c.grader} {c.grade}
+                    </button>
+                    {c.grades
+                      .filter(g => !(g.grader === c.grader && String(g.grade) === String(c.grade)))
+                      .slice(0, 5)
+                      .map((g, i) => {
+                        const gLabel = `${g.grader} ${g.grade}`;
+                        return (
+                          <button key={i} onClick={() => setChartGrade(gLabel)} style={{
+                            fontFamily: 'var(--mono)', fontSize: 9, padding: '2px 7px',
+                            borderRadius: 4, cursor: 'pointer', border: 'none',
+                            background: chartGrade === gLabel ? 'var(--gold)' : 'var(--panel-2)',
+                            color: chartGrade === gLabel ? '#000' : 'var(--muted)',
+                          }}>{gLabel}</button>
+                        );
+                      })}
+                  </div>
+                )}
+
+                {/* Chart body */}
                 {historyLoading ? (
-                  <div style={{ padding: 12, color: 'var(--dim)', fontSize: 12 }}>Loading price data...</div>
+                  <div style={{
+                    height: 180, background: 'var(--panel-2)', borderRadius: 10,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--dim)', fontSize: 12,
+                  }}>
+                    <span style={{ animation: 'spin 1s linear infinite', marginRight: 8, display: 'inline-block' }}>◌</span>
+                    Loading price data...
+                  </div>
                 ) : priceHistory.length > 1 ? (
-                  <div style={{ marginTop: 8, padding: '8px 0' }}>
-                    <PriceChart prices={priceHistory} />
+                  <div style={{ background: 'var(--panel-2)', borderRadius: 10, padding: '12px 10px 4px' }}>
+                    <PriceChart
+                      prices={priceHistory}
+                      comps={priceComps}
+                      lo={c.lo || null}
+                      hi={c.hi || null}
+                      currentPrice={c.market || null}
+                    />
+                    {/* Stats bar */}
+                    {priceStats && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'OPEN', val: priceStats.open },
+                          { label: 'CLOSE', val: priceStats.close },
+                          { label: `${chartDays}D LOW`, val: priceStats.low },
+                          { label: `${chartDays}D HIGH`, val: priceStats.high },
+                        ].map(({ label, val }) => (
+                          <div key={label} style={{ flex: '1 1 60px', background: 'rgba(255,255,255,.04)', borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', letterSpacing: '.08em' }}>{label}</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, marginTop: 2 }}>
+                              {val >= 1000 ? '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '$' + Number(val).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Legend */}
+                    <div style={{ display: 'flex', gap: 12, padding: '4px 4px 8px', fontSize: 9, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
+                      <span><span style={{ color: priceHistory.length > 1 && priceHistory[priceHistory.length-1]?.price >= priceHistory[0]?.price ? 'var(--up)' : 'var(--down)', marginRight: 4 }}>●</span>Price trend</span>
+                      {priceComps.length > 0 && <span><span style={{ color: 'var(--gold)', marginRight: 4 }}>●</span>Actual sales ({priceComps.length})</span>}
+                      {(c.lo || c.hi) && <span><span style={{ color: 'rgba(155,123,255,.6)', marginRight: 4 }}>■</span>FMV range</span>}
+                    </div>
                   </div>
                 ) : (
-                  <div style={{ padding: 12, color: 'var(--dim)', fontSize: 12 }}>No price history available for this card.</div>
+                  <div style={{
+                    height: 80, background: 'var(--panel-2)', borderRadius: 10,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--dim)', fontSize: 12,
+                  }}>
+                    No sales data for this {chartDays}D window
+                  </div>
                 )}
               </div>
             )}

@@ -305,23 +305,60 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
   try {
     const { cardhedgeId } = req.params;
     const grade = req.query.grade || 'PSA 10';
-    const days = Math.min(Number(req.query.days) || 30, 90);
+    const days = Math.min(Number(req.query.days) || 30, 365);
     const cacheKey = `history_${cardhedgeId}_${grade}_${days}`;
     if (app._historyCache?.[cacheKey]?.expires > Date.now())
       return res.json(app._historyCache[cacheKey].data);
-    const apiKey = process.env.CARDHEDGE_API_KEY || 'inNtDlct1UCWnsJutpdTnJkKdt22xuJ222RTsLHs';
-    const r2 = await fetch('https://api.cardhedger.com/v1/cards/prices-by-card', {
-      method: 'POST',
-      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card_id: cardhedgeId, grade, days }),
-    });
-    const data = await r2.json();
-    const prices = (data.prices || []).map(p => ({ date: p.closing_date, price: p.price }));
-    const result = { prices };
+    const apiKey = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
+
+    // Fetch price history + comps in parallel
+    const [histRes, compRes] = await Promise.allSettled([
+      fetch('https://api.cardhedger.com/v1/cards/prices-by-card', {
+        method: 'POST',
+        headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card_id: cardhedgeId, grade, days }),
+      }),
+      fetch('https://api.cardhedger.com/v1/cards/comps', {
+        method: 'POST',
+        headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card_id: cardhedgeId, limit: 20 }),
+      }),
+    ]);
+
+    let prices = [];
+    if (histRes.status === 'fulfilled' && histRes.value.ok) {
+      const data = await histRes.value.json();
+      prices = (data.prices || []).map(p => ({ date: p.closing_date || p.date, price: Number(p.price) }))
+        .filter(p => p.price > 0 && p.date)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    let comps = [];
+    if (compRes.status === 'fulfilled' && compRes.value.ok) {
+      const cd = await compRes.value.json();
+      comps = (cd.comps || cd.sales || []).slice(0, 20).map(c => ({
+        date: c.sale_date || c.date,
+        price: Number(c.sale_price || c.price),
+        source: c.source || 'eBay',
+        url: c.listing_url || null,
+      })).filter(c => c.price > 0);
+    }
+
+    // Stats derived from history
+    const vals = prices.map(p => p.price);
+    const stats = vals.length >= 2 ? {
+      open: vals[0],
+      close: vals[vals.length - 1],
+      low: Math.min(...vals),
+      high: Math.max(...vals),
+      pctChange: (((vals[vals.length - 1] - vals[0]) / vals[0]) * 100).toFixed(1),
+    } : null;
+
+    const result = { prices, comps, stats };
     if (!app._historyCache) app._historyCache = {};
     app._historyCache[cacheKey] = { expires: Date.now() + 30 * 60 * 1000, data: result };
     res.json(result);
-  } catch (e) { res.json({ prices: [] }); }
+  } catch (e) { console.error('history:', e.message); res.json({ prices: [], comps: [], stats: null }); }
 });
 
 // ── Card Hedge proxy: top movers ──────────────────────────────────────────────
