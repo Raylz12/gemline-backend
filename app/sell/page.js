@@ -111,7 +111,7 @@ export default function SellPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create listing');
-      toast('Card listed! 🎉');
+      toast('Card listed! ');
       reset();
     } catch (e) {
       toast(e.message, true);
@@ -170,7 +170,7 @@ export default function SellPage() {
         <h1 className="page">List your cards.</h1>
         <p className="sub">Set your price backed by real market data. 0.75% platform fee — the lowest in the industry.</p>
         <PreviewGate
-          icon="💰"
+          icon=""
           cta="Start selling on GEMLINE"
           subtitle="List cards at your price. Buy now, make offers, or auction. Just 0.75% fee per sale."
           preview={<SampleCardGrid count={8} />}
@@ -289,7 +289,7 @@ export default function SellPage() {
                   marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8,
                   fontSize: 13, color: 'var(--gold)',
                 }}>
-                  <span>📊</span>
+                  <span></span>
                   <span>Market value: {fmv.lo ? `${fmt(fmv.lo)} – ${fmt(fmv.hi)}` : fmt(fmv.avg || fmv.median || 0)}</span>
                   {fmv.avg && <span style={{ color: 'var(--muted)', fontSize: 11 }}>· Avg {fmt(fmv.avg)}</span>}
                 </div>
@@ -311,7 +311,7 @@ export default function SellPage() {
 
               {price && fmv?.avg && (
                 <div style={{ fontSize: 12, color: Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'var(--up)' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'var(--down)' : 'var(--muted)', marginBottom: 16 }}>
-                  {Number(price) < (fmv.lo || fmv.avg * 0.85) ? '🔥 Below market — will sell fast' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? '📈 Above market range' : '✅ Fair market price'}
+                  {Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'Below market — will sell fast' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'Above market range' : 'Fair market price'}
                 </div>
               )}
 
@@ -328,9 +328,9 @@ export default function SellPage() {
               <h3 style={{ fontFamily: 'var(--disp)', marginBottom: 16 }}>Listing type</h3>
               <div style={{ display: 'grid', gap: 10 }}>
                 {[
-                  { key: 'buy_now', icon: '🏷️', label: 'Buy Now', desc: 'Fixed price. First buyer gets it.' },
+                  { key: 'buy_now', icon: '', label: 'Buy Now', desc: 'Fixed price. First buyer gets it.' },
                   { key: 'auction', icon: '🔨', label: 'Auction', desc: 'Let buyers bid. Goes to highest bidder.' },
-                  { key: 'offer', icon: '🤝', label: 'Open to Offers', desc: 'Buyers submit offers. You choose.' },
+                  { key: 'offer', icon: '', label: 'Open to Offers', desc: 'Buyers submit offers. You choose.' },
                 ].map(t => (
                   <div key={t.key} onClick={() => { setListingType(t.key); if (t.key === 'offer') setOpenToOffers(true); else setOpenToOffers(false); }}
                     style={{
@@ -442,7 +442,7 @@ export default function SellPage() {
                       fontSize: 11, padding: '3px 8px', borderRadius: 6,
                       background: 'var(--gold-soft)', color: 'var(--gold)',
                     }}>
-                      {listingType === 'buy_now' ? '🏷️ Buy Now' : listingType === 'auction' ? '🔨 Auction' : '🤝 Offers'}
+                      {listingType === 'buy_now' ? 'Buy Now' : listingType === 'auction' ? '🔨 Auction' : 'Offers'}
                     </span>
                     {openToOffers && listingType !== 'offer' && (
                       <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: 'var(--panel-2)', color: 'var(--muted)' }}>
@@ -482,7 +482,7 @@ export default function SellPage() {
                 <button className="chip" onClick={() => setStep(3)} style={{ color: 'var(--muted)' }}>← Back</button>
                 <button className="chip on" onClick={submit} disabled={submitting}
                   style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>
-                  {submitting ? 'Listing...' : '🚀 List it'}
+                  {submitting ? 'Listing...' : 'List it'}
                 </button>
               </div>
             </div>
@@ -495,7 +495,7 @@ export default function SellPage() {
           {loadingMine && <div style={{ color: 'var(--muted)', padding: 20 }}>Loading...</div>}
           {!loadingMine && myListings.length === 0 && (
             <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)' }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>📦</div>
+              <div style={{ fontSize: 36, marginBottom: 12 }}></div>
               <p style={{ fontSize: 15, marginBottom: 6 }}>No active listings yet.</p>
               <p style={{ fontSize: 13 }}>Switch to &ldquo;List a Card&rdquo; to get started.</p>
             </div>

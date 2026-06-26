@@ -60,7 +60,7 @@ function DealBadge({ listingPrice, card }) {
   const lo = card.lo || (card.market * 0.85);
   const hi = card.hi || (card.market * 1.15);
   const catalog = card.ask || card.market;
-  if (listingPrice < lo) return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--up-soft)', color: 'var(--up)', fontWeight: 600 }}>🔥 Great Deal</span>;
+  if (listingPrice < lo) return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--up-soft)', color: 'var(--up)', fontWeight: 600 }}>Great Deal</span>;
   if (listingPrice < catalog) return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--up-soft)', color: 'var(--up)' }}>Good Deal</span>;
   if (listingPrice > hi) return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--down-soft)', color: 'var(--down)' }}>High</span>;
   return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--panel)', color: 'var(--muted)' }}>Fair</span>;
@@ -367,7 +367,7 @@ export default function CardDetail({ card: c, onClose }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to place bid');
-      toast('Bid placed! 🎯');
+      toast('Bid placed! ');
       setShowBidForm(false);
       setBidFormAmount('');
       setBidFormBoost(0);
@@ -404,7 +404,7 @@ export default function CardDetail({ card: c, onClose }) {
       });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
-      else if (data.order) { toast('Purchase complete! 🎉'); setListings(prev => prev.filter(l => l.id !== listing.id)); }
+      else if (data.order) { toast('Purchase complete! '); setListings(prev => prev.filter(l => l.id !== listing.id)); }
       else throw new Error(data.error || 'Purchase failed');
     } catch (e) { toast(e.message, true); }
     finally { setBuying(null); }
@@ -422,7 +422,7 @@ export default function CardDetail({ card: c, onClose }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Offer failed');
-      toast('Offer submitted! 🤝');
+      toast('Offer submitted! ');
       setShowOfferModal(null);
       setOfferAmount('');
     } catch (e) { toast(e.message, true); }
@@ -504,7 +504,7 @@ export default function CardDetail({ card: c, onClose }) {
               <div className="mr-section" style={{ marginBottom: 20 }}>
                 {/* Chart header: title + range tabs */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <h4 style={{ margin: 0 }}>📈 Price History</h4>
+                  <h4 style={{ margin: 0 }}>Price History</h4>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {[7, 30, 90].map(d => (
                       <button key={d} onClick={() => setChartDays(d)} style={{
@@ -604,7 +604,7 @@ export default function CardDetail({ card: c, onClose }) {
 
             {/* Market Stats */}
             <div className="mr-section" style={{ marginBottom: 16 }}>
-              <h4>📊 Market Stats</h4>
+              <h4>Market Stats</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
                 {c.sales7d > 0 && (
                   <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
@@ -638,7 +638,7 @@ export default function CardDetail({ card: c, onClose }) {
             {/* Available Grades */}
             {c.grades && c.grades.length > 1 && (
               <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>🏅 Available Grades ({c.grades.length})</h4>
+                <h4>Available Grades ({c.grades.length})</h4>
                 <div style={{ marginTop: 8, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--line)' }}>
                   <div style={{
                     display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr',
@@ -692,7 +692,7 @@ export default function CardDetail({ card: c, onClose }) {
             {/* Active Listings */}
             {listings.length > 0 && (
               <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4 style={{ marginBottom: 10 }}>🏷️ For Sale ({listings.length})</h4>
+                <h4 style={{ marginBottom: 10 }}>For Sale ({listings.length})</h4>
                 <div style={{ display: 'grid', gap: 8 }}>
                   {listings.slice(0, 5).map(l => (
                     <div key={l.id} style={{
@@ -745,7 +745,7 @@ export default function CardDetail({ card: c, onClose }) {
                 <button className="buy" style={{ opacity: 0.5, cursor: 'default' }}>No listings</button>
               )}
               <button className="offer" onClick={() => setShowBidForm(!showBidForm)} style={{ background: showBidForm ? 'var(--gold-soft)' : undefined, color: showBidForm ? 'var(--gold)' : undefined, borderColor: showBidForm ? 'var(--gold)' : undefined }}>
-                🎯 Place a Bid
+                Place a Bid
               </button>
               <button className={`offer watch ${w ? 'on' : ''}`} onClick={() => toggleWatch(c.id)} style={{ width: 'auto' }}>♥</button>
               <button
@@ -784,9 +784,9 @@ export default function CardDetail({ card: c, onClose }) {
                 <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                   {[
                     { credits: 0, label: 'No boost' },
-                    { credits: 10, label: '🔥 10cr' },
-                    { credits: 25, label: '⚡ 25cr' },
-                    { credits: 50, label: '💎 50cr' },
+                    { credits: 10, label: '10cr' },
+                    { credits: 25, label: '25cr' },
+                    { credits: 50, label: '50cr' },
                   ].map(b => (
                     <button key={b.credits} onClick={() => setBidFormBoost(b.credits)}
                       style={{
@@ -801,7 +801,7 @@ export default function CardDetail({ card: c, onClose }) {
                 </div>
                 <button onClick={handlePlaceBid} disabled={submittingBid}
                   style={{ width: '100%', padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: 'var(--gold)', color: '#000', cursor: submittingBid ? 'wait' : 'pointer' }}>
-                  {submittingBid ? 'Placing...' : '🎯 Submit Bid'}
+                  {submittingBid ? 'Placing...' : 'Submit Bid'}
                 </button>
               </div>
             )}
@@ -809,7 +809,7 @@ export default function CardDetail({ card: c, onClose }) {
             {/* Existing Bids */}
             {cardWants.length > 0 && (
               <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>🎯 Open Bids ({cardWants.length})</h4>
+                <h4>Open Bids ({cardWants.length})</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {cardWants.slice(0, 5).map(w => (
                     <div key={w.id} className="card-bid-item">
@@ -819,7 +819,7 @@ export default function CardDetail({ card: c, onClose }) {
                         </span>
                         {w.boost_credits > 0 && (
                           <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--gold-soft)', color: 'var(--gold)', fontFamily: 'var(--mono)' }}>
-                            {w.boost_credits >= 50 ? '💎' : w.boost_credits >= 25 ? '⚡' : '🔥'} {w.boost_credits}cr
+                            {w.boost_credits >= 50 ? '' : w.boost_credits >= 25 ? '' : ''} {w.boost_credits}cr
                           </span>
                         )}
                       </div>

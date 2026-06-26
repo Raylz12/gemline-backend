@@ -19,9 +19,9 @@ export default function FilterSidebar({ filters, setFilters, cards, sportCounts,
 
   const cardTypes = [
     { key: 'all', label: 'All Cards' },
-    { key: 'rookie', label: 'Rookie Cards', icon: '🌟' },
+    { key: 'rookie', label: 'Rookie Cards', icon: '' },
     { key: 'base', label: 'Base Cards', icon: '📇' },
-    { key: 'parallel', label: 'Parallels', icon: '✨' },
+    { key: 'parallel', label: 'Parallels', icon: '' },
     { key: 'auto', label: 'Autographs', icon: '✍️', soon: true },
   ];
 

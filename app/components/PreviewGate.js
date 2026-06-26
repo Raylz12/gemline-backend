@@ -12,7 +12,7 @@ import AuthModal from './AuthModal';
  * `icon`: emoji icon
  * `always`: if true, shows preview even when logged in (for empty states)
  */
-export default function PreviewGate({ children, preview, cta, subtitle, icon = '✨', always = false }) {
+export default function PreviewGate({ children, preview, cta, subtitle, icon = '', always = false }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 

@@ -84,7 +84,7 @@ export default function Scout({ onSelect }) {
               <div className="nm">{card.player || card.description}</div>
               <div className="why">
                 {card.set} · {card.variant || 'Base'}{card.number ? ` · #${card.number}` : ''}
-                {card.rookie && ' · 🏅 Rookie'}
+                {card.rookie && ' · Rookie'}
                 {card.confidence ? ` · ${(card.confidence * 100).toFixed(0)}% match` : ''}
               </div>
             </div>

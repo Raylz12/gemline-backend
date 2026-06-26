@@ -226,7 +226,7 @@ export default function MarketplacePage() {
           {boosted.length > 0 && (
             <div className="featured-strip">
               <div className="fs-head">
-                <span className="fs-title">⚡ Boosted right now</span>
+                <span className="fs-title">Boosted right now</span>
                 <span className="fs-sub">Sellers paid to push these to the front</span>
               </div>
               <div className="fs-track">
@@ -271,7 +271,7 @@ export default function MarketplacePage() {
                 const sortMap = { hi: 'price_desc', lo: 'price_asc', az: 'player', newest: 'newest', trending: 'trending', gain: 'gain', volume: 'sales' };
                 setSortBy(sortMap[v] || 'trending');
               }}>
-              <option value="trending">🔥 Trending</option>
+              <option value="trending">Trending</option>
               <option value="hi">Price: High → Low</option>
               <option value="lo">Price: Low → High</option>
               <option value="az">Player A–Z</option>

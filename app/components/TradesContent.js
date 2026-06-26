@@ -70,8 +70,7 @@ export default function TradesContent() {
   if (!user) {
     return (
       <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)' }}>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
-        <p style={{ fontSize: 15, marginBottom: 6 }}>Sign in to view your trades</p>
+          <p style={{ fontSize: 15, marginBottom: 6 }}>Sign in to view your trades</p>
         <p style={{ fontSize: 13 }}>Propose swaps, add cash, and see fair-value scoring.</p>
       </div>
     );

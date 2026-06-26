@@ -447,7 +447,7 @@ export default function ArbitragePage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#E8B339', fontWeight: 700, letterSpacing: '.1em' }}>
-            ◈ GEMLINE ARB TERMINAL
+            GEMLINE ARB TERMINAL
           </span>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', letterSpacing: '.08em' }}>
             POWERED BY CARDHEDGE

@@ -47,7 +47,7 @@ export default function ScoutOverlay({ onClose }) {
       });
       const data = await r.json();
       setResults(data.results || []);
-      setSummary((data.ai ? '🤖 ' : '') + (data.summary || ''));
+      setSummary(data.summary || '');
     } catch {}
     setLoading(false);
   };
@@ -117,7 +117,7 @@ export default function ScoutOverlay({ onClose }) {
                   <div className="why">
                     {card.set} · {card.variant || 'Base'}
                     {card.number ? ` · #${card.number}` : ''}
-                    {card.rookie && ' · 🏅 RC'}
+                    {card.rookie && ' · RC'}
                     {card.confidence ? ` · ${(card.confidence * 100).toFixed(0)}% match` : ''}
                     {card['30 Day Sales'] ? ` · ${card['30 Day Sales']} sales/30d` : ''}
                   </div>

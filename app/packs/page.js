@@ -371,7 +371,7 @@ export default function PacksPage() {
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>12 pulls · 3 hits · 2 showcased</div>
               </div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>🎴 Showcase</div>
+            <div style={{ fontSize: 11, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Showcase</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               {[
                 { n: 'Wemby', c: '#7b4dd6', hit: true },
@@ -398,7 +398,7 @@ export default function PacksPage() {
       {/* Collection section */}
       {user && (
         <div style={{ marginTop: 48 }}>
-          <div className="eyebrow" style={{ marginBottom: 4 }}>🎴 My Collection</div>
+          <div className="eyebrow" style={{ marginBottom: 4 }}>My Collection</div>
           <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Cards from Packs</h3>
           <p className="sub" style={{ marginBottom: 16 }}>Your digital collection from pack rips. Hits glow with a foil effect.</p>
 

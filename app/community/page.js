@@ -121,18 +121,18 @@ function ProfileCard({ user, token, authFetch }) {
 }
 
 const ALL_ACHIEVEMENTS = [
-  { key: 'first_pull', name: 'First Pull', desc: 'Open your first pack', icon: '🎴', tier: 'bronze' },
-  { key: 'collector_10', name: 'Collector', desc: 'Add 10 cards to your portfolio', icon: '📦', tier: 'bronze' },
-  { key: 'first_trade', name: 'First Trade', desc: 'Complete your first trade', icon: '🤝', tier: 'bronze' },
-  { key: 'first_sale', name: 'Seller', desc: 'Sell your first card', icon: '💰', tier: 'bronze' },
+  { key: 'first_pull', name: 'First Pull', desc: 'Open your first pack', icon: '', tier: 'bronze' },
+  { key: 'collector_10', name: 'Collector', desc: 'Add 10 cards to your portfolio', icon: '', tier: 'bronze' },
+  { key: 'first_trade', name: 'First Trade', desc: 'Complete your first trade', icon: '', tier: 'bronze' },
+  { key: 'first_sale', name: 'Seller', desc: 'Sell your first card', icon: '', tier: 'bronze' },
   { key: 'pack_addict', name: 'Pack Addict', desc: 'Open 25 packs', icon: '🎰', tier: 'silver' },
   { key: 'collector_50', name: 'Hoarder', desc: 'Own 50+ cards', icon: '🗄️', tier: 'silver' },
-  { key: 'big_hit', name: 'Big Hit', desc: 'Pull a card worth $200+', icon: '🔥', tier: 'gold' },
+  { key: 'big_hit', name: 'Big Hit', desc: 'Pull a card worth $200+', icon: '', tier: 'gold' },
   { key: 'collector_100', name: 'Vault Keeper', desc: 'Own 100+ cards in your vault', icon: '🏦', tier: 'gold' },
   { key: 'pack_whale', name: 'Whale', desc: 'Spend 5,000+ credits on packs', icon: '🐋', tier: 'gold' },
-  { key: 'early_adopter', name: 'Early Adopter', desc: 'Join during the first month', icon: '⭐', tier: 'gold' },
-  { key: 'legendary_pull', name: 'Legendary', desc: 'Pull a mythic-tier card', icon: '👑', tier: 'diamond' },
-  { key: 'og', name: 'OG', desc: 'One of the original GEMLINE members', icon: '💎', tier: 'diamond' },
+  { key: 'early_adopter', name: 'Early Adopter', desc: 'Join during the first month', icon: '', tier: 'gold' },
+  { key: 'legendary_pull', name: 'Legendary', desc: 'Pull a mythic-tier card', icon: '', tier: 'diamond' },
+  { key: 'og', name: 'OG', desc: 'One of the original GEMLINE members', icon: '', tier: 'diamond' },
 ];
 
 const TIER_COLORS = {
@@ -167,7 +167,6 @@ function AchievementsChecklist({ token }) {
         padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18 }}>🏆</span>
           <span style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15 }}>Achievements</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--gold)' }}>{earnedCount}/{ALL_ACHIEVEMENTS.length}</span>
         </div>
@@ -232,7 +231,7 @@ function AchievementsChecklist({ token }) {
 /* ─── Community Activity Feed ─── */
 const DEMO_POSTS = [
   { id: 1, user: '@CardRipper', avatar: 'C', time: '2m ago', type: 'pull',
-    text: 'Just ripped a pack and pulled a PSA 10 Cooper Flagg! 🔥',
+    text: 'Just ripped a pack and pulled a PSA 10 Cooper Flagg! ',
     card: { name: 'Cooper Flagg', grade: 'PSA 10', value: '$268', img: null, sport: '🏀' },
     likes: 14, comments: 3 },
   { id: 2, user: '@PackShark6903', avatar: 'P', time: '18m ago', type: 'trade',
@@ -252,9 +251,9 @@ const DEMO_POSTS = [
 ];
 
 const TYPE_META = {
-  pull: { label: 'Pack Pull', color: 'var(--gold)', icon: '🎴' },
-  trade: { label: 'Trade Offer', color: 'var(--blue)', icon: '🤝' },
-  sale: { label: 'Sale', color: 'var(--up)', icon: '💰' },
+  pull: { label: 'Pack Pull', color: 'var(--gold)', icon: '' },
+  trade: { label: 'Trade Offer', color: 'var(--blue)', icon: '' },
+  sale: { label: 'Sale', color: 'var(--up)', icon: '' },
 };
 
 function FeedPost({ post }) {
@@ -314,7 +313,7 @@ function FeedPost({ post }) {
         <button onClick={() => { setLiked(!liked); setLikeCount(n => liked ? n - 1 : n + 1); }}
           style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
             fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)', cursor: 'pointer' }}>
-          <span style={{ fontSize: 14 }}>{liked ? '❤️' : '🤍'}</span> {likeCount}
+          <span style={{ fontSize: 14 }}>{liked ? '' : '🤍'}</span> {likeCount}
         </button>
         <button style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
           fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
@@ -478,7 +477,7 @@ export default function CommunityPage() {
       {/* Tabs */}
       {!searchQuery && (
         <div className="seg" style={{ marginBottom: 20 }}>
-          <button className={tab === 'feed' ? 'on' : ''} onClick={() => setTab('feed')}>🔥 Feed</button>
+          <button className={tab === 'feed' ? 'on' : ''} onClick={() => setTab('feed')}>Feed</button>
           <button className={tab === 'discover' ? 'on' : ''} onClick={() => setTab('discover')}>Discover</button>
           {user && (
             <>
@@ -508,7 +507,7 @@ export default function CommunityPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Trending now */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🔥 Trending Now</div>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Trending Now</div>
               {TRENDING_CARDS.map((c, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < TRENDING_CARDS.length-1 ? '1px solid var(--line)' : 'none' }}>
                   <span style={{ fontSize: 20 }}>{c.sport}</span>
@@ -524,7 +523,7 @@ export default function CommunityPage() {
             {/* Suggested users */}
             {suggested.slice(0, 4).length > 0 && (
               <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>👥 Who to Follow</div>
+                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Who to Follow</div>
                 {suggested.slice(0, 4).map(u => (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,var(--gold),#b8851f)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13, color: '#000', flexShrink: 0 }}>
@@ -547,7 +546,7 @@ export default function CommunityPage() {
 
             {/* Community stats */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📊 This Week</div>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>This Week</div>
               {[['Pack pulls shared', '142'], ['Trades proposed', '38'], ['Cards sold', '97'], ['New members', '24']].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,.03)', fontSize: 12 }}>
                   <span style={{ color: 'var(--muted)' }}>{k}</span>

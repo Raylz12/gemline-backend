@@ -191,7 +191,7 @@ export default function TradesPage() {
       {!user && (
         <PreviewGate
           always={true}
-          icon="🔄"
+          icon=""
           cta="Trade cards with other collectors"
           subtitle="Propose swaps, add credits to sweeten the deal, and see fair-value scoring on every offer."
           preview={<SampleTradePreview />}

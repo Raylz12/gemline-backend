@@ -12,12 +12,12 @@ const HERO_CARDS = [
 ];
 
 const FEATURES = [
-  { icon: '🛒', title: 'Marketplace', desc: 'Buy now, make offers, or bid — every listing scored against live comps.', target: '/market' },
-  { icon: '📈', title: 'Arbitrage engine', desc: 'Price spreads, gainers, losers, volume movers — real-time data.', target: '/analytics' },
-  { icon: '🗺️', title: 'Live heatmap', desc: 'See the entire market at a glance. Green rising, red falling.', target: '/analytics' },
-  { icon: '🔄', title: 'Peer trading', desc: 'Trade cards directly. Fair-value meter shows who\'s winning.', target: '/community' },
-  { icon: '🎴', title: 'Pack rips', desc: 'Rip virtual packs, collect hits, show them off on your profile.', target: '/live' },
-  { icon: '🔍', title: 'AI Scout', desc: 'Ask anything — the AI searches the entire catalog for matches.', target: '/market' },
+  { icon: '01', title: 'Marketplace', desc: 'Buy now, make offers, or bid — every listing scored against live comps.', target: '/market' },
+  { icon: '02', title: 'Arbitrage engine', desc: 'Price spreads, gainers, losers, volume movers — real-time data.', target: '/analytics' },
+  { icon: '03', title: 'Live heatmap', desc: 'See the entire market at a glance. Green rising, red falling.', target: '/analytics' },
+  { icon: '04', title: 'Peer trading', desc: 'Trade cards directly. Fair-value meter shows who\'s winning.', target: '/community' },
+  { icon: '05', title: 'Pack rips', desc: 'Rip virtual packs, collect hits, show them off on your profile.', target: '/live' },
+  { icon: '06', title: 'AI Scout', desc: 'Ask anything — the AI searches the entire catalog for matches.', target: '/market' },
 ];
 
 export default function Landing() {
@@ -211,11 +211,11 @@ export default function Landing() {
               {/* Badges */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', margin: '16px 0' }}>
                 {[
-                  { name: 'Early Adopter', icon: '⭐', tier: 'gold' },
+                  { name: 'Early Adopter', icon: '', tier: 'gold' },
                   { name: 'Whale', icon: '🐋', tier: 'gold' },
-                  { name: 'First Trade', icon: '🤝', tier: 'bronze' },
+                  { name: 'First Trade', icon: '', tier: 'bronze' },
                   { name: 'Pack Addict', icon: '🎰', tier: 'silver' },
-                  { name: 'OG', icon: '💎', tier: 'diamond' },
+                  { name: 'OG', icon: '', tier: 'diamond' },
                 ].map((b, i) => (
                   <span key={i} style={{
                     fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)',
@@ -247,7 +247,7 @@ export default function Landing() {
               {/* Physical Cards Section */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 16 }}>🏆</span>
+                  <span style={{ fontSize: 16 }}></span>
                   <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Physical Collection</h3>
                   <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '2px 8px', background: 'var(--panel)', borderRadius: 4 }}>12 cards</span>
                 </div>
@@ -277,7 +277,6 @@ export default function Landing() {
               {/* Digital / Pack Pulls Section */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 16 }}>🎴</span>
                   <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Virtual Pulls</h3>
                   <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '2px 8px', background: 'var(--panel)', borderRadius: 4 }}>6 hits</span>
                   <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--violet, #9b7bff)', padding: '2px 8px', background: 'rgba(155,123,255,.1)', borderRadius: 4 }}>FROM PACKS</span>
@@ -309,7 +308,6 @@ export default function Landing() {
         </section>
 
         <section className="lp-signup reveal" style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--panel)', borderRadius: 18, border: '1px solid var(--line)', margin: '0 auto 40px', maxWidth: 700 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🔥</div>
           <h2 style={{ fontFamily: 'var(--disp)', fontSize: 28, fontWeight: 800 }}>Join the exchange</h2>
           <p style={{ color: 'var(--muted)', maxWidth: 440, margin: '8px auto 24px', fontSize: 14, lineHeight: 1.6 }}>
             Create a free account to build your portfolio, propose trades, and list cards for sale. Takes 30 seconds.

@@ -194,13 +194,13 @@ export default function PortfolioPage() {
   const subTabBar = (
     <div style={{ display: 'flex', gap: 4, marginBottom: 18, marginTop: 16, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
       <button className={`live-tab ${subTab === 'cards' ? 'on' : ''}`} onClick={() => setSubTab('cards')}>
-        📂 My Cards
+        My Cards
       </button>
       <button className={`live-tab ${subTab === 'trades' ? 'on' : ''}`} onClick={() => setSubTab('trades')}>
-        🔄 Trades
+        Trades
       </button>
       <button className={`live-tab ${subTab === 'sell' ? 'on' : ''}`} onClick={() => setSubTab('sell')}>
-        💰 Sell
+        Sell
       </button>
     </div>
   );
@@ -244,7 +244,7 @@ export default function PortfolioPage() {
           + Search &amp; Add Card
         </button>
         <button className="offer" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => setShowCamera(true)}>
-          📷 Scan Card
+          Scan Card
         </button>
       </div>
 
@@ -274,13 +274,13 @@ export default function PortfolioPage() {
       {items.length > 0 && (
         <div className="toolbar" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <select className="sortsel" value={sortBy} onChange={e => { setSortBy(e.target.value); setShowCount(20); }}>
-            <option value="value_desc">💰 Value: High → Low</option>
+            <option value="value_desc">Value: High → Low</option>
             <option value="value_asc">Value: Low → High</option>
-            <option value="name_asc">🔤 Player A → Z</option>
+            <option value="name_asc">Player A → Z</option>
             <option value="name_desc">Player Z → A</option>
-            <option value="gain_desc">📈 Biggest Gain</option>
-            <option value="gain_asc">📉 Biggest Loss</option>
-            <option value="newest">🕐 Newest First</option>
+            <option value="gain_desc">Biggest Gain</option>
+            <option value="gain_asc">Biggest Loss</option>
+            <option value="newest">Newest First</option>
           </select>
           <span className="count" style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
             Showing {Math.min(showCount, items.length)} of {items.length}
@@ -433,10 +433,10 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* 🎴 My Pulls Section */}
+      {/* My Pulls Section */}
       {pulls.length > 0 && (
         <div style={{ marginTop: 40 }}>
-          <div className="eyebrow" style={{ marginBottom: 4 }}>🎴 Digital Collection</div>
+          <div className="eyebrow" style={{ marginBottom: 4 }}>Digital Collection</div>
           <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Cards from Packs ({pulls.length})</h3>
           <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 300 }}>
@@ -446,10 +446,10 @@ export default function PortfolioPage() {
                 style={{ width: '100%', padding: '8px 12px 8px 30px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 12, outline: 'none' }} />
             </div>
             <select className="sortsel" value={pullSort} onChange={e => setPullSort(e.target.value)} style={{ fontSize: 12 }}>
-              <option value="value_desc">💰 Value High→Low</option>
+              <option value="value_desc">Value High→Low</option>
               <option value="value_asc">Value Low→High</option>
-              <option value="name_asc">🔤 Player A→Z</option>
-              <option value="newest">🕐 Newest First</option>
+              <option value="name_asc">Player A→Z</option>
+              <option value="newest">Newest First</option>
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>

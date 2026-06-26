@@ -141,7 +141,6 @@ export default function Header() {
           <div className="nav-right">
             {user && (
               <button id="walletPill" title="Buy credits" onClick={() => setShowCredits(true)}>
-                <span className="diamond">◈</span>
                 <span className="mono">{wallet.credits}</span>
                 <span className="addc">+</span>
               </button>
@@ -155,7 +154,7 @@ export default function Header() {
                 {avatarOpen && (
                   <div className="avatar-dropdown" onClick={() => setAvatarOpen(false)}>
                     <Link href={`/profile/${user.handle || 'me'}`} className="avatar-dd-item">
-                      👤 My Profile
+                      My Profile
                     </Link>
                     <button className="avatar-dd-item" onClick={() => { setAvatarOpen(false); setShowSettings(true); }}>
                       ⚙️ Settings

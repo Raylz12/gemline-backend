@@ -362,7 +362,6 @@ export default function ArbitrageContent({ onSelectCard }) {
       {/* ── Undervalued Radar label ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16 }}>🎯</span>
           <span style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15, color: 'var(--txt)' }}>Undervalued Radar</span>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>biggest edge × trading volume</span>
         </div>

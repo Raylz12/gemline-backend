@@ -32,9 +32,9 @@ function Countdown({ endTime, showUrgency = false }) {
 }
 
 function boostTier(credits) {
-  if (credits >= 50) return { label: '💎 Diamond', cls: 'boost-diamond' };
-  if (credits >= 25) return { label: '⚡ Supercharged', cls: 'boost-super' };
-  if (credits >= 10) return { label: '🔥 Hot', cls: 'boost-hot' };
+  if (credits >= 50) return { label: 'Diamond', cls: 'boost-diamond' };
+  if (credits >= 25) return { label: 'Supercharged', cls: 'boost-super' };
+  if (credits >= 10) return { label: 'Hot', cls: 'boost-hot' };
   return null;
 }
 
@@ -176,7 +176,7 @@ export default function LivePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Bid failed');
-      toast(`Bid placed: $${Number(bidAmount || 0).toFixed(2)} 🎯`);
+      toast(`Bid placed: $${Number(bidAmount || 0).toFixed(2)} `);
       setBidModal(null);
       setBidAmount('');
       loadAuctions();
@@ -216,7 +216,7 @@ export default function LivePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to place bid');
-      toast('Bid placed! 🎯');
+      toast('Bid placed! ');
       setWantModal(false);
       setWantCard(null);
       setWantAmount('');
@@ -240,7 +240,7 @@ export default function LivePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Boost failed');
-      toast(`Boosted! ⚡`);
+      toast(`Boosted! `);
       setBoostModal(null);
       loadWants();
       loadTopBids();
@@ -260,7 +260,7 @@ export default function LivePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Match failed');
       if (data.url) { window.location.href = data.url; return; }
-      toast('Matched! 🤝');
+      toast('Matched! ');
       setMatchModal(null);
       loadWants();
       loadTopBids();
@@ -319,7 +319,7 @@ export default function LivePage() {
       {topBids.length > 0 && (
         <div className="live-section" style={{ marginBottom: 28 }}>
           <div className="live-section-header">
-            <h3 className="live-section-title">🏆 Top Bids</h3>
+            <h3 className="live-section-title">Top Bids</h3>
             <span className="live-section-sub">Most-wanted cards right now</span>
           </div>
           <div className="live-top-bids-rail">
@@ -462,16 +462,16 @@ export default function LivePage() {
 
               {/* Text content */}
               <div className="live-empty-text">
-                <div className="live-empty-icon">🏷️</div>
+                <div className="live-empty-icon"></div>
                 <h2 className="live-empty-title">Auctions are Coming</h2>
                 <p className="live-empty-sub">Be the first to list a card and kick off the live floor.</p>
 
                 {/* How it works steps */}
                 <div className="live-empty-steps">
                   {[
-                    { icon: '📦', step: '1', label: 'List', desc: 'Add a card from your collection' },
-                    { icon: '⚡', step: '2', label: 'Bid', desc: 'Buyers compete in real time' },
-                    { icon: '🏆', step: '3', label: 'Win', desc: 'Highest bid takes the card' },
+                    { icon: '', step: '1', label: 'List', desc: 'Add a card from your collection' },
+                    { icon: '', step: '2', label: 'Bid', desc: 'Buyers compete in real time' },
+                    { icon: '', step: '3', label: 'Win', desc: 'Highest bid takes the card' },
                   ].map(s => (
                     <div key={s.step} className="live-empty-step">
                       <div className="live-empty-step-icon">{s.icon}</div>
@@ -490,7 +490,7 @@ export default function LivePage() {
 
           {upcomingAuctions.length > 0 && (
             <>
-              <h3 className="live-section-title" style={{ marginTop: 36, marginBottom: 16, fontSize: 18 }}>⏰ Coming Up</h3>
+              <h3 className="live-section-title" style={{ marginTop: 36, marginBottom: 16, fontSize: 18 }}>Coming Up</h3>
               <div className="live-auction-grid">
                 {upcomingAuctions.map(a => (
                   <div key={a.id} className="live-auction-card live-auction-card--upcoming">
@@ -571,7 +571,7 @@ export default function LivePage() {
                         {isOwn ? (
                           <>
                             <button onClick={() => { setBoostModal(w); setBoostAmount(10); }} className="live-want-boost-btn">
-                              ⚡ Boost
+                              Boost
                             </button>
                             <button onClick={() => cancelWant(w.id)} className="live-want-cancel-btn">✕</button>
                           </>
@@ -588,7 +588,6 @@ export default function LivePage() {
             </div>
           ) : (
             <div className="live-bids-empty">
-              <div style={{ fontSize: 40, marginBottom: 14 }}>🎯</div>
               <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 20, marginBottom: 8 }}>No Open Bids Yet</h3>
               <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20, maxWidth: 340, margin: '0 auto 20px' }}>
                 Post what you&#39;re looking for and sellers will come to you.
@@ -647,7 +646,7 @@ export default function LivePage() {
             <div className="live-modal-actions">
               <button onClick={() => setBidModal(null)} className="live-modal-cancel">Cancel</button>
               <button onClick={placeBid} disabled={submittingBid} className="live-modal-submit">
-                {submittingBid ? 'Placing…' : `🎯 Bid $${Number(bidAmount || 0).toFixed(2)}`}
+                {submittingBid ? 'Placing…' : `Bid $${Number(bidAmount || 0).toFixed(2)}`}
               </button>
             </div>
             <div className="live-modal-footer-note">
@@ -662,7 +661,7 @@ export default function LivePage() {
         <div className="overlay on" onClick={e => e.target === e.currentTarget && setWantModal(false)}>
           <div className="live-modal">
             <div className="live-modal-header">
-              <h3 className="live-modal-title">🎯 Place a Bid</h3>
+              <h3 className="live-modal-title">Place a Bid</h3>
               <button className="live-modal-close" onClick={() => setWantModal(false)}>✕</button>
             </div>
 
@@ -715,9 +714,9 @@ export default function LivePage() {
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[
                       { credits: 0, label: 'None', icon: '' },
-                      { credits: 10, label: '🔥 Hot', icon: '' },
-                      { credits: 25, label: '⚡ Super', icon: '' },
-                      { credits: 50, label: '💎 Diamond', icon: '' },
+                      { credits: 10, label: 'Hot', icon: '' },
+                      { credits: 25, label: 'Super', icon: '' },
+                      { credits: 50, label: 'Diamond', icon: '' },
                     ].map(b => (
                       <button key={b.credits} onClick={() => setWantBoost(b.credits)}
                         style={{
@@ -737,7 +736,7 @@ export default function LivePage() {
                 <div className="live-modal-actions">
                   <button onClick={() => setWantModal(false)} className="live-modal-cancel">Cancel</button>
                   <button onClick={submitWant} disabled={submittingWant} className="live-modal-submit">
-                    {submittingWant ? 'Placing…' : '🎯 Place Bid'}
+                    {submittingWant ? 'Placing…' : 'Place Bid'}
                   </button>
                 </div>
               </>
@@ -751,7 +750,7 @@ export default function LivePage() {
         <div className="overlay on" onClick={e => e.target === e.currentTarget && setBoostModal(null)}>
           <div className="live-modal" style={{ maxWidth: 380 }}>
             <div className="live-modal-header">
-              <h3 className="live-modal-title">⚡ Boost Your Bid</h3>
+              <h3 className="live-modal-title">Boost Your Bid</h3>
               <button className="live-modal-close" onClick={() => setBoostModal(null)}>✕</button>
             </div>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
@@ -759,9 +758,9 @@ export default function LivePage() {
             </p>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               {[
-                { credits: 10, label: '🔥 Hot', desc: 'Gold highlight' },
-                { credits: 25, label: '⚡ Super', desc: 'Gold border + badge' },
-                { credits: 50, label: '💎 Diamond', desc: 'Top + animated glow' },
+                { credits: 10, label: 'Hot', desc: 'Gold highlight' },
+                { credits: 25, label: 'Super', desc: 'Gold border + badge' },
+                { credits: 50, label: 'Diamond', desc: 'Top + animated glow' },
               ].map(b => (
                 <button key={b.credits} onClick={() => setBoostAmount(b.credits)}
                   style={{
@@ -791,7 +790,7 @@ export default function LivePage() {
         <div className="overlay on" onClick={e => e.target === e.currentTarget && setMatchModal(null)}>
           <div className="live-modal" style={{ maxWidth: 400 }}>
             <div className="live-modal-header">
-              <h3 className="live-modal-title">🤝 Match This Bid</h3>
+              <h3 className="live-modal-title">Match This Bid</h3>
               <button className="live-modal-close" onClick={() => setMatchModal(null)}>✕</button>
             </div>
             <div className="live-modal-card-preview">
@@ -818,7 +817,7 @@ export default function LivePage() {
               <button onClick={() => setMatchModal(null)} className="live-modal-cancel">Cancel</button>
               <button onClick={submitMatch} disabled={submittingMatch}
                 style={{ flex: 2, padding: 12, borderRadius: 8, fontSize: 14, fontWeight: 700, background: 'var(--up)', color: '#04140c', cursor: submittingMatch ? 'wait' : 'pointer' }}>
-                {submittingMatch ? 'Processing…' : '🤝 Match & Sell'}
+                {submittingMatch ? 'Processing…' : 'Match & Sell'}
               </button>
             </div>
           </div>

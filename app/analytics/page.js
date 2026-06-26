@@ -42,10 +42,10 @@ export default function AnalyticsPage() {
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 18, marginTop: 16, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
         <button className={`live-tab ${tab === 'heatmap' ? 'on' : ''}`} onClick={() => setTab('heatmap')}>
-          🗺️ Heatmap
+          Heatmap
         </button>
         <button className={`live-tab ${tab === 'arbitrage' ? 'on' : ''}`} onClick={() => setTab('arbitrage')}>
-          📈 Arbitrage
+          Arbitrage
         </button>
       </div>
 
