@@ -112,8 +112,8 @@ async function main() {
   let sinceLastMV = 0;
   const t0 = Date.now();
 
-  for (let offset = prog.offset; offset < total; offset += PAGE_SIZE) {
-    console.log(`\nDEBUG: Loop iter offset=${offset} (< ${total})`);
+  for (let offset = prog.offset; offset < total; offset += PAGE_SIZE) { console.log("
+DEBUG: Loop iteration offset=", offset);
     // Fetch page
     const pc = await pool.connect();
     const { rows } = await pc.query(`
@@ -174,8 +174,7 @@ async function main() {
     const rem = (total - done) / Math.max(rate, 0.1);
     const eta = new Date(Date.now() + rem * 1000).toISOString().slice(11, 16);
     const pct = ((done / total) * 100).toFixed(1);
-    console.log(`  ${done.toLocaleString()}/${total.toLocaleString()} (${pct}%) | ${rate.toFixed(0)}/s | ETA ${eta}Z | wr:${written} err:${errors}`);
-    console.log(`DEBUG: End of loop body, continuing to next offset...`);
+    console.log("DEBUG: Finished page, continuing..."); console.log(`  ${done.toLocaleString()}/${total.toLocaleString()} (${pct}%) | ${rate.toFixed(0)}/s | ETA ${eta}Z | wr:${written} err:${errors}`);
   }
 
   await refreshMV();

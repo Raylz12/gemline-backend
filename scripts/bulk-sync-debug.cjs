@@ -12,7 +12,7 @@ const KEY  = 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
 const CH   = 'https://api.cardhedger.com';
 
 const CONCURRENCY = 20;
-const PAGE_SIZE   = 500;  // Reduced to avoid overwhelming pMap
+const PAGE_SIZE   = 5000;
 const MV_EVERY    = 50000;
 const PROG_FILE   = path.join(__dirname, '.bulk-sync-progress.json');
 
@@ -113,8 +113,7 @@ async function main() {
   const t0 = Date.now();
 
   for (let offset = prog.offset; offset < total; offset += PAGE_SIZE) {
-    console.log(`\nDEBUG: Loop iter offset=${offset} (< ${total})`);
-    // Fetch page
+    console.log("DEBUG: Fetching page at offset", offset); // Fetch page
     const pc = await pool.connect();
     const { rows } = await pc.query(`
       SELECT cardhedge_id, grader, COALESCE(grade,'') as grade
@@ -125,7 +124,7 @@ async function main() {
     `, [PAGE_SIZE, offset]);
     pc.release();
 
-    if (!rows.length) break;
+    console.log("DEBUG: Got", rows.length, "rows"); if (!rows.length) { console.log("DEBUG: Breaking"); break; }
 
     // Dedupe in memory
     const uniq = new Map();
@@ -133,33 +132,22 @@ async function main() {
       const key = `${c.cardhedge_id}|${c.grader}|${c.grade}`;
       if (!uniq.has(key)) uniq.set(key, c);
     }
-    const cards = Array.from(uniq.values());
+    const cards = Array.from(uniq.values()); console.log("DEBUG: Deduped to", cards.length, "unique cards");
 
     // Fetch FMV
-    let results = [];
-    try {
-      results = await pMap(cards, async (c) => {
-        const gl = gradeLabel(c.grader, c.grade);
-        const data = await fetchFMV(c.cardhedge_id, gl);
-        return data ? { card_id: c.cardhedge_id, grader: c.grader, grade: c.grade, ...data } : null;
-      }, CONCURRENCY);
-    } catch (e) {
-      console.error('  [pMap error]', e.message);
-      results = [];
-    }
+    const results = await pMap(cards, async (c) => {
+      const gl = gradeLabel(c.grader, c.grade);
+      const data = await fetchFMV(c.cardhedge_id, gl);
+      return data ? { card_id: c.cardhedge_id, grader: c.grader, grade: c.grade, ...data } : null;
+    }, CONCURRENCY);
 
     const hits = results.filter(Boolean);
     errors += results.length - hits.length;
 
     // Write
-    let w = 0;
-    try {
-      w = await bulkUpdate(hits);
-      written += w;
-      sinceLastMV += w;
-    } catch (e) {
-      console.error('  [bulkUpdate error]', e.message);
-    }
+    const w = await bulkUpdate(hits);
+    written += w;
+    sinceLastMV += w;
 
     saveProg({ offset: offset + PAGE_SIZE, written, errors, t0: prog.t0 || t0 });
 
@@ -175,7 +163,6 @@ async function main() {
     const eta = new Date(Date.now() + rem * 1000).toISOString().slice(11, 16);
     const pct = ((done / total) * 100).toFixed(1);
     console.log(`  ${done.toLocaleString()}/${total.toLocaleString()} (${pct}%) | ${rate.toFixed(0)}/s | ETA ${eta}Z | wr:${written} err:${errors}`);
-    console.log(`DEBUG: End of loop body, continuing to next offset...`);
   }
 
   await refreshMV();

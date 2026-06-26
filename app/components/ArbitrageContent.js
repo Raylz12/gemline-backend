@@ -49,8 +49,9 @@ function Ticker({ cards }) {
           const up = (c.gain7d || 0) >= 0;
           return (
             <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 18px', borderRight: '1px solid rgba(255,255,255,.04)', fontFamily: 'var(--mono)', fontSize: 10 }}>
-              <span style={{ color: 'rgba(255,255,255,.35)' }}>{c.player.split(' ').pop()?.toUpperCase()}</span>
-              <span style={{ color: 'var(--txt)', fontWeight: 600 }}>{fmtP(c.market)}</span>
+              <span style={{ color: 'rgba(255,255,255,.8)', fontWeight: 600 }}>{(c.player || 'Unknown').toUpperCase()}</span>
+              <span style={{ color: 'rgba(255,255,255,.4)', fontSize: 9 }}>{c.grader} {c.grade}</span>
+              <span style={{ color: '#fff', fontWeight: 700 }}>{fmtP(c.market)}</span>
               <span style={{ color: up ? '#34D88A' : '#FF5C6C' }}>{up ? '▲' : '▼'}{Math.abs(c.gain7d || 0).toFixed(1)}%</span>
             </span>
           );
@@ -132,7 +133,7 @@ function MoverRow({ card, rank, onClick }) {
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderBottom: '1px solid rgba(255,255,255,.03)', cursor: 'pointer' }}>
       <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', width: 16, textAlign: 'right' }}>{rank}</span>
       {card.thumbnail && (
-        <div style={{ width: 28, height: 36, borderRadius: 3, flexShrink: 0, background: `url(${card.thumbnail}) center/contain no-repeat #111`, border: '1px solid rgba(255,255,255,.07)' }} />
+        <div style={{ width: 28, height: 36, borderRadius: 3, flexShrink: 0, background: `url(${card.thumbnail}) center/contain no-repeat #1a1d26`, border: '1px solid rgba(255,255,255,.08)' }} />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.player}</div>
@@ -196,7 +197,7 @@ function SpreadTable({ cards, onSelect }) {
               <span style={{ width: 28, fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', textAlign: 'right', paddingRight: 6 }}>{i + 1}</span>
               {/* Card */}
               <div style={{ flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 7 }}>
-                {c.thumbnail && <div style={{ width: 28, height: 38, borderRadius: 3, flexShrink: 0, background: `url(${c.thumbnail}) center/contain no-repeat #111`, border: '1px solid rgba(255,255,255,.06)' }} />}
+                {c.thumbnail && <div style={{ width: 28, height: 38, borderRadius: 3, flexShrink: 0, background: `url(${c.thumbnail}) center/contain no-repeat #1a1d26`, border: '1px solid rgba(255,255,255,.06)' }} />}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {c.player}
@@ -292,10 +293,12 @@ export default function ArbitrageContent({ onSelectCard }) {
     .map(c => ({ ...c, edge: +((( c.hi - c.lo) / c.lo) * 100).toFixed(1), spread: +(c.hi - c.lo).toFixed(2) }))
     .sort((a, b) => b.edge - a.edge), [cards]);
 
-  const gainers   = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0).sort((a, b) => b.gain7d - a.gain7d).slice(0, 14), [cards]);
-  const losers    = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0).sort((a, b) => a.gain7d - b.gain7d).slice(0, 14), [cards]);
-  const byVol     = useMemo(() => [...cards].filter(c => c.sales30d > 0).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [cards]);
-  const heat      = useMemo(() => [...cards].filter(c => c.gain7d !== 0).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 32), [cards]);
+  // Cap at ±500% — anything beyond is a data artifact (null→priced = fake ∞% gain)
+  const realGain  = c => c.gain7d > -500 && c.gain7d < 500;
+  const gainers   = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0 && realGain(c) && c.player).sort((a, b) => b.gain7d - a.gain7d).slice(0, 14), [cards]);
+  const losers    = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0 && realGain(c) && c.player).sort((a, b) => a.gain7d - b.gain7d).slice(0, 14), [cards]);
+  const byVol     = useMemo(() => [...cards].filter(c => c.sales30d > 0 && c.player).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [cards]);
+  const heat      = useMemo(() => [...cards].filter(c => c.gain7d !== 0 && realGain(c) && c.player).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 32), [cards]);
   const ticker    = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);
   const volMax    = byVol[0]?.sales30d || 1;
 
