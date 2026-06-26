@@ -60,6 +60,27 @@ app.use('/api/auth', async (req, res, next) => {
 app.get('/feed', (_req, res) => res.json({ mode: 'preview', cards: [] }));
 
 
+// ── Admin: refresh mv_card_feed + trigger price refresh ──────────────────────
+app.post('/api/admin/refresh-mv', async (req, res) => {
+  if (req.headers['x-admin-key'] !== (process.env.ADMIN_KEY || 'gemline-admin-2026'))
+    return res.status(403).json({ error: 'forbidden' });
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ ok: false, reason: 'no db' });
+    const t0 = Date.now();
+    // Refresh concurrently so reads keep working during refresh
+    await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_card_feed');
+    // Bust all in-memory caches so next request gets fresh data
+    app._feedCache = null;
+    app._sportCounts = null;
+    app._brandCounts = null;
+    app._arbCache = null;
+    console.log(`[admin] mv_card_feed refreshed in ${Date.now()-t0}ms`);
+    res.json({ ok: true, refreshedMs: Date.now()-t0 });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── Admin ingest (no auth — key-protected instead) ────────────────────────────
 app.post('/api/admin/ingest', async (req, res) => {
   if (req.headers['x-admin-key'] !== (process.env.ADMIN_KEY || 'gemline-admin-2026'))
@@ -382,59 +403,34 @@ app.get('/api/market/feed', async (req, res) => {
     if (sport && sport !== 'All') { conditions.push(`sport = $${paramIdx}`); params.push(sport); paramIdx++; }
     if (search) { conditions.push(`(player ILIKE $${paramIdx} OR card_set ILIKE $${paramIdx})`); params.push(`%${search}%`); paramIdx++; }
     if (brand) { conditions.push(`card_set ILIKE $${paramIdx}`); params.push(`%${brand}%`); paramIdx++; }
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Use materialized view (mv_card_feed) — pre-grouped, indexed, ~10ms vs 500ms raw
+    // mv columns: id, player, card_set, year, variant, number, sport, catalog_price,
+    //             ch_price_lo/hi/confidence, ebay_thumb, image_url, cardhedge_id,
+    //             grader, grade, gain_7d, sales_7d, sales_30d, rookie, grade_count, grades
+    const mvWhere = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Sort (using aggregates for GROUP BY)
+    // Sort against mv columns (no aggregates needed)
     let orderBy;
     switch (sort) {
-      case 'price_asc': orderBy = 'MAX(catalog_price) ASC NULLS LAST'; break;
-      case 'price_desc': orderBy = 'MAX(catalog_price) DESC NULLS LAST'; break;
+      case 'price_asc': orderBy = 'catalog_price ASC NULLS LAST'; break;
+      case 'price_desc': orderBy = 'catalog_price DESC NULLS LAST'; break;
       case 'player': orderBy = 'player ASC'; break;
-      case 'gain': orderBy = 'MAX(gain_7d) DESC NULLS LAST'; break;
-      case 'sales': orderBy = 'MAX(sales_30d) DESC NULLS LAST'; break;
-      case 'newest': orderBy = 'MAX(year) DESC NULLS LAST, MAX(created_at) DESC NULLS LAST'; break;
+      case 'gain': orderBy = 'gain_7d DESC NULLS LAST'; break;
+      case 'sales': orderBy = 'sales_30d DESC NULLS LAST'; break;
+      case 'newest': orderBy = 'year DESC NULLS LAST'; break;
       default:
-        // "trending" — weighted random mix of sports, eras, prices
-        orderBy = `(COALESCE(MAX(sales_7d),0)*2 + COALESCE(MAX(sales_30d),0) + ABS(COALESCE(MAX(gain_7d),0))*5 + RANDOM()*20) DESC`;
+        orderBy = `(COALESCE(sales_7d,0)*2 + COALESCE(sales_30d,0) + ABS(COALESCE(gain_7d,0))*5 + RANDOM()*20) DESC`;
         break;
     }
 
     const { rows: cards } = await pool.query(`
-      SELECT
-        (array_agg(id ORDER BY catalog_price DESC NULLS LAST))[1] AS id,
-        player, sport, card_set, year, variant, number,
-        (array_agg(grader ORDER BY catalog_price DESC NULLS LAST))[1] AS grader,
-        (array_agg(grade ORDER BY catalog_price DESC NULLS LAST))[1] AS grade,
-        MAX(catalog_price) AS catalog_price,
-        (array_agg(ch_price_lo ORDER BY catalog_price DESC NULLS LAST))[1] AS ch_price_lo,
-        (array_agg(ch_price_hi ORDER BY catalog_price DESC NULLS LAST))[1] AS ch_price_hi,
-        (array_agg(ch_confidence ORDER BY catalog_price DESC NULLS LAST))[1] AS ch_confidence,
-        (array_agg(ebay_thumb ORDER BY catalog_price DESC NULLS LAST))[1] AS ebay_thumb,
-        (array_agg(image_url ORDER BY catalog_price DESC NULLS LAST))[1] AS image_url,
-        (array_agg(cardhedge_id ORDER BY catalog_price DESC NULLS LAST))[1] AS cardhedge_id,
-        BOOL_OR(rookie) AS rookie,
-        MAX(sales_7d) AS sales_7d,
-        MAX(sales_30d) AS sales_30d,
-        MAX(gain_7d) AS gain_7d,
-        COUNT(*) AS grade_count,
-        json_agg(json_build_object(
-          'grader', COALESCE(grader, 'RAW'),
-          'grade', COALESCE(grade, ''),
-          'price', catalog_price,
-          'lo', ch_price_lo,
-          'hi', ch_price_hi,
-          'sales7d', sales_7d,
-          'sales30d', sales_30d,
-          'gain7d', gain_7d
-        ) ORDER BY catalog_price DESC NULLS LAST) AS grades
-      FROM cards ${where}
-      GROUP BY player, card_set, year, variant, number, sport
-      ORDER BY (MAX(catalog_price) IS NOT NULL AND MAX(catalog_price) > 0) DESC, ${orderBy}
+      SELECT * FROM mv_card_feed ${mvWhere}
+      ORDER BY (catalog_price IS NOT NULL AND catalog_price > 0) DESC, ${orderBy}
       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
     `, [...params, limit, offset]);
 
     const { rows: [{ count: totalCards }] } = await pool.query(
-      `SELECT COUNT(*) FROM (SELECT 1 FROM cards ${where} GROUP BY player, card_set, year, variant, number, sport) sub`,
+      `SELECT COUNT(*) FROM mv_card_feed ${mvWhere}`,
       params
     );
 
@@ -473,19 +469,19 @@ app.get('/api/market/feed', async (req, res) => {
     const total = Number(totalCards);
     const pages = Math.ceil(total / limit);
 
-    // Sport counts (cached separately for 5 min)
+    // Sport counts — query from mv (fast, indexed)
     let sportCounts = app._sportCounts;
     if (!sportCounts || sportCounts.expires < Date.now()) {
-      const { rows: sc } = await pool.query('SELECT sport, COUNT(*) as cnt FROM cards GROUP BY sport ORDER BY cnt DESC');
+      const { rows: sc } = await pool.query('SELECT sport, COUNT(*) as cnt FROM mv_card_feed GROUP BY sport ORDER BY cnt DESC');
       sportCounts = { data: sc.map(r => ({ sport: r.sport, count: Number(r.cnt) })), expires: Date.now() + 60 * 60 * 1000 };
       app._sportCounts = sportCounts;
     }
 
-    // Brand counts (cached 10 min) — top 20 brands by card count
+    // Brand counts — query from mv (fast)
     let brandCounts = app._brandCounts;
     if (!brandCounts || brandCounts.expires < Date.now()) {
       const { rows: bc } = await pool.query(`
-        SELECT card_set AS brand, COUNT(*) as cnt FROM cards 
+        SELECT card_set AS brand, COUNT(*) as cnt FROM mv_card_feed
         WHERE card_set IS NOT NULL AND card_set != ''
         GROUP BY card_set ORDER BY cnt DESC LIMIT 30
       `);
@@ -506,10 +502,15 @@ app.post('/api/catalog/search', async (req, res) => {
     const pool = r.pool;
     const q = (req.body?.q || req.query.q || '').trim();
     if (!pool || !q) return res.json({ results: [], canCreate: true });
+    // Trigram similarity search — uses GIN index, fast on 500K rows
     const { rows } = await pool.query(
-      `SELECT id, player, grader, grade, card_set, variant, sport, catalog_price, ebay_thumb, image_url
-       FROM cards WHERE player ILIKE $1 OR card_set ILIKE $1 ORDER BY catalog_price DESC NULLS LAST LIMIT 20`,
-      [`%${q}%`]
+      `SELECT id, player, grader, grade, card_set, variant, sport, catalog_price, ebay_thumb, image_url,
+              similarity(player, $1) AS sim
+       FROM cards
+       WHERE player % $1 OR card_set ILIKE $2 OR variant ILIKE $2
+       ORDER BY sim DESC, catalog_price DESC NULLS LAST
+       LIMIT 20`,
+      [q, `%${q}%`]
     );
     res.json({ results: rows, canCreate: true, total: rows.length });
   } catch(e) { res.json({ results: [], canCreate: true }); }
