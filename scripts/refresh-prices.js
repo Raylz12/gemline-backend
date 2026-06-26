@@ -11,8 +11,8 @@ const KEY = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZ
 const CH  = 'https://api.cardhedger.com';
 
 const BATCH   = 50;   // cards per CH request
-const MAX_CARDS = 5000; // max to refresh per run (API rate limit friendly)
-const STALE_HOURS = 20; // refresh cards not updated in X hours
+const MAX_CARDS = 500000; // max to refresh per run — all of them
+const STALE_HOURS = 6; // refresh cards not updated in 6 hours (catches all)
 
 const pool = new pg.Pool({ connectionString: DB });
 
