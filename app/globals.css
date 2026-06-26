@@ -52,7 +52,7 @@ header{position:sticky;top:0;z-index:40;background:#07080d;border-bottom:1px sol
 .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--dim)}
 .search kbd{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px;background:var(--ink)}
 .navlinks{display:flex;gap:2px;flex:0 0 auto;overflow:hidden}
-.navlinks a.navbtn{font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);padding:6px 10px;border-radius:var(--r-sm);transition:.15s;display:flex;align-items:center;gap:5px;white-space:nowrap;text-decoration:none}
+.navlinks a.navbtn{font-size:13px;font-weight:500;color:var(--muted);padding:6px 11px;border-radius:var(--r-sm);transition:.15s;display:flex;align-items:center;gap:5px;white-space:nowrap;text-decoration:none}
 .navlinks a.navbtn:hover{color:var(--txt);background:var(--panel)}
 .navlinks a.navbtn.on{color:#000;background:var(--gold);font-weight:700}
 .navlinks .dot{width:6px;height:6px;border-radius:50%;background:var(--down);box-shadow:0 0 7px var(--down);animation:pulse 1.4s infinite}
@@ -71,7 +71,7 @@ main{max-width:1320px;margin:0 auto;padding:26px 22px 80px;position:relative;z-i
 
 /* ---------- shared bits ---------- */
 .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
-h1.page{font-family:var(--disp);font-weight:900;font-size:clamp(32px,5vw,54px);letter-spacing:.01em;line-height:1;text-transform:uppercase}
+h1.page{font-family:var(--disp);font-weight:700;font-size:clamp(28px,4vw,44px);letter-spacing:-.01em;line-height:1.1}
 .sub{color:var(--muted);font-size:14px;margin-top:10px;max-width:560px;font-weight:400;line-height:1.6}
 .pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
 .pill.up{background:var(--up-soft);border-color:transparent;color:var(--up)}
@@ -87,7 +87,7 @@ h1.page{font-family:var(--disp);font-weight:900;font-size:clamp(32px,5vw,54px);l
 .statbar{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0 30px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 17px;position:relative;overflow:hidden;border-left:3px solid var(--line)}
 .stat .k{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
-.stat .v{font-family:var(--disp);font-weight:900;font-size:30px;margin-top:6px;letter-spacing:.02em;line-height:1;text-transform:uppercase}
+.stat .v{font-family:var(--disp);font-weight:700;font-size:28px;margin-top:6px;letter-spacing:-.01em;line-height:1}
 .stat .d{font-family:var(--mono);font-size:10px;margin-top:5px;color:var(--muted)}
 
 /* ---------- FILTER RAIL + grid layout ---------- */
@@ -158,7 +158,7 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 /* ---------- ARBITRAGE ENGINE ---------- */
 .arb-top{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin:22px 0 26px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
-.panel h3{font-family:var(--disp);font-weight:800;font-size:17px;letter-spacing:.02em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.panel h3{font-family:var(--disp);font-weight:700;font-size:16px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
 .panel .ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .radar{display:flex;flex-direction:column;gap:9px}
 .radar-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line);transition:.15s;cursor:pointer}
@@ -221,7 +221,7 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .stage .lotinfo .curbid .l{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em}
 .stage .lotinfo .curbid .v{font-family:var(--mono);font-weight:600;font-size:26px;color:var(--up)}
 .bidbtns{display:flex;gap:10px;margin-top:14px}
-.bidbtns button{flex:1;padding:13px;border-radius:var(--r);font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;transition:.13s}
+.bidbtns button{flex:1;padding:13px;border-radius:var(--r);font-family:var(--ui);font-weight:600;font-size:14px;transition:.13s}
 .bidbtns .bid{background:var(--up);color:#04140c}
 .bidbtns .bid:hover{background:#13b876}
 .bidbtns .custom{background:var(--panel-2);border:1px solid var(--line-2);color:var(--txt)}
@@ -293,12 +293,12 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .mr-price{display:flex;align-items:flex-end;gap:14px;margin:18px 0}
 .mr-price .ask{font-family:var(--mono);font-weight:600;font-size:34px}
 .mr-actions{display:flex;gap:10px;margin:16px 0 22px}
-.mr-actions button{padding:13px 18px;border-radius:var(--r);font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;font-family:var(--ui);transition:.13s}
+.mr-actions button{padding:13px 18px;border-radius:var(--r);font-weight:600;font-size:14px;font-family:var(--ui);transition:.13s}
 .mr-actions .buy{background:var(--gold);color:#000;flex:1}
 .mr-actions .buy:hover{background:#13b876}
 .mr-actions .offer{background:var(--panel-2);border:1px solid var(--line-2);color:var(--txt)}
 .mr-section{margin-top:22px}
-.mr-section h4{font-family:var(--disp);font-size:13px;font-weight:800;letter-spacing:.08em;color:var(--txt);text-transform:uppercase;margin-bottom:12px}
+.mr-section h4{font-family:var(--ui);font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--muted);margin-bottom:10px}
 .cross{display:flex;flex-direction:column;gap:7px}
 .cross-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:9px 11px;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;font-size:13px}
 .cross-row .plat{font-weight:500;display:flex;align-items:center;gap:8px}
@@ -357,7 +357,7 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .fs-rib.frontline{background:var(--gold-soft);color:var(--gold)}.fs-rib.spotlight{background:#241a3a;color:#b69bff}.fs-rib.bump{background:#0c1830;color:#6aa6ff}
 .fs-nm{font-weight:600;font-size:13px}.fs-meta{font-family:var(--mono);font-size:11px;color:var(--muted)}
 /* buttons */
-.btn-primary{background:var(--gold);color:#000;font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;padding:11px 18px;border-radius:var(--r);transition:.13s}
+.btn-primary{background:var(--gold);color:#000;font-weight:600;font-size:14px;padding:11px 20px;border-radius:var(--r);transition:.13s}
 .btn-primary:hover{background:#13b876}
 .btn-primary.full{width:100%;margin-top:16px;padding:14px}
 .btn-ghost{background:transparent;border:1px solid var(--line-2);color:var(--txt);font-weight:500;font-size:13px;padding:9px 15px;border-radius:var(--r)}
@@ -397,7 +397,7 @@ footer{border-top:1px solid var(--line);margin-top:60px}
 .sell-bar{display:flex;align-items:center;gap:24px;margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 20px;flex-wrap:wrap}
 .sell-stat{display:flex;flex-direction:column}
 .sell-stat .k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
-.sell-stat .v{font-family:var(--disp);font-weight:900;font-size:24px;margin-top:3px;text-transform:uppercase;letter-spacing:.02em}
+.sell-stat .v{font-family:var(--disp);font-weight:700;font-size:24px;margin-top:3px;letter-spacing:-.01em}
 .sell-bar .btn-ghost{margin-left:auto}
 .sell-card-foot{display:flex;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)}
 .sell-card-foot button{flex:1;padding:8px;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:600}
