@@ -566,6 +566,19 @@ footer{border-top:1px solid var(--line);margin-top:60px}
   font-family: var(--disp); font-size: 24px; font-weight: 800; color: rgba(255,255,255,.5);
   letter-spacing: 2px;
 }
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.card-shimmer {
+  position: relative; overflow: hidden;
+}
+.card-shimmer::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.07) 50%, transparent 100%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
 .card-sport-label {
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--muted);
   margin-top: 8px; text-transform: uppercase;

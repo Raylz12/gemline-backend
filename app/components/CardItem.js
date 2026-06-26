@@ -1,10 +1,13 @@
 'use client';
 import { fmtDisplay, fmtRange, fmt } from '../lib/data';
 import { useCardStore } from './CardStore';
+import { useState } from 'react';
 
 export default function CardItem({ card: c, onClick }) {
   const { watch, toggleWatch } = useCardStore();
   const w = watch.has(String(c.id));
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const confBadge = c.confidence ? (
     <span className={`conf-badge conf-${c.confidence.toLowerCase()}`}>CH {c.confidence}</span>
@@ -48,13 +51,31 @@ export default function CardItem({ card: c, onClick }) {
       )}
 
       <div className="card-img-box">
-        {c.thumbnail ? (
-          <img src={c.thumbnail} alt={c.player} className="card-thumb" loading="lazy" 
-               onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-        ) : null}
-        <div className="card-placeholder" style={{ display: c.thumbnail ? 'none' : 'flex', background: `linear-gradient(135deg,${c.theme[0]},${c.theme[1]})` }}>
-          <span className="card-placeholder-text">{c.ini}</span>
-        </div>
+        {c.thumbnail && !imgError ? (
+          <>
+            {!imgLoaded && (
+              <div className="card-placeholder card-shimmer" style={{ background: `linear-gradient(135deg,${c.theme[0]},${c.theme[1]})` }}>
+                <span className="card-placeholder-text">{c.ini}</span>
+              </div>
+            )}
+            <img
+              src={c.thumbnail}
+              alt={c.player}
+              className="card-thumb"
+              loading="lazy"
+              decoding="async"
+              width={220}
+              height={308}
+              style={{ display: imgLoaded ? 'block' : 'none' }}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+            />
+          </>
+        ) : (
+          <div className="card-placeholder" style={{ display: 'flex', background: `linear-gradient(135deg,${c.theme[0]},${c.theme[1]})` }}>
+            <span className="card-placeholder-text">{c.ini}</span>
+          </div>
+        )}
       </div>
 
       <div className="cardbody">

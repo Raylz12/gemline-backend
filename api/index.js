@@ -368,10 +368,10 @@ app.get('/api/market/feed', async (req, res) => {
     const sort = req.query.sort || 'price_desc';
     const brand = req.query.brand || null;
 
-    // Build cache key — trending uses RANDOM() so cache for 30s, others 2min
+    // Build cache key — trending uses RANDOM() so cache for 5min, others 15min
     const isTrending = !['price_asc','price_desc','player','gain','sales','newest'].includes(sort);
     const cacheKey = `${sport || 'all'}_${search || ''}_${brand || ''}_${sort}_${page}_${limit}`;
-    const cacheTTL = isTrending ? 30_000 : 120_000;
+    const cacheTTL = isTrending ? 300_000 : 900_000;
     if (app._feedCache && app._feedCache.key === cacheKey && app._feedCache.expires > Date.now())
       return res.json({ feed: app._feedCache.data, totalCards: app._feedCache.totalCards, page, pages: app._feedCache.pages, sportCounts: (app._sportCounts || {}).data });
 
@@ -477,7 +477,7 @@ app.get('/api/market/feed', async (req, res) => {
     let sportCounts = app._sportCounts;
     if (!sportCounts || sportCounts.expires < Date.now()) {
       const { rows: sc } = await pool.query('SELECT sport, COUNT(*) as cnt FROM cards GROUP BY sport ORDER BY cnt DESC');
-      sportCounts = { data: sc.map(r => ({ sport: r.sport, count: Number(r.cnt) })), expires: Date.now() + 5 * 60 * 1000 };
+      sportCounts = { data: sc.map(r => ({ sport: r.sport, count: Number(r.cnt) })), expires: Date.now() + 60 * 60 * 1000 };
       app._sportCounts = sportCounts;
     }
 
@@ -489,7 +489,7 @@ app.get('/api/market/feed', async (req, res) => {
         WHERE card_set IS NOT NULL AND card_set != ''
         GROUP BY card_set ORDER BY cnt DESC LIMIT 30
       `);
-      brandCounts = { data: bc.map(r => ({ brand: r.brand, count: Number(r.cnt) })), expires: Date.now() + 10 * 60 * 1000 };
+      brandCounts = { data: bc.map(r => ({ brand: r.brand, count: Number(r.cnt) })), expires: Date.now() + 60 * 60 * 1000 };
       app._brandCounts = brandCounts;
     }
 
