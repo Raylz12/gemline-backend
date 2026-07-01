@@ -51,6 +51,12 @@ export const IconGlobe = ({ size = 16, ...p }) => (
 export const IconCheck = ({ size = 16, ...p }) => (
   <svg {...base(size)} {...p}><path d="M20 6L9 17l-5-5" /></svg>
 );
+export const IconGavel = ({ size = 16, ...p }) => (
+  <svg {...base(size)} {...p}><path d="M14 4l6 6M12 6l6 6M4 22h8M16 8l-9 9a2.1 2.1 0 0 1-3-3l9-9a2.1 2.1 0 0 1 3 3z" /></svg>
+);
+export const IconTrophy = ({ size = 16, ...p }) => (
+  <svg {...base(size)} {...p}><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4z" /><path d="M7 6H4a1 1 0 0 0-1 1c0 2.2 1.8 4 4 4M17 6h3a1 1 0 0 1 1 1c0 2.2-1.8 4-4 4" strokeWidth="1.6" /></svg>
+);
 export const IconUsers = ({ size = 16, ...p }) => (
   <svg {...base(size)} {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5" /><circle cx="17.5" cy="9" r="2.6" strokeWidth="1.6" /><path d="M16.5 14.6c2.4.3 4.3 1.8 5 4.4" strokeWidth="1.6" /></svg>
 );

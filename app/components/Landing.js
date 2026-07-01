@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { IconPackage, IconSwap, IconDollar } from './Icons';
+import { IconPackage, IconSwap, IconDollar, IconCheck, IconZap, IconStore } from './Icons';
 
 const SPORTS = [
   { label: 'Basketball', emoji: '🏀', sport: 'Basketball' },
@@ -28,7 +28,7 @@ function LiveStatBar() {
     return () => clearInterval(t);
   }, []);
   const items = [
-    ['287,000+', 'Cards'],
+    ['750,000+', 'Cards'],
     [stats?.active_listings ?? '—', 'Active Listings'],
     [stats?.trades_this_week ?? '—', 'Trades This Week'],
     [stats?.total_users ?? '—', 'Collectors'],
@@ -230,6 +230,7 @@ export default function Landing() {
   return (
     <div id="landing" className={gone ? 'gone' : ''}>
       <div className="lp-in">
+        <div className="lp-dark">
         <div className="lp-nav">
           <div className="brand">
             <div className="logo">G</div>
@@ -243,7 +244,7 @@ export default function Landing() {
 
         <section className="lp-hero">
           <div className="lp-copy">
-            <span className="lp-badge"><span className="d"></span>Tens of thousands of cards · every grade · every sport</span>
+            <span className="lp-badge"><span className="d"></span>750,000+ cards · every grade · every sport</span>
             <h1 className="lp-h1">The Card Show,<br /><span className="accent">Online.</span></h1>
             <p className="lp-sub">Bring cards from anywhere — your collection, eBay grabs, your local shop. List, trade, and connect with collectors who actually get it. By collectors, for collectors.</p>
             <div className="lp-cta">
@@ -252,6 +253,11 @@ export default function Landing() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               </button>
               <button className="btn-xl ghost" onClick={() => enter('/sell')}>List Your Cards</button>
+            </div>
+            <div className="lp-trust">
+              <span><IconZap size={13} /> Live prices, 7-day moves</span>
+              <span><IconCheck size={13} /> Stripe-secured payouts</span>
+              <span><IconStore size={13} /> Verified dealers</span>
             </div>
           </div>
 
@@ -315,6 +321,7 @@ export default function Landing() {
             <p className="nft-hint">← Swipe to browse →</p>
           </div>
         </section>
+        </div>
 
         <section className="lp-features">
           <div className="lp-sec-head reveal">
@@ -333,121 +340,56 @@ export default function Landing() {
         </section>
 
         {/* Profile Showcase */}
-        <section className="lp-profile reveal" style={{ margin: '0 auto 40px', maxWidth: 900 }}>
-          <div className="lp-sec-head reveal" style={{ marginBottom: 24 }}>
+        <section className="lp-profile reveal" style={{ margin: '0 auto 56px', maxWidth: 980, padding: '0 4px' }}>
+          <div className="lp-sec-head reveal" style={{ marginBottom: 26 }}>
             <div className="eyebrow">Your collector profile</div>
             <h2>Show off your collection</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 8, maxWidth: 520 }}>Every card you own, graded and priced live. Earn badges, flex your grails, and build a reputation collectors recognize.</p>
           </div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20, alignItems: 'start' }}>
+
+          <div className="sc-grid">
             {/* Profile Card */}
-            <div className="lp-profile-card" style={{
-              background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 16,
-              padding: '24px 20px', textAlign: 'center',
-            }}>
-              <div style={{
-                width: 64, height: 64, borderRadius: '50%', margin: '0 auto 12px',
-                background: 'linear-gradient(135deg, var(--gold), #0d9463)',
-                display: 'grid', placeItems: 'center', fontSize: 28, fontWeight: 800,
-                fontFamily: 'var(--disp)', color: '#000',
-              }}>R</div>
-              <div style={{ fontFamily: 'var(--disp)', fontSize: 20, fontWeight: 700 }}>@rhett</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Collector since 2026</div>
-              
-              {/* Badges */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', margin: '16px 0' }}>
+            <div className="sc-profile">
+              <div className="sc-avatar">R</div>
+              <div style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 800, letterSpacing: '.01em' }}>@rhett</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 4, fontFamily: 'var(--mono)' }}>COLLECTOR SINCE 2026</div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'center', margin: '18px 0 20px' }}>
                 {[
-                  { name: 'Early Adopter', tier: 'gold' },
-                  { name: 'Whale', tier: 'gold' },
-                  { name: 'First Trade', tier: 'bronze' },
-                  { name: 'Set Builder', tier: 'silver' },
                   { name: 'OG', tier: 'diamond' },
+                  { name: 'Whale', tier: 'gold' },
+                  { name: 'Early Adopter', tier: 'emerald' },
+                  { name: 'Set Builder', tier: 'silver' },
                 ].map((b, i) => (
-                  <span key={i} style={{
-                    fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)',
-                    padding: '4px 8px', borderRadius: 6, letterSpacing: '.03em',
-                    background: b.tier === 'diamond' ? 'rgba(185,242,255,.12)' : 
-                               b.tier === 'gold' ? 'rgba(232,179,57,.12)' :
-                               b.tier === 'silver' ? 'rgba(192,192,192,.12)' : 'rgba(205,127,50,.12)',
-                    color: b.tier === 'diamond' ? '#B9F2FF' :
-                           b.tier === 'gold' ? '#E8B339' :
-                           b.tier === 'silver' ? '#C0C0C0' : '#CD7F32',
-                    border: `1px solid ${b.tier === 'diamond' ? 'rgba(185,242,255,.2)' :
-                             b.tier === 'gold' ? 'rgba(232,179,57,.2)' :
-                             b.tier === 'silver' ? 'rgba(192,192,192,.2)' : 'rgba(205,127,50,.2)'}`,
-                  }}>
-                    {b.name}
-                  </span>
+                  <span key={i} className={`gbadge t-${b.tier}`}><span className="gb-dot" />{b.name}</span>
                 ))}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 20, fontSize: 12, color: 'var(--muted)' }}>
-                <div><span style={{ fontWeight: 700, color: 'var(--txt)', fontSize: 16, fontFamily: 'var(--mono)' }}>47</span><br/>Cards</div>
-                <div><span style={{ fontWeight: 700, color: 'var(--txt)', fontSize: 16, fontFamily: 'var(--mono)' }}>$12.4K</span><br/>Value</div>
-                <div><span style={{ fontWeight: 700, color: 'var(--txt)', fontSize: 16, fontFamily: 'var(--mono)' }}>8</span><br/>Trades</div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 24, fontSize: 11, color: 'rgba(255,255,255,.45)', borderTop: '1px solid rgba(255,255,255,.09)', paddingTop: 18 }}>
+                <div><span style={{ fontWeight: 800, color: '#fff', fontSize: 18, fontFamily: 'var(--mono)' }}>47</span><br/>CARDS</div>
+                <div><span style={{ fontWeight: 800, color: 'var(--gold)', fontSize: 18, fontFamily: 'var(--mono)' }}>$12.4K</span><br/>VALUE</div>
+                <div><span style={{ fontWeight: 800, color: '#fff', fontSize: 18, fontFamily: 'var(--mono)' }}>8</span><br/>TRADES</div>
               </div>
             </div>
 
-            {/* Card Collections */}
-            <div>
-              {/* Physical Cards Section */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Physical Collection</h3>
-                  <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '2px 8px', background: 'var(--panel)', borderRadius: 4 }}>12 cards</span>
+            {/* Featured slabs */}
+            <div className="sc-cards">
+              {[
+                { name: 'V. Wembanyama', grade: 'PSA 10', price: '$483', grail: true, img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1780201684415x613734703719177000/resize' },
+                { name: 'S. Ohtani RC', grade: 'PSA 10', price: '$760', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1721089050927x363050362695842370/crop_image' },
+                { name: 'Cooper Flagg', grade: 'PSA 10', price: '$268', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1766714753053x119226404538868900/resize' },
+                { name: 'Mega Gengar EX', grade: 'PSA 10', price: '$343', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1771045490872x640532286138891500/resize' },
+              ].map((c, i) => (
+                <div key={i} className={`sc-slab${c.grail ? ' grail' : ''}`}>
+                  <span className="sc-grade">{c.grade}</span>
+                  <img src={c.img} alt={c.name} loading="lazy" />
+                  <div className="sc-meta">
+                    <div className="sc-name">{c.name}</div>
+                    <div className="sc-price">{c.price}</div>
+                  </div>
+                  <span className="sc-shine" />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                  {[
-                    { name: 'Wembanyama', tier: 'mythic', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1780201684415x613734703719177000/resize' },
-                    { name: 'Ohtani', tier: 'legendary', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1721089050927x363050362695842370/crop_image' },
-                    { name: 'Flagg', tier: 'epic', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1766714753053x119226404538868900/resize' },
-                    { name: 'Gengar EX', tier: 'rare', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1771045490872x640532286138891500/resize' },
-                  ].map((c, i) => (
-                    <div key={i} className={`tier-${c.tier}`} style={{
-                      borderRadius: 10, overflow: 'hidden', position: 'relative',
-                      background: 'var(--panel)', border: '1px solid var(--line)',
-                      aspectRatio: '2.5/3.5',
-                    }}>
-                      <img src={c.img} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 6px',
-                        background: 'linear-gradient(transparent, rgba(0,0,0,.8))',
-                        fontSize: 9, fontWeight: 700, fontFamily: 'var(--mono)', color: '#fff',
-                      }}>{c.name}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Digital / Pack Pulls Section */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Mystery Pulls</h3>
-                  <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '2px 8px', background: 'var(--panel)', borderRadius: 4 }}>6 hits</span>
-                  <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--gold)', padding: '2px 8px', background: 'var(--gold-soft)', borderRadius: 4 }}>REAL CARDS · SHIPPED</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                  {[
-                    { name: 'Articuno', tier: 'epic', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1743308840944x685090135713223800/crop_image' },
-                    { name: 'Dart', tier: 'rare', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1776173374828x379438362063353500/resize' },
-                    { name: 'LeBron', tier: 'uncommon', img: 'https://i.ebayimg.com/images/g/oaYAAeSwd2NqNhxN/s-l500.webp' },
-                    { name: 'Griffey', tier: 'common', img: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1720253347400x475058474277705100/crop_image' },
-                  ].map((c, i) => (
-                    <div key={i} className={`tier-${c.tier}`} style={{
-                      borderRadius: 10, overflow: 'hidden', position: 'relative',
-                      background: 'var(--panel)', border: '1px solid var(--line)',
-                      aspectRatio: '2.5/3.5',
-                    }}>
-                      <img src={c.img} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 6px',
-                        background: 'linear-gradient(transparent, rgba(0,0,0,.8))',
-                        fontSize: 9, fontWeight: 700, fontFamily: 'var(--mono)', color: '#fff',
-                      }}>{c.name}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </section>

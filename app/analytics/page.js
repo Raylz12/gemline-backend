@@ -64,7 +64,7 @@ function MoversTable({ cards, onSelect, loading }) {
               <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{c.grader || 'RAW'} {c.grade} · {c.year || c.sport}</div>
             </div>
           </div>
-          <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--gold)', alignSelf: 'center' }}>{fmt(c.market || c.catalog_price)}</div>
+          <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--txt)', alignSelf: 'center' }}>{fmt(c.market || c.catalog_price)}</div>
           <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 13, color: pctColor(c.gain7d), alignSelf: 'center', fontWeight: 600 }}>{pctStr(c.gain7d)}</div>
           <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{c.sales7d || '—'}</div>
         </div>
@@ -305,8 +305,25 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* Content */}
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
+      {/* Content — trade desk surface */}
+      <div className="desk" style={{ overflow: 'hidden' }}>
+        {/* Market pulse strip */}
+        {!loading && cards.length > 0 && (() => {
+          const adv = cards.filter(c => (c.gain7d || 0) > 0).length;
+          const dec = cards.filter(c => (c.gain7d || 0) < 0).length;
+          const vol = cards.reduce((a, c) => a + (c.sales7d || 0), 0);
+          const top = [...cards].sort((a, b) => (b.gain7d || 0) - (a.gain7d || 0))[0];
+          const bot = [...cards].sort((a, b) => (a.gain7d || 0) - (b.gain7d || 0))[0];
+          return (
+            <div className="desk-pulse">
+              <div className="dp"><div className="dp-k">Advancing</div><div className="dp-v up">{adv}</div><div className="dp-s">cards up 7d</div></div>
+              <div className="dp"><div className="dp-k">Declining</div><div className="dp-v down">{dec}</div><div className="dp-s">cards down 7d</div></div>
+              <div className="dp"><div className="dp-k">7D Volume</div><div className="dp-v">{vol.toLocaleString()}</div><div className="dp-s">tracked sales</div></div>
+              {top && <div className="dp"><div className="dp-k">Top Gainer</div><div className="dp-v up">+{Number(top.gain7d).toFixed(0)}%</div><div className="dp-s">{top.player}</div></div>}
+              {bot && <div className="dp"><div className="dp-k">Top Loser</div><div className="dp-v down">{Number(bot.gain7d).toFixed(0)}%</div><div className="dp-s">{bot.player}</div></div>}
+            </div>
+          );
+        })()}
         {view === 'movers' && <MoversTable cards={filtered} onSelect={setSelectedCard} loading={loading} />}
         {view === 'heatmap' && <div style={{ padding: 14 }}><HeatGrid cards={filtered} onSelect={setSelectedCard} loading={loading} /></div>}
         {view === 'arbitrage' && <div style={{ padding: 16 }}><ArbTable onSelect={setSelectedCard} /></div>}

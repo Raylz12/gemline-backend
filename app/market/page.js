@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useCardStore } from '../components/CardStore';
 import { fmt, fmtDisplay, fmtRange } from '../lib/data';
 import StatBar from '../components/StatBar';
-import FilterSidebar from '../components/FilterSidebar';
+import FilterSidebar, { PRICE_RANGES, ERAS } from '../components/FilterSidebar';
 import CardItem from '../components/CardItem';
 import CardDetail from '../components/CardDetail';
 import Scout from '../components/Scout';
@@ -59,10 +59,11 @@ function ListRow({ card: c, onClick }) {
 
 export default function MarketplacePage() {
   const { cards, searchQuery, totalCards, sportCounts, brandCounts, loadMore, loading, currentPage, totalPages, filterSport, setFilterSport, filterBrand, setFilterBrand, setSortBy } = useCardStore();
-  const [filters, setFilters] = useState({
+  const DEFAULT_FILTERS = {
     sport: 'All', grade: 'All', type: 'All', cardType: 'all',
-    maxPrice: 50000, edge: 'all', sort: 'trending', q: '', brand: '',
-  });
+    priceRange: 'all', era: 'all', edge: 'all', sort: 'trending', q: '', brand: '',
+  };
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const q = (searchQuery || filters.q || '').toLowerCase();
   const [selectedCard, setSelectedCard] = useState(null);
   const [activeListings, setActiveListings] = useState([]);
@@ -109,8 +110,19 @@ export default function MarketplacePage() {
       if (filters.sport !== 'All' && c.sport !== filters.sport) return false;
       if (filters.grade !== 'All' && c.grader !== filters.grade) return false;
       if (filters.type !== 'All' && c.type !== filters.type) return false;
-      if (c.market > 0 && c.market > filters.maxPrice) return false;
       if (filters.edge === 'hot' && c.edge < 15) return false;
+
+      // Price range preset
+      const pr = PRICE_RANGES.find(p => p.key === (filters.priceRange || 'all'));
+      if (pr && pr.key !== 'all' && c.market > 0 && (c.market < pr.min || c.market > pr.max)) return false;
+      if (pr && pr.key !== 'all' && !(c.market > 0)) return false;
+
+      // Era filter (by card year)
+      const era = ERAS.find(e => e.key === (filters.era || 'all'));
+      if (era && era.key !== 'all') {
+        const y = parseInt(c.year) || 0;
+        if (!y || y < era.min || y > era.max) return false;
+      }
 
       // Card type filter
       if (filters.cardType === 'rookie') {
@@ -244,6 +256,39 @@ export default function MarketplacePage() {
               </div>
             </div>
           )}
+
+          {/* Active filter chips */}
+          {(() => {
+            const chips = [];
+            if (filters.sport !== 'All') chips.push({ k: 'sport', label: filters.sport, reset: { sport: 'All' } });
+            if (filters.brand) chips.push({ k: 'brand', label: filters.brand, reset: { brand: '' } });
+            if ((filters.priceRange || 'all') !== 'all') chips.push({ k: 'price', label: PRICE_RANGES.find(p => p.key === filters.priceRange)?.label, reset: { priceRange: 'all' } });
+            if ((filters.era || 'all') !== 'all') chips.push({ k: 'era', label: ERAS.find(e => e.key === filters.era)?.label, reset: { era: 'all' } });
+            if ((filters.cardType || 'all') !== 'all') chips.push({ k: 'ct', label: filters.cardType === 'rookie' ? 'Rookies' : filters.cardType === 'base' ? 'Base' : 'Parallels', reset: { cardType: 'all' } });
+            if (filters.grade !== 'All') chips.push({ k: 'grade', label: filters.grade, reset: { grade: 'All' } });
+            if (filters.type !== 'All') chips.push({ k: 'type', label: filters.type === 'buy' ? 'Buy it now' : 'Auction', reset: { type: 'All' } });
+            if (chips.length === 0) return null;
+            return (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 14 }}>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.1em', color: 'var(--dim)', textTransform: 'uppercase' }}>Filters:</span>
+                {chips.map(ch => (
+                  <button key={ch.k} onClick={() => {
+                    setFilters(f => ({ ...f, ...ch.reset }));
+                    if (ch.k === 'sport') setFilterSport('All');
+                    if (ch.k === 'brand') setFilterBrand('');
+                  }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 16, fontSize: 12, fontWeight: 600, background: 'var(--gold-soft)', color: 'var(--gold)', border: '1px solid rgba(22,199,132,.3)', cursor: 'pointer' }}>
+                    {ch.label}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                ))}
+                <button onClick={() => { setFilters(DEFAULT_FILTERS); setFilterSport('All'); setFilterBrand(''); }}
+                  style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                  Clear all
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Toolbar */}
           <div className="toolbar">

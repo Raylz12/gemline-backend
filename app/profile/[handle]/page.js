@@ -70,7 +70,7 @@ export default function ProfilePage() {
   const [savingBadges, setSavingBadges] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState(null);
   const [allBadgesList, setAllBadgesList] = useState([]);
-  const [portfolioTab, setPortfolioTab] = useState('digital');
+
   const [portfolioSearch, setPortfolioSearch] = useState('');
 
   const isOwnProfile = user && profile && (user.handle?.toLowerCase() === handle?.toLowerCase() || user.id === profile.id);
@@ -104,7 +104,7 @@ export default function ProfilePage() {
       .catch(() => {});
   }, []);
 
-  const toggleShowcase = async (cardId, type = 'digital') => {
+  const toggleShowcase = async (cardId, type = 'physical') => {
     if (!token || !isOwnProfile) return;
     const allShowcase = [...(profile.digitalShowcase || []), ...(profile.physicalShowcase || [])];
     const isInShowcase = allShowcase.some(c => c.id === cardId || c.card_id === cardId);
@@ -178,9 +178,9 @@ export default function ProfilePage() {
   const featured = featuredKeys.length > 0
     ? featuredKeys.map(k => allBadges.find(b => b.key === k || b.name === k)).filter(Boolean)
     : allBadges.slice(0, 6);
-  const digitalShowcase = profile.digitalShowcase || [];
+
   const physicalShowcase = profile.physicalShowcase || [];
-  const recentPulls = profile.recentPulls || [];
+
   const portfolioCards = profile.portfolioCards || [];
   const listings = profile.listings || [];
   const stats = profile.stats || {};
@@ -230,9 +230,9 @@ export default function ProfilePage() {
             <h1 className="p-handle">@{profile.handle}</h1>
             {profile.bio && <p className="p-bio">{profile.bio}</p>}
             <div className="p-meta">
-              <span className="p-join">📅 Joined {joinDate}</span>
+              <span className="p-join">Joined {joinDate}</span>
               {allBadges.length > 0 && (
-                <span className="p-badge-count">🏅 {allBadges.length} badge{allBadges.length !== 1 ? 's' : ''}</span>
+                <span className="p-badge-count">{allBadges.length} badge{allBadges.length !== 1 ? 's' : ''}</span>
               )}
             </div>
           </div>
@@ -243,10 +243,10 @@ export default function ProfilePage() {
       {(featured.length > 0 || isOwnProfile) && (
         <div className="p-badges-section">
           <div className="p-section-header">
-            <h2 className="p-section-title">🏅 Featured Badges</h2>
+            <h2 className="p-section-title">Featured Badges</h2>
             {isOwnProfile && allBadges.length > 0 && (
               <button className="p-customize-btn" onClick={() => setBadgeModalOpen(true)}>
-                ✨ Customize
+                Customize
               </button>
             )}
           </div>
@@ -274,72 +274,31 @@ export default function ProfilePage() {
       {/* ═══ STATS ROW ═══ */}
       <div className="p-stats">
         <div className="p-stat-card">
-          <div className="p-stat-val">{stats.digital ?? 0}</div>
-          <div className="p-stat-label">🎴 Digital</div>
-        </div>
-        <div className="p-stat-card">
           <div className="p-stat-val">{stats.physical ?? 0}</div>
-          <div className="p-stat-label">📦 Physical</div>
+          <div className="p-stat-label">Cards</div>
         </div>
         <div className="p-stat-card">
           <div className="p-stat-val">{stats.trades ?? 0}</div>
           <div className="p-stat-label">Trades</div>
         </div>
         <div className="p-stat-card">
-          <div className="p-stat-val">{stats.packs ?? 0}</div>
-          <div className="p-stat-label">Packs</div>
+          <div className="p-stat-val">{listings.length}</div>
+          <div className="p-stat-label">For Sale</div>
         </div>
         <div className="p-stat-card">
           <div className="p-stat-val gold">{fmtP(stats.totalValue)}</div>
-          <div className="p-stat-label">Total Value</div>
+          <div className="p-stat-label">Collection Value</div>
         </div>
       </div>
 
       {/* ═══ PUBLIC SHOWCASE — 3 Digital + 3 Physical ═══ */}
       <div className="p-section">
-        <h2 className="p-section-title">🏆 Showcase</h2>
+        <h2 className="p-section-title">Showcase</h2>
 
-        {/* Digital Cards */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.14em', color: 'var(--dim)', textTransform: 'uppercase', marginBottom: 10 }}>
-            🎴 Digital Collection · {digitalShowcase.length}/3
-          </div>
-          {digitalShowcase.length > 0 ? (
-            <div className="p-showcase-grid">
-              {digitalShowcase.map((card, i) => {
-                const price = Number(card.catalog_price || 0);
-                const tierClass = getTierClass(price);
-                return (
-                  <div key={card.id || i} className={`p-showcase-card ${tierClass}`}
-                    onClick={() => setSelectedCard(toCardDetail(card))}>
-                    {isOwnProfile && (
-                      <button className="pin-btn pinned"
-                        onClick={(e) => { e.stopPropagation(); toggleShowcase(card.card_id || card.id); }}
-                        title="Remove from showcase">📌</button>
-                    )}
-                    <div className="p-card-img" style={{
-                      background: card.thumbnail ? `url(${card.thumbnail}) center/contain no-repeat var(--panel-2)` : 'linear-gradient(135deg, #2a2a2a, #555)',
-                    }} />
-                    <div className="p-card-info">
-                      <div className="p-card-name">{card.player}</div>
-                      <div className="p-card-meta">{card.grader} {card.grade} · {card.card_set || card.set}</div>
-                      <div className="p-card-price">{fmtP(price)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ padding: 16, textAlign: 'center', color: 'var(--dim)', fontSize: 13, background: 'var(--panel)', borderRadius: 10, border: '1px solid var(--line)' }}>
-              {isOwnProfile ? 'Pin your best pack pulls below ↓' : 'No digital cards showcased'}
-            </div>
-          )}
-        </div>
-
-        {/* Physical Cards */}
+        {/* Showcase Cards */}
         <div>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.14em', color: 'var(--dim)', textTransform: 'uppercase', marginBottom: 10 }}>
-            📦 Physical Collection · {physicalShowcase.length}/3
+            Pinned Grails · {physicalShowcase.length}/3
           </div>
           {physicalShowcase.length > 0 ? (
             <div className="p-showcase-grid">
@@ -368,7 +327,7 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div style={{ padding: 16, textAlign: 'center', color: 'var(--dim)', fontSize: 13, background: 'var(--panel)', borderRadius: 10, border: '1px solid var(--line)' }}>
-              {isOwnProfile ? 'Add physical cards to your portfolio, then pin them here' : 'No physical cards showcased'}
+              {isOwnProfile ? 'Add cards to your portfolio, then pin your best ones here' : 'No cards showcased yet'}
             </div>
           )}
         </div>
@@ -377,7 +336,7 @@ export default function ProfilePage() {
       {/* ═══ ACTIVE LISTINGS (always public) ═══ */}
       {listings.length > 0 && (
         <div className="p-section">
-          <h2 className="p-section-title">💰 For Sale</h2>
+          <h2 className="p-section-title">For Sale</h2>
           <div className="p-showcase-grid">
             {listings.map((listing, i) => {
               const price = Number(listing.price || listing.catalog_price || 0);
@@ -400,62 +359,19 @@ export default function ProfilePage() {
       )}
 
       {/* ═══ OWNER-ONLY: FULL PORTFOLIO (searchable, tabbed) ═══ */}
-      {isOwnProfile && (recentPulls.length > 0 || portfolioCards.length > 0) && (
+      {isOwnProfile && portfolioCards.length > 0 && (
         <div className="p-section">
-          <h2 className="p-section-title">📂 My Collection</h2>
-
-          {/* Tabs: Digital / Physical */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid var(--line)' }}>
-            <button className={`live-tab ${portfolioTab === 'digital' ? 'on' : ''}`}
-              onClick={() => setPortfolioTab('digital')}>
-              🎴 Digital ({recentPulls.length})
-            </button>
-            <button className={`live-tab ${portfolioTab === 'physical' ? 'on' : ''}`}
-              onClick={() => setPortfolioTab('physical')}>
-              📦 Physical ({portfolioCards.length})
-            </button>
-          </div>
+          <h2 className="p-section-title">My Collection</h2>
 
           {/* Search bar */}
           <div style={{ position: 'relative', marginBottom: 14, maxWidth: 400 }}>
             <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="text" value={portfolioSearch} onChange={e => setPortfolioSearch(e.target.value)}
-              placeholder={`Search ${portfolioTab} cards...`}
+              placeholder="Search your cards..."
               style={{ width: '100%', padding: '9px 12px 9px 32px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 13, outline: 'none' }} />
           </div>
 
-          {/* Card grid */}
-          {portfolioTab === 'digital' && (() => {
-            const q = portfolioSearch.toLowerCase();
-            const filtered = q ? recentPulls.filter(p => (p.player || '').toLowerCase().includes(q) || (p.card_set || '').toLowerCase().includes(q) || (p.sport || '').toLowerCase().includes(q)) : recentPulls;
-            return filtered.length > 0 ? (
-              <div className="grid" style={{ gap: 10 }}>
-                {filtered.map((pull, i) => {
-                  const price = Number(pull.market || pull.catalog_price || 0);
-                  const isShowcased = digitalShowcase.some(s => (s.card_id || s.id) === (pull.card_id || pull.id));
-                  return (
-                    <div key={pull.id || i} className="card" onClick={() => setSelectedCard(toCardDetail(pull))}
-                      style={{ cursor: 'pointer', position: 'relative' }}>
-                      <button className={`pin-btn ${isShowcased ? 'pinned' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); toggleShowcase(pull.card_id || pull.id, 'digital'); }}
-                        title={isShowcased ? 'Remove from showcase' : 'Pin to showcase (max 3)'}>📌</button>
-                      <div className="slab" style={{
-                        background: pull.thumbnail ? `url(${pull.thumbnail}) center/contain no-repeat var(--panel-2)` : 'linear-gradient(135deg, #2a2a2a, #555)',
-                        height: 130,
-                      }} />
-                      <div style={{ padding: '8px 10px' }}>
-                        <div style={{ fontWeight: 600, fontSize: 12 }}>{pull.player}</div>
-                        <div style={{ color: 'var(--muted)', fontSize: 10 }}>{pull.grader} {pull.grade} · {pull.card_set || pull.set}</div>
-                        <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', marginTop: 3 }}>{fmtP(price)}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : <div style={{ textAlign: 'center', padding: 30, color: 'var(--dim)', fontSize: 13 }}>No matching digital cards</div>;
-          })()}
-
-          {portfolioTab === 'physical' && (() => {
+          {(() => {
             const q = portfolioSearch.toLowerCase();
             const filtered = q ? portfolioCards.filter(p => (p.player || '').toLowerCase().includes(q) || (p.card_set || '').toLowerCase().includes(q) || (p.sport || '').toLowerCase().includes(q)) : portfolioCards;
             return filtered.length > 0 ? (
@@ -483,7 +399,7 @@ export default function ProfilePage() {
                 })}
               </div>
             ) : <div style={{ textAlign: 'center', padding: 30, color: 'var(--dim)', fontSize: 13 }}>
-              {portfolioCards.length === 0 ? 'No physical cards yet. Add them from the Portfolio page.' : 'No matching physical cards'}
+              {portfolioCards.length === 0 ? 'No cards yet. Add them from the Portfolio page.' : 'No matching cards'}
             </div>;
           })()}
         </div>
@@ -494,7 +410,7 @@ export default function ProfilePage() {
         <div className="p-modal-overlay" onClick={() => setBadgeModalOpen(false)}>
           <div className="p-modal" onClick={e => e.stopPropagation()}>
             <div className="p-modal-header">
-              <h3>✨ Customize Featured Badges</h3>
+              <h3>Customize Featured Badges</h3>
               <button className="p-modal-close" onClick={() => setBadgeModalOpen(false)}>✕</button>
             </div>
             <div className="p-modal-hint">
@@ -538,7 +454,7 @@ export default function ProfilePage() {
       {/* ═══ ALL BADGES ═══ */}
       {allBadgesList.length > 0 && (
         <div style={{ marginTop: 32, marginBottom: 32 }}>
-          <h2 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 20, marginBottom: 4 }}>🏅 All Badges</h2>
+          <h2 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 20, marginBottom: 4 }}>All Badges</h2>
           <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>
             {allBadges.length} of {allBadgesList.length} earned
           </p>
@@ -623,7 +539,7 @@ export default function ProfilePage() {
               </div>
             )}
             <div style={{ marginTop: 12, fontSize: 13, fontWeight: 600, color: selectedBadge.earned !== false ? 'var(--up)' : 'var(--dim)' }}>
-              {selectedBadge.earned !== false ? '✅ Earned' : '🔒 Locked'}
+              {selectedBadge.earned !== false ? '✓ Earned' : 'Locked'}
             </div>
           </div>
         </div>

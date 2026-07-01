@@ -6,6 +6,7 @@ import { fmt, SPORT_THEME, slabStyle } from '../lib/data';
 import { toast } from '../lib/toast';
 // PackRipContent removed — replaced by Mystery Pulls at /packs
 import PreviewGate, { SampleLivePreview } from '../components/PreviewGate';
+import { IconCards, IconGavel, IconTrophy } from '../components/Icons';
 
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
@@ -532,21 +533,20 @@ export default function LivePage() {
 
               {/* Text content */}
               <div className="live-empty-text">
-                <div className="live-empty-icon"></div>
                 <h2 className="live-empty-title">No Live Auctions Right Now</h2>
                 <p className="live-empty-sub">Be the first to list a card and kick off the live floor.</p>
 
                 {/* How it works steps */}
                 <div className="live-empty-steps">
                   {[
-                    { icon: '', step: '1', label: 'List', desc: 'Add a card from your collection' },
-                    { icon: '', step: '2', label: 'Bid', desc: 'Buyers compete in real time' },
-                    { icon: '', step: '3', label: 'Win', desc: 'Highest bid takes the card' },
-                  ].map(s => (
-                    <div key={s.step} className="live-empty-step">
-                      <div className="live-empty-step-icon">{s.icon}</div>
-                      <div className="live-empty-step-label">{s.label}</div>
-                      <div className="live-empty-step-desc">{s.desc}</div>
+                    { Ic: IconCards, step: '1', label: 'List', desc: 'Add a card from your collection' },
+                    { Ic: IconGavel, step: '2', label: 'Bid', desc: 'Buyers compete in real time' },
+                    { Ic: IconTrophy, step: '3', label: 'Win', desc: 'Highest bid takes the card' },
+                  ].map(({ Ic, step, label, desc }) => (
+                    <div key={step} className="live-empty-step">
+                      <div className="live-empty-step-icon" style={{ color: 'var(--gold)' }}><Ic size={22} /></div>
+                      <div className="live-empty-step-label">{label}</div>
+                      <div className="live-empty-step-desc">{desc}</div>
                     </div>
                   ))}
                 </div>

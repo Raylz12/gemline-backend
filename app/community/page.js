@@ -239,7 +239,7 @@ function timeAgo(dateStr) {
 }
 
 const TYPE_META = {
-  pull:    { label: 'Pack Pull', color: 'var(--gold)', icon: '🎴' },
+  pull:    { label: 'Pull', color: 'var(--gold)', icon: '🎴' },
   trade:   { label: 'Trade',     color: 'var(--blue)', icon: '🔄' },
   sale:    { label: 'Sale',      color: 'var(--up)',   icon: '💰' },
   general: { label: 'Post',      color: 'var(--muted)','icon': '💬' },
@@ -544,18 +544,22 @@ export default function CommunityPage() {
   const raw = searchQuery ? searchResults : (tab === 'discover' ? suggested : tab === 'following' ? myFollowing : myFollowers);
   const displayUsers = user ? raw.filter(u => u.id !== user.id) : raw;
 
-  const TRENDING_CARDS = [
-    { name: 'Cooper Flagg', sport: '🏀', change: '+49%', grade: 'PSA 10' },
-    { name: 'Meowth', sport: '🃏', change: '+288', sub: 'sales/wk', grade: 'PSA 10' },
-    { name: 'Ken Griffey Jr.', sport: '⚾', change: '+2400%', grade: 'Raw' },
-    { name: 'Victor Wembanyama', sport: '🏀', change: '299 sales', grade: 'Raw' },
-  ];
+  // Live trending from the market heatmap (top validated gainers)
+  const [trending, setTrending] = useState([]);
+  const [liveStats, setLiveStats] = useState(null);
+  useEffect(() => {
+    fetch('/api/market/heatmap').then(r => r.json()).then(d => {
+      const rows = (d.cards || []).filter(c => Number(c.gain_7d) > 0).slice(0, 4);
+      setTrending(rows);
+    }).catch(() => {});
+    fetch('/api/stats/live').then(r => r.json()).then(setLiveStats).catch(() => {});
+  }, []);
 
   return (
     <>
       <div className="eyebrow">Social</div>
       <h1 className="page">Community</h1>
-      <p className="sub">Pack pulls, trades, and collectors all in one place.</p>
+      <p className="sub">Pulls, trades, and collectors all in one place. Show off your hits and follow the collectors you rate.</p>
 
       {/* Search bar */}
       <div style={{ marginTop: 20, marginBottom: 20 }}>
@@ -607,18 +611,25 @@ export default function CommunityPage() {
           <CommunityFeed user={user} authFetch={authFetch} token={token} />
 
           {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* Trending now */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 96 }}>
+            {/* Trending now — live market data */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Trending Now</div>
-              {TRENDING_CARDS.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < TRENDING_CARDS.length-1 ? '1px solid var(--line)' : 'none' }}>
-                  <span style={{ fontSize: 20 }}>{c.sport}</span>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                Trending Now
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--up)', boxShadow: '0 0 6px var(--up)', display: 'inline-block' }} />
+              </div>
+              {trending.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--dim)', padding: '8px 0' }}>Loading market data…</div>
+              ) : trending.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < trending.length-1 ? '1px solid var(--line)' : 'none' }}>
+                  <span style={{ width: 28, height: 38, borderRadius: 4, flexShrink: 0, overflow: 'hidden', background: 'var(--panel-2)', display: 'grid', placeItems: 'center', fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700, color: 'var(--muted)', border: '1px solid var(--line)' }}>
+                    {c.thumbnail ? <img src={c.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (c.player || '?').split(' ').map(w => w[0]).join('').slice(0, 2)}
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{c.grade}</div>
+                    <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{c.grader || 'RAW'} {c.grade}</div>
                   </div>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--up)', fontWeight: 600 }}>{c.change}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--up)', fontWeight: 600 }}>+{Number(c.gain_7d).toFixed(0)}%</span>
                 </div>
               ))}
             </div>
@@ -647,13 +658,18 @@ export default function CommunityPage() {
               </div>
             )}
 
-            {/* Community stats */}
+            {/* Community stats — live */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>This Week</div>
-              {[['Pack pulls shared', '142'], ['Trades proposed', '38'], ['Cards sold', '97'], ['New members', '24']].map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,.03)', fontSize: 12 }}>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>The Exchange</div>
+              {[
+                ['Cards priced live', '750K+'],
+                ['Active listings', liveStats?.active_listings ?? '—'],
+                ['Trades this week', liveStats?.trades_this_week ?? '—'],
+                ['Collectors', liveStats?.total_users ?? '—'],
+              ].map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
                   <span style={{ color: 'var(--muted)' }}>{k}</span>
-                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--gold)' }}>{v}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--gold)' }}>{v?.toLocaleString?.() ?? v}</span>
                 </div>
               ))}
             </div>
