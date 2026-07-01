@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { IconPackage, IconSwap, IconDollar } from './Icons';
 
 const SPORTS = [
   { label: 'Basketball', emoji: '🏀', sport: 'Basketball' },
@@ -53,11 +54,11 @@ function LiveMovers() {
     const t = setInterval(load, 60000);
     return () => clearInterval(t);
   }, []);
-  const sportEmoji = (s) => ({ Basketball: '🏀', Baseball: '⚾', Football: '🏈', Pokemon: '🃏', Hockey: '🏒', Soccer: '⚽' }[s] || '🃏');
+  const SPORT_COLOR = { Basketball: '#f59e0b', Baseball: '#2563eb', Football: '#7c3aed', Pokemon: '#eab308', Hockey: '#0ea5e9', Soccer: '#16a34a' };
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '18px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15 }}>Today\'s Biggest Movers</div>
+        <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15 }}>Today’s Biggest Movers</div>
         {lastUpdated && <div style={{ fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>Updated {lastUpdated.toLocaleTimeString()}</div>}
       </div>
       {movers.length === 0 ? (
@@ -67,7 +68,7 @@ function LiveMovers() {
         const isUp = pct >= 0;
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < movers.length - 1 ? '1px solid var(--line)' : 'none' }}>
-            <span style={{ fontSize: 20 }}>{sportEmoji(m.sport)}</span>
+            <span style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: (SPORT_COLOR[m.sport] || 'var(--gold)') + '18', color: SPORT_COLOR[m.sport] || 'var(--gold)', display: 'grid', placeItems: 'center', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700 }}>{(m.player || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.player}</div>
               <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{m.grader} {m.grade}</div>
@@ -161,7 +162,7 @@ const FEATURES = [
   { icon: '02', title: 'Arbitrage engine', desc: 'Price spreads, gainers, losers, volume movers — real-time data.', target: '/analytics' },
   { icon: '03', title: 'Live heatmap', desc: 'See the entire market at a glance. Green rising, red falling.', target: '/analytics' },
   { icon: '04', title: 'Peer trading', desc: 'Trade cards directly. Fair-value meter shows who\'s winning.', target: '/community' },
-  { icon: '05', title: 'Pack rips', desc: 'Rip virtual packs, collect hits, show them off on your profile.', target: '/live' },
+  { icon: '05', title: 'Mystery Pulls', desc: 'Real cards from verified stores. Pull one blind — it ships to your door.', target: '/packs' },
   { icon: '06', title: 'AI Scout', desc: 'Ask anything — the AI searches the entire catalog for matches.', target: '/market' },
 ];
 
@@ -346,7 +347,7 @@ export default function Landing() {
             }}>
               <div style={{
                 width: 64, height: 64, borderRadius: '50%', margin: '0 auto 12px',
-                background: 'linear-gradient(135deg, var(--gold), #c89b2a)',
+                background: 'linear-gradient(135deg, var(--gold), #0d9463)',
                 display: 'grid', placeItems: 'center', fontSize: 28, fontWeight: 800,
                 fontFamily: 'var(--disp)', color: '#000',
               }}>R</div>
@@ -356,11 +357,11 @@ export default function Landing() {
               {/* Badges */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', margin: '16px 0' }}>
                 {[
-                  { name: 'Early Adopter', icon: '', tier: 'gold' },
-                  { name: 'Whale', icon: '🐋', tier: 'gold' },
-                  { name: 'First Trade', icon: '', tier: 'bronze' },
-                  { name: 'Pack Addict', icon: '🎰', tier: 'silver' },
-                  { name: 'OG', icon: '', tier: 'diamond' },
+                  { name: 'Early Adopter', tier: 'gold' },
+                  { name: 'Whale', tier: 'gold' },
+                  { name: 'First Trade', tier: 'bronze' },
+                  { name: 'Set Builder', tier: 'silver' },
+                  { name: 'OG', tier: 'diamond' },
                 ].map((b, i) => (
                   <span key={i} style={{
                     fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)',
@@ -375,7 +376,7 @@ export default function Landing() {
                              b.tier === 'gold' ? 'rgba(232,179,57,.2)' :
                              b.tier === 'silver' ? 'rgba(192,192,192,.2)' : 'rgba(205,127,50,.2)'}`,
                   }}>
-                    {b.icon} {b.name}
+                    {b.name}
                   </span>
                 ))}
               </div>
@@ -392,7 +393,6 @@ export default function Landing() {
               {/* Physical Cards Section */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 16 }}></span>
                   <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Physical Collection</h3>
                   <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '2px 8px', background: 'var(--panel)', borderRadius: 4 }}>12 cards</span>
                 </div>
@@ -422,9 +422,9 @@ export default function Landing() {
               {/* Digital / Pack Pulls Section */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Virtual Pulls</h3>
+                  <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16, fontWeight: 700, margin: 0 }}>Mystery Pulls</h3>
                   <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '2px 8px', background: 'var(--panel)', borderRadius: 4 }}>6 hits</span>
-                  <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--violet, #9b7bff)', padding: '2px 8px', background: 'rgba(155,123,255,.1)', borderRadius: 4 }}>FROM PACKS</span>
+                  <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--gold)', padding: '2px 8px', background: 'var(--gold-soft)', borderRadius: 4 }}>REAL CARDS · SHIPPED</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                   {[
@@ -460,7 +460,7 @@ export default function Landing() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
               <div className="eyebrow">Live Market</div>
-              <h2 style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 800, margin: 0 }}>What\'s Moving Right Now</h2>
+              <h2 style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 800, margin: 0 }}>What’s Moving Right Now</h2>
             </div>
           </div>
           <div className="lp-live-grid">
@@ -481,12 +481,12 @@ export default function Landing() {
           </div>
           <div className="lp-hiw-grid">
             {[
-              { step: '01', icon: '📦', title: 'Bring Your Cards', desc: 'From any source — your collection, eBay, local shop, card shows. If you own it, list it here.' },
-              { step: '02', icon: '🔄', title: 'List or Trade', desc: 'Set your price, make a trade offer, or drop it in a live auction. You\'re in control.' },
-              { step: '03', icon: '💰', title: 'Get Paid', desc: 'Secure payments via Stripe. Funds released when the buyer confirms. Real cards, real money.' },
-            ].map(({ step, icon, title, desc }) => (
+              { step: '01', Icon: IconPackage, title: 'Bring Your Cards', desc: 'From any source — your collection, eBay, local shop, card shows. If you own it, list it here.' },
+              { step: '02', Icon: IconSwap, title: 'List or Trade', desc: 'Set your price, make a trade offer, or drop it in a live auction. You\'re in control.' },
+              { step: '03', Icon: IconDollar, title: 'Get Paid', desc: 'Secure payments via Stripe. Funds released when the buyer confirms. Real cards, real money.' },
+            ].map(({ step, Icon, title, desc }) => (
               <div key={step} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '24px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>{icon}</div>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--gold-soft)', color: 'var(--gold)', display: 'grid', placeItems: 'center', margin: '0 auto 14px' }}><Icon size={24} /></div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', marginBottom: 6, letterSpacing: '.1em' }}>STEP {step}</div>
                 <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
                 <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>{desc}</p>

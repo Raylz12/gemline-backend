@@ -1,9 +1,19 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
+import { IconTrendUp, IconTrendDown, IconGrid, IconZap, IconVolume } from '../components/Icons';
 
 const SPORT_TABS = ['All', 'Basketball', 'Baseball', 'Football', 'Pokemon', 'Hockey'];
-const SPORT_EMOJI = { Basketball: '🏀', Baseball: '⚾', Football: '🏈', Pokemon: '🃏', Hockey: '🏒', All: '🌐' };
+const SPORT_COLOR = { Basketball: '#f59e0b', Baseball: '#2563eb', Football: '#7c3aed', Pokemon: '#eab308', Hockey: '#0ea5e9', Soccer: '#16a34a' };
+function Thumb({ card: c, size = 34 }) {
+  const ini = (c.player || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const color = SPORT_COLOR[c.sport] || '#16c784';
+  return (
+    <span style={{ width: size, height: Math.round(size * 1.35), borderRadius: 4, flexShrink: 0, overflow: 'hidden', background: color + '14', color, display: 'grid', placeItems: 'center', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, border: '1px solid var(--line)' }}>
+      {c.ebay_thumb ? <img src={c.ebay_thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.remove(); }} /> : ini}
+    </span>
+  );
+}
 
 function fmt(n) {
   if (!n || n <= 0) return '—';
@@ -47,11 +57,12 @@ function MoversTable({ cards, onSelect, loading }) {
           onMouseEnter={e => e.currentTarget.style.background = 'var(--panel-2)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {SPORT_EMOJI[c.sport] || '🃏'} {c.player}
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Thumb card={c} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
+              <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{c.grader || 'RAW'} {c.grade} · {c.year || c.sport}</div>
             </div>
-            <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{c.grader} {c.grade} · {c.year}</div>
           </div>
           <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--gold)', alignSelf: 'center' }}>{fmt(c.market || c.catalog_price)}</div>
           <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 13, color: pctColor(c.gain7d), alignSelf: 'center', fontWeight: 600 }}>{pctStr(c.gain7d)}</div>
@@ -73,7 +84,19 @@ function ArbTable({ onSelect }) {
     setLoading(true);
     fetch('/api/market/arb')
       .then(r => r.json())
-      .then(d => { setRows(d.opportunities || d.arb || []); setLastUpdated(new Date()); setLoading(false); })
+      .then(d => {
+        // API returns four buckets — merge, dedupe, keep rows with a real bid/ask spread
+        const all = [...(d.undervalued || []), ...(d.gainers || []), ...(d.losers || []), ...(d.mostTraded || [])];
+        const seen = new Set();
+        const merged = all.filter(c => {
+          if (!c.id || seen.has(c.id)) return false;
+          seen.add(c.id);
+          return (c.lo || 0) > 0 && (c.hi || 0) > 0 && (c.spread || 0) > 0;
+        }).sort((a, b) => (b.spread || 0) - (a.spread || 0));
+        setRows(merged);
+        setLastUpdated(new Date());
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   };
 
@@ -109,7 +132,7 @@ function ArbTable({ onSelect }) {
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
+          <div style={{ color: 'var(--dim)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}><IconZap size={32} /></div>
           <div style={{ fontWeight: 600, fontSize: 14 }}>No opportunities at ${minSpread}+ spread</div>
           <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>Try lowering the minimum spread filter.</p>
         </div>
@@ -124,14 +147,17 @@ function ArbTable({ onSelect }) {
               onMouseEnter={e => e.currentTarget.style.background = 'var(--panel-2)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.player || r.card}</div>
-                <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{r.grader} {r.grade}</div>
+              <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Thumb card={{ player: r.player, sport: r.sport, ebay_thumb: r.thumbnail }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.player || r.card}</div>
+                  <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{r.grader || 'RAW'} {r.grade} · {r.year || r.sport}</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--up)', alignSelf: 'center' }}>{fmt(r.buy || r.low)}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--down)', alignSelf: 'center' }}>{fmt(r.sell || r.high)}</div>
+              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--up)', alignSelf: 'center' }}>{fmt(r.lo)}</div>
+              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--down)', alignSelf: 'center' }}>{fmt(r.hi)}</div>
               <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--gold)', alignSelf: 'center' }}>{fmt(r.spread)}</div>
-              <div style={{ textAlign: 'right', fontSize: 11, color: r.confidence === 'high' ? 'var(--up)' : r.confidence === 'low' ? 'var(--down)' : 'var(--muted)', alignSelf: 'center' }}>{r.confidence || '—'}</div>
+              <div style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: (r.sales7d || 0) >= 5 ? 'var(--up)' : (r.sales7d || 0) >= 3 ? 'var(--muted)' : 'var(--dim)', alignSelf: 'center' }}>{(r.sales7d || 0) >= 5 ? 'high' : (r.sales7d || 0) >= 3 ? 'med' : 'low'}</div>
             </div>
           ))}
         </div>
@@ -232,8 +258,8 @@ export default function AnalyticsPage() {
       {/* View selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, marginTop: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <div className="seg">
-          {[['movers', '📈 Movers'], ['heatmap', '🟩 Heatmap'], ['arbitrage', '⚡ Arbitrage']].map(([v, label]) => (
-            <button key={v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>{label}</button>
+          {[['movers', 'Movers', IconTrendUp], ['heatmap', 'Heatmap', IconGrid], ['arbitrage', 'Arbitrage', IconZap]].map(([v, label, Ic]) => (
+            <button key={v} className={view === v ? 'on' : ''} onClick={() => setView(v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ic size={13} /> {label}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -247,22 +273,24 @@ export default function AnalyticsPage() {
         <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
           <div className="seg">
             {SPORT_TABS.map(s => (
-              <button key={s} className={sport === s ? 'on' : ''} onClick={() => setSport(s)}>
-                {SPORT_EMOJI[s]} {s}
-              </button>
+              <button key={s} className={sport === s ? 'on' : ''} onClick={() => setSport(s)}>{s}</button>
             ))}
           </div>
           {view === 'movers' && (
             <div className="seg">
-              {[['gainers', '🟢 Gainers'], ['losers', '🔴 Losers'], ['volume', '📦 Volume'], ['value', '💎 Value']].map(([v, label]) => (
-                <button key={v} className={sort === v ? 'on' : ''} onClick={() => setSort(v)}>{label}</button>
+              {[['gainers', 'Gainers', 'var(--up)'], ['losers', 'Losers', 'var(--down)'], ['volume', 'Volume', 'var(--blue)'], ['value', 'Value', 'var(--gold)']].map(([v, label, dot]) => (
+                <button key={v} className={sort === v ? 'on' : ''} onClick={() => setSort(v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, display: 'inline-block' }} />{label}
+                </button>
               ))}
             </div>
           )}
           {view === 'heatmap' && (
             <div className="seg">
-              {[['gainers', '🟢 Gainers first'], ['losers', '🔴 Losers first'], ['value', '💎 By value']].map(([v, label]) => (
-                <button key={v} className={sort === v ? 'on' : ''} onClick={() => setSort(v)}>{label}</button>
+              {[['gainers', 'Gainers first', 'var(--up)'], ['losers', 'Losers first', 'var(--down)'], ['value', 'By value', 'var(--gold)']].map(([v, label, dot]) => (
+                <button key={v} className={sort === v ? 'on' : ''} onClick={() => setSort(v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, display: 'inline-block' }} />{label}
+                </button>
               ))}
             </div>
           )}
@@ -287,24 +315,24 @@ export default function AnalyticsPage() {
       {/* Help text */}
       <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
         {view === 'movers' && [
-          ['📈', 'Gainers', 'Cards with the biggest 7-day price increase'],
-          ['📉', 'Losers', 'Cards with the biggest 7-day price drop'],
-          ['📦', 'Volume', 'Most sales activity in the last 7 days'],
-        ].map(([icon, title, desc]) => (
+          [IconTrendUp, 'var(--up)', 'Gainers', 'Cards with the biggest 7-day price increase'],
+          [IconTrendDown, 'var(--down)', 'Losers', 'Cards with the biggest 7-day price drop'],
+          [IconVolume, 'var(--blue)', 'Volume', 'Most sales activity in the last 7 days'],
+        ].map(([Ic, color, title, desc]) => (
           <div key={title} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px' }}>
-            <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+            <div style={{ color, marginBottom: 6 }}><Ic size={18} /></div>
             <div style={{ fontWeight: 700, fontSize: 12 }}>{title}</div>
             <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 3 }}>{desc}</div>
           </div>
         ))}
         {view === 'heatmap' && (
           <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>🟩 <strong>Green</strong> = price up in 7 days · 🟥 <strong>Red</strong> = price down · Darker = bigger move · Click any card for details</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--up)', display: 'inline-block' }} /> <strong>Green</strong> = price up in 7 days · <span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--down)', display: 'inline-block' }} /> <strong>Red</strong> = price down · Darker = bigger move · Click any card for details</div>
           </div>
         )}
         {view === 'arbitrage' && (
           <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>⚡ <strong>Spread</strong> = difference between lowest ask and highest bid · Auto-refreshes every 2 minutes · Low data points marked as low confidence</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}><strong>Spread</strong> = difference between lowest ask and highest bid · Auto-refreshes every 2 minutes · Low data points marked as low confidence</div>
           </div>
         )}
       </div>

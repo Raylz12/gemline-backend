@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../components/AuthContext';
+import { IconStore, IconCards, IconShip } from '../components/Icons';
 
 function fmt(cents) {
   if (!cents) return '?';
@@ -66,7 +67,7 @@ function PoolCard({ pool, onPull, pulling }) {
             opacity: pulling ? 0.7 : 1,
           }}
         >
-          {available === 0 ? 'Sold Out' : pulling ? 'Pulling...' : `🎴 Pull Now · ${pool.price_credits} credits`}
+          {available === 0 ? 'Sold Out' : pulling ? 'Pulling...' : `Pull Now · ${pool.price_credits} credits`}
         </button>
       </div>
     </div>
@@ -174,12 +175,12 @@ export default function MysteryPullsPage() {
       {/* How it works banner */}
       <div style={{ background: 'rgba(22,199,132,.06)', border: '1px solid rgba(22,199,132,.15)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         {[
-          ['🏪', 'Verified stores submit real cards to each pool'],
-          ['🎴', 'You buy a pull with credits and get a random card'],
-          ['📦', 'Your card ships directly from the store in 3–5 days'],
-        ].map(([icon, text]) => (
-          <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted)' }}>
-            <span style={{ fontSize: 18 }}>{icon}</span> {text}
+          [IconStore, 'Verified stores submit real cards to each pool'],
+          [IconCards, 'You buy a pull with credits and get a random card'],
+          [IconShip, 'Your card ships directly from the store in 3–5 days'],
+        ].map(([Ic, text]) => (
+          <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--muted)' }}>
+            <span style={{ color: 'var(--gold)', display: 'grid', placeItems: 'center' }}><Ic size={17} /></span> {text}
           </div>
         ))}
       </div>
@@ -203,8 +204,8 @@ export default function MysteryPullsPage() {
           ))}
         </div>
       ) : pools.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div style={{ fontSize: 52, marginBottom: 16 }}>🎴</div>
+        <div style={{ textAlign: 'center', padding: '70px 20px', background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 16 }}>
+          <div style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--gold-soft)', color: 'var(--gold)', display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}><IconCards size={30} /></div>
           <div style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 700, marginBottom: 8 }}>No pools open right now</div>
           <p style={{ color: 'var(--muted)', maxWidth: 380, margin: '0 auto 20px', fontSize: 13 }}>
             Mystery Pull pools are created by verified stores. Check back soon — or apply to become a store and create your own pool.

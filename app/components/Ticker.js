@@ -16,7 +16,9 @@ export default function Ticker() {
       .then(data => {
         const feed = (data.feed || []).filter(c => {
           const price = Number(c.marketPrice) || 0;
-          return price > 0 && price <= 200;
+          const gain = Number(c.gain7d) || 0;
+          // Sanity: skip thin-sale garbage moves (±10,000%) that make the tape look broken
+          return price >= 5 && price <= 2000 && Math.abs(gain) <= 500 && gain !== 0;
         }).slice(0, 50);
         setTickerCards(feed.map(c => ({
           id: c.cardId,

@@ -4,6 +4,9 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../components/AuthContext';
 import { fmt } from '../../lib/data';
+import { IconStore, IconPackage } from '../../components/Icons';
+
+const SPORT_COLOR = { Basketball: '#f59e0b', Baseball: '#2563eb', Football: '#7c3aed', Pokemon: '#eab308', Hockey: '#0ea5e9', Soccer: '#16a34a' };
 
 function ListingCard({ listing }) {
   return (
@@ -14,8 +17,11 @@ function ListingCard({ listing }) {
       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold)'}
       onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
     >
-      <div style={{ height: 120, background: 'linear-gradient(135deg,#1a1f35,#2a3050)', display: 'grid', placeItems: 'center', fontSize: 36 }}>
-        {listing.sport === 'Basketball' ? '🏀' : listing.sport === 'Baseball' ? '⚾' : listing.sport === 'Football' ? '🏈' : listing.sport === 'Pokemon' ? '🃏' : '🃏'}
+      <div style={{ height: 120, background: 'linear-gradient(135deg,#1a1f35,#2a3050)', display: 'grid', placeItems: 'center', position: 'relative' }}>
+        <span style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, letterSpacing: '.02em', color: (SPORT_COLOR[listing.sport] || '#16c784') + 'cc' }}>
+          {(listing.player || '?').split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()}
+        </span>
+        <span style={{ position: 'absolute', bottom: 8, right: 10, fontSize: 9, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase' }}>{listing.sport}</span>
       </div>
       <div style={{ padding: '10px 12px' }}>
         <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.player}</div>
@@ -60,7 +66,7 @@ export default function StorePage() {
 
   if (!store) return (
     <div style={{ padding: 60, textAlign: 'center' }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🏪</div>
+      <div style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--gold-soft)', color: 'var(--gold)', display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}><IconStore size={30} /></div>
       <div style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 700 }}>Store not found</div>
       <Link href="/stores" style={{ color: 'var(--gold)', marginTop: 12, display: 'inline-block' }}>← Browse all stores</Link>
     </div>
@@ -136,7 +142,7 @@ export default function StorePage() {
       {tab === 'listings' && (
         listings.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>📦</div>
+            <div style={{ color: 'var(--dim)', marginBottom: 12, display: 'flex', justifyContent: 'center' }}><IconPackage size={32} /></div>
             <div style={{ fontWeight: 600 }}>No active listings</div>
             <p style={{ fontSize: 13, marginTop: 6 }}>This store hasn't listed any cards yet.</p>
           </div>

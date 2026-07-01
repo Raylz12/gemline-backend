@@ -424,10 +424,16 @@ app.get('/api/market/heatmap', async (req, res) => {
     const sportClause = (sport && sport !== 'All') ? ` AND sport = $1` : '';
     const params = (sport && sport !== 'All') ? [sport] : [];
     
-    // Top 50 gainers + top 50 losers for a balanced heatmap
-    const gainersQ = `SELECT ${cols} FROM cards WHERE gain_7d > 0 AND catalog_price > 0${sportClause}
+    // Top 50 gainers + top 50 losers for a balanced heatmap.
+    // Sanity filters: require 2+ sales to validate a move, price >= $5,
+    // and clamp moves to a believable range (thin-sale cards produce
+    // +124,900% / -100% garbage that makes the whole page look broken).
+    const sane = `AND catalog_price >= 5 AND COALESCE(sales_7d,0) >= 2`;
+    const gainersQ = `SELECT ${cols} FROM cards
+      WHERE gain_7d > 0 AND gain_7d <= 500 ${sane}${sportClause}
       ORDER BY gain_7d DESC, COALESCE(sales_7d,0) DESC LIMIT 50`;
-    const losersQ = `SELECT ${cols} FROM cards WHERE gain_7d < 0 AND catalog_price > 0${sportClause}
+    const losersQ = `SELECT ${cols} FROM cards
+      WHERE gain_7d < 0 AND gain_7d >= -90 ${sane}${sportClause}
       ORDER BY gain_7d ASC, COALESCE(sales_7d,0) DESC LIMIT 50`;
     
     const [{ rows: gainers }, { rows: losers }] = await Promise.all([
@@ -475,6 +481,10 @@ app.get('/api/market/feed', async (req, res) => {
     // mv columns: id, player, card_set, year, variant, number, sport, catalog_price,
     //             ch_price_lo/hi/confidence, ebay_thumb, image_url, cardhedge_id,
     //             grader, grade, gain_7d, sales_7d, sales_30d, rookie, grade_count, grades
+    // Movers sorts need sanity filters — thin-sale cards produce ±10,000% garbage
+    if (sort === 'gain' || sort === 'loss') {
+      conditions.push(`catalog_price >= 5`, `COALESCE(sales_7d,0) >= 2`, `gain_7d BETWEEN -90 AND 500`);
+    }
     const mvWhere = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Sort against mv columns (no aggregates needed)

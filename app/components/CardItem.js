@@ -9,9 +9,20 @@ export default function CardItem({ card: c, onClick }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  const confBadge = c.confidence ? (
-    <span className={`conf-badge conf-${c.confidence.toLowerCase()}`}>CH {c.confidence}</span>
-  ) : null;
+  // Humanize price-confidence: raw values like "0.4177" or "catalog" mean
+  // nothing to collectors. Show a clean verified/estimate signal instead.
+  const confBadge = (() => {
+    if (!c.confidence) return null;
+    const raw = String(c.confidence).toLowerCase();
+    if (raw === 'catalog') return <span className="conf-badge conf-est" title="Catalog estimate">EST</span>;
+    const n = Number(raw);
+    if (!isNaN(n)) {
+      if (n >= 0.65) return <span className="conf-badge conf-hi" title="High-confidence live price">VERIFIED</span>;
+      if (n >= 0.35) return <span className="conf-badge conf-med" title="Moderate sales data">LIVE</span>;
+      return <span className="conf-badge conf-est" title="Limited sales data">EST</span>;
+    }
+    return <span className={`conf-badge conf-${raw}`}>{String(c.confidence).toUpperCase()}</span>;
+  })();
 
   const isRC = (c.variant || '').toLowerCase().includes('rc') || 
                (c.variant || '').toLowerCase().includes('rookie') ||

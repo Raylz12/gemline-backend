@@ -6,6 +6,7 @@ import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
 import SignupTeaser from '../components/SignupTeaser';
 import PreviewGate, { SampleCardGrid } from '../components/PreviewGate';
+import { IconStore, IconCheck } from '../components/Icons';
 
 const STEPS = ['Search', 'Price', 'Type', 'Photos', 'Review'];
 
@@ -243,7 +244,7 @@ export default function SellPage() {
       <div className="sell-tabs" style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
         <button className={`chip ${tab === 'list' ? 'on' : ''}`} onClick={() => setTab('list')}>+ List a Card</button>
         <button className={`chip ${tab === 'my' ? 'on' : ''}`} onClick={() => setTab('my')}>My Listings</button>
-        <button className={`chip ${tab === 'store' ? 'on' : ''}`} onClick={() => setTab('store')}>🏪 Apply to Sell as Store</button>
+        <button className={`chip ${tab === 'store' ? 'on' : ''}`} onClick={() => setTab('store')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconStore size={13} /> Apply to Sell as Store</button>
       </div>
 
       {tab === 'list' && (
@@ -660,7 +661,7 @@ export default function SellPage() {
         <div style={{ maxWidth: 560 }}>
           <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 16, padding: 28, marginBottom: 20 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 20 }}>
-              <div style={{ fontSize: 36 }}>🏪</div>
+              <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--gold-soft)', color: 'var(--gold)', display: 'grid', placeItems: 'center', flexShrink: 0 }}><IconStore size={26} /></div>
               <div>
                 <h2 style={{ fontFamily: 'var(--disp)', fontSize: 20, fontWeight: 800, margin: '0 0 6px' }}>Apply to Sell as a Store</h2>
                 <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0, lineHeight: 1.6 }}>Verified stores get a dedicated storefront, bulk inventory upload, verified badge on all listings, and the ability to create Mystery Pull pools.</p>
@@ -705,9 +706,9 @@ export default function SellPage() {
           </div>
           <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '16px 20px' }}>
             <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 10 }}>What you get as a verified store</div>
-            {[['🏪','Dedicated storefront page at gemlinecards.com/store/yourname'],['✓','Verified badge on every listing'],['📦','Bulk inventory upload (up to 200 cards at once)'],['🎴','Create and manage Mystery Pull pools'],['📊','Sales analytics dashboard']].map(([icon, text]) => (
+            {['Dedicated storefront page at gemlinecards.com/store/yourname','Verified badge on every listing','Bulk inventory upload (up to 200 cards at once)','Create and manage Mystery Pull pools','Sales analytics dashboard'].map(text => (
               <div key={text} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 0', borderBottom: '1px solid var(--line)', fontSize: 12, color: 'var(--muted)' }}>
-                <span style={{ flexShrink: 0, width: 20, textAlign: 'center' }}>{icon}</span>{text}
+                <span style={{ flexShrink: 0, color: 'var(--gold)', marginTop: 1 }}><IconCheck size={14} /></span>{text}
               </div>
             ))}
           </div>
