@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
 import Link from 'next/link';
+import { SkeletonList } from './Skeleton';
 
 function TradeCard({ card }) {
   return (
@@ -93,13 +94,17 @@ export default function TradesContent() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>Loading trades...</div>
+        <SkeletonList count={3} />
       ) : (
         <div className="trade-list">
           {list.length === 0 && (
             <div className="empty">
+              <div style={{ fontSize: 32, marginBottom: 12 }}>{tab === 'incoming' ? '📬' : '📤'}</div>
               <div className="big">No {tab} offers</div>
-              {tab === 'incoming' ? 'Offers people send you will appear here.' : 'Propose a trade from someone\'s portfolio.'}
+              {tab === 'incoming'
+                ? 'Offers people send you will appear here. Browse the community to find traders.'
+                : <span>No outgoing offers. <Link href="/community" style={{ color: 'var(--gold)' }}>Find someone to trade with →</Link></span>
+              }
             </div>
           )}
           {list.map(proposal => {

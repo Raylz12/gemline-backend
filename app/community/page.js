@@ -229,37 +229,48 @@ function AchievementsChecklist({ token }) {
 
 
 /* ─── Community Activity Feed ─── */
-const DEMO_POSTS = [
-  { id: 1, user: '@CardRipper', avatar: 'C', time: '2m ago', type: 'pull',
-    text: 'Just ripped a pack and pulled a PSA 10 Cooper Flagg! ',
-    card: { name: 'Cooper Flagg', grade: 'PSA 10', value: '$268', img: null, sport: '🏀' },
-    likes: 14, comments: 3 },
-  { id: 2, user: '@PackShark6903', avatar: 'P', time: '18m ago', type: 'trade',
-    text: 'Looking to trade my BGS 9.5 Wembanyama for a PSA 10 LeBron rookie. DM me!',
-    likes: 7, comments: 5 },
-  { id: 3, user: '@SlabKing', avatar: 'S', time: '1h ago', type: 'sale',
-    text: 'Just sold my PSA 8 Ken Griffey Jr. \x2789 Upper Deck for $87 — finally got the price I wanted',
-    likes: 22, comments: 8 },
-  { id: 4, user: '@VaultCollector', avatar: 'V', time: '3h ago', type: 'pull',
-    text: 'Opened 3 hobby boxes today. Biggest hit: 1/1 logoman Jalen Brunson 🤯',
-    card: { name: 'Jalen Brunson', grade: 'RAW', value: '1/1', img: null, sport: '🏀' },
-    likes: 41, comments: 17 },
-  { id: 5, user: '@PokeMasterJ', avatar: 'P', time: '5h ago', type: 'pull',
-    text: 'Hit a CGC 10 Pristine Charizard from the new Mega Evolution set 🐉',
-    card: { name: 'Charizard', grade: 'CGC 10 PRISTINE', value: '$340+', img: null, sport: '🃏' },
-    likes: 88, comments: 29 },
-];
+
+function timeAgo(dateStr) {
+  const diff = (Date.now() - new Date(dateStr)) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
 const TYPE_META = {
-  pull: { label: 'Pack Pull', color: 'var(--gold)', icon: '' },
-  trade: { label: 'Trade Offer', color: 'var(--blue)', icon: '' },
-  sale: { label: 'Sale', color: 'var(--up)', icon: '' },
+  pull:    { label: 'Pack Pull', color: 'var(--gold)', icon: '🎴' },
+  trade:   { label: 'Trade',     color: 'var(--blue)', icon: '🔄' },
+  sale:    { label: 'Sale',      color: 'var(--up)',   icon: '💰' },
+  general: { label: 'Post',      color: 'var(--muted)','icon': '💬' },
 };
 
-function FeedPost({ post }) {
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(post.likes);
-  const meta = TYPE_META[post.type] || TYPE_META.pull;
+const SPORT_EMOJI = { basketball: '🏀', baseball: '⚾', football: '🏈', hockey: '🏒', soccer: '⚽', pokemon: '🃏', 'trading card': '🃏' };
+function sportEmoji(sport) { return SPORT_EMOJI[(sport||'').toLowerCase()] || '🃏'; }
+
+function FeedPost({ post, authFetch, token, onLiked }) {
+  const [liked, setLiked] = useState(post.userLiked || false);
+  const [likeCount, setLikeCount] = useState(post.likes || 0);
+  const [liking, setLiking] = useState(false);
+  const meta = TYPE_META[post.type] || TYPE_META.general;
+  const handle = post.user?.handle || 'user';
+  const initial = handle[0]?.toUpperCase() || 'U';
+
+  const toggleLike = async () => {
+    if (!token || liking) return;
+    setLiking(true);
+    try {
+      const res = await authFetch(`/api/posts/${post.id}/like`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setLiked(data.liked);
+        setLikeCount(data.likes);
+        if (onLiked) onLiked(post.id, data.liked);
+      }
+    } catch (_) {}
+    finally { setLiking(false); }
+  };
+
   return (
     <div style={{
       background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '16px 18px',
@@ -269,12 +280,14 @@ function FeedPost({ post }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <div style={{
           width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-          background: 'linear-gradient(135deg,var(--gold),#b8851f)',
+          background: post.user?.avatarUrl ? `url(${post.user.avatarUrl}) center/cover` : 'linear-gradient(135deg,var(--gold),#b8851f)',
           display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16, color: '#000',
-        }}>{post.avatar}</div>
+        }}>{post.user?.avatarUrl ? '' : initial}</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 13 }}>{post.user}</div>
-          <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>{post.time}</div>
+          <Link href={`/profile/${handle}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)', textDecoration: 'none' }}>
+            @{handle}
+          </Link>
+          <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>{timeAgo(post.createdAt)}</div>
         </div>
         <div style={{
           fontSize: 10, fontWeight: 600, fontFamily: 'var(--mono)',
@@ -283,9 +296,9 @@ function FeedPost({ post }) {
         }}>{meta.icon} {meta.label}</div>
       </div>
 
-      {/* Post text */}
+      {/* Post body */}
       <p style={{ fontSize: 13, lineHeight: 1.55, marginBottom: post.card ? 12 : 14, color: 'var(--txt)' }}>
-        {post.text}
+        {post.body}
       </p>
 
       {/* Card attachment */}
@@ -296,13 +309,15 @@ function FeedPost({ post }) {
           borderRadius: 10, padding: '10px 14px', marginBottom: 14,
         }}>
           <div style={{
-            width: 36, height: 48, borderRadius: 5, background: 'linear-gradient(135deg,#1a1f35,#2a3050)',
-            display: 'grid', placeItems: 'center', fontSize: 20, flexShrink: 0,
-          }}>{post.card.sport}</div>
+            width: 36, height: 48, borderRadius: 5, flexShrink: 0,
+            background: post.card.thumbnail ? `url(${post.card.thumbnail}) center/cover` : 'linear-gradient(135deg,#1a1f35,#2a3050)',
+            display: 'grid', placeItems: 'center', fontSize: 20,
+          }}>{post.card.thumbnail ? '' : sportEmoji(post.card.sport)}</div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>{post.card.name}</div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{post.card.player}</div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              {post.card.grade} · <span style={{ color: 'var(--gold)' }}>{post.card.value}</span>
+              {[post.card.grader, post.card.grade].filter(Boolean).join(' ')}
+              {post.card.value > 0 && <> · <span style={{ color: 'var(--gold)' }}>${post.card.value.toFixed(0)}</span></>}
             </div>
           </div>
         </div>
@@ -310,27 +325,71 @@ function FeedPost({ post }) {
 
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <button onClick={() => { setLiked(!liked); setLikeCount(n => liked ? n - 1 : n + 1); }}
+        <button
+          onClick={toggleLike}
+          disabled={!token}
           style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
-            fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)', cursor: 'pointer' }}>
-          <span style={{ fontSize: 14 }}>{liked ? '' : '🤍'}</span> {likeCount}
+            fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)',
+            cursor: token ? 'pointer' : 'default', opacity: liking ? 0.6 : 1 }}>
+          <span style={{ fontSize: 14 }}>{liked ? '❤️' : '🤍'}</span> {likeCount}
         </button>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
-          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
-          <span style={{ fontSize: 14 }}>💬</span> {post.comments}
-        </button>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
-          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', marginLeft: 'auto' }}>
-          <span style={{ fontSize: 14 }}>↗</span> Share
-        </button>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5,
+          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>
+          {!token && <span style={{ fontSize: 10, opacity: 0.5 }}>Sign in to like</span>}
+        </span>
       </div>
     </div>
   );
 }
 
-function CommunityFeed({ user }) {
+function CommunityFeed({ user, authFetch, token }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [postType, setPostType] = useState('general');
+  const [posts, setPosts] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState('');
+
+  const loadFeed = useCallback(async (p = 1) => {
+    if (p === 1) setLoading(true); else setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/posts/feed?page=${p}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (p === 1) setPosts(data.posts || []);
+        else setPosts(prev => [...prev, ...(data.posts || [])]);
+        setHasMore(data.hasMore || false);
+        setPage(p);
+      }
+    } catch (_) {}
+    finally { setLoading(false); setLoadingMore(false); }
+  }, []);
+
+  useEffect(() => { loadFeed(1); }, [loadFeed]);
+
+  const submitPost = async () => {
+    if (!draft.trim() || !token) return;
+    setPosting(true); setPostError('');
+    try {
+      const res = await authFetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: draft.trim(), type: postType }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPostError(data.error || 'Failed to post'); }
+      else {
+        setPosts(prev => [data.post, ...prev]);
+        setDraft(''); setComposing(false); setPostType('general');
+      }
+    } catch (e) { setPostError(e.message); }
+    finally { setPosting(false); }
+  };
+
   return (
     <div style={{ marginBottom: 28 }}>
       {/* Post Composer */}
@@ -348,36 +407,80 @@ function CommunityFeed({ user }) {
             <textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
-              onFocus={() => setComposing(true)}
-              placeholder="Share a pull, trade, or find..."
+              onFocus={() => { if (user) setComposing(true); }}
+              placeholder={user ? 'Share a pull, trade, or find...' : 'Sign in to post to the community...'}
+              disabled={!user}
               style={{
                 width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)',
                 borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13,
                 resize: 'none', minHeight: composing ? 80 : 40, outline: 'none',
                 fontFamily: 'inherit', lineHeight: 1.5, transition: 'min-height .2s',
+                opacity: user ? 1 : 0.5, cursor: user ? 'text' : 'not-allowed',
               }}
             />
-            {composing && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
-                <button onClick={() => { setComposing(false); setDraft(''); }} style={{
-                  padding: '7px 16px', borderRadius: 8, fontSize: 12, background: 'none',
-                  border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer',
-                }}>Cancel</button>
-                <button style={{
-                  padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                  background: 'var(--gold)', border: 'none', color: '#000', cursor: 'pointer',
-                }}>Post</button>
+            {composing && user && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {['general','pull','trade','sale'].map(t => (
+                    <button key={t} onClick={() => setPostType(t)} style={{
+                      padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                      background: postType === t ? 'var(--gold)' : 'var(--panel-2)',
+                      border: `1px solid ${postType === t ? 'var(--gold)' : 'var(--line)'}`,
+                      color: postType === t ? '#000' : 'var(--muted)', cursor: 'pointer',
+                    }}>{TYPE_META[t]?.icon} {t.charAt(0).toUpperCase() + t.slice(1)}</button>
+                  ))}
+                </div>
+                {postError && <div style={{ color: 'var(--down)', fontSize: 12, marginBottom: 6 }}>{postError}</div>}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setComposing(false); setDraft(''); setPostError(''); }} style={{
+                    padding: '7px 16px', borderRadius: 8, fontSize: 12, background: 'none',
+                    border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer',
+                  }}>Cancel</button>
+                  <button onClick={submitPost} disabled={posting || !draft.trim()} style={{
+                    padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                    background: 'var(--gold)', border: 'none', color: '#000',
+                    cursor: posting || !draft.trim() ? 'not-allowed' : 'pointer',
+                    opacity: posting || !draft.trim() ? 0.6 : 1,
+                  }}>{posting ? 'Posting…' : 'Post'}</button>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Feed posts */}
-      {DEMO_POSTS.map(p => <FeedPost key={p.id} post={p} />)}
-      <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--dim)', fontFamily: 'var(--mono)', fontSize: 11 }}>
-        ↑ Showing demo activity · Sign in to see your real feed
-      </div>
+      {/* Feed */}
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[1,2,3].map(i => (
+            <div key={i} className="skeleton" style={{ height: 120, borderRadius: 12 }} />
+          ))}
+        </div>
+      ) : posts.length === 0 ? (
+        <div style={{
+          textAlign: 'center', padding: '48px 0', color: 'var(--muted)',
+          border: '1px dashed var(--line)', borderRadius: 12,
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No posts yet</div>
+          <div style={{ fontSize: 13, opacity: 0.7 }}>
+            {user ? 'Be the first to share a pull or trade!' : 'Sign in and be the first to post!'}
+          </div>
+        </div>
+      ) : (
+        <>
+          {posts.map(p => (
+            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} />
+          ))}
+          {hasMore && (
+            <button onClick={() => loadFeed(page + 1)} disabled={loadingMore} style={{
+              width: '100%', padding: '12px', borderRadius: 10, background: 'var(--panel)',
+              border: '1px solid var(--line)', color: 'var(--muted)', cursor: loadingMore ? 'wait' : 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 12, marginTop: 4,
+            }}>{loadingMore ? 'Loading…' : 'Load more posts'}</button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -499,9 +602,9 @@ export default function CommunityPage() {
       )}
 
       {tab === 'feed' && !searchQuery && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+        <div className="community-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
           {/* Main feed */}
-          <CommunityFeed user={user} />
+          <CommunityFeed user={user} authFetch={authFetch} token={token} />
 
           {/* Sidebar */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

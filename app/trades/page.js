@@ -4,6 +4,7 @@ import { useAuth } from '../components/AuthContext';
 import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
 import SignupTeaser from '../components/SignupTeaser';
+import { SkeletonList } from '../components/Skeleton';
 import PreviewGate, { SampleTradePreview } from '../components/PreviewGate';
 import Link from 'next/link';
 
@@ -90,7 +91,7 @@ export default function TradesPage() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>Loading trades...</div>
+        <SkeletonList count={3} />
       ) : (
         <div className="trade-list">
           {list.length === 0 && (

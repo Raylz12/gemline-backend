@@ -67,19 +67,19 @@ export default function Ticker() {
         return (
           <span className="tk" key={i} onClick={() => openCard(c)}>
             <b>{c.player}</b>
-            <span style={{ color: 'var(--muted)', fontSize: 10, margin: '0 2px' }}>{c.grader} {c.grade}</span>
-            <span className="px mono">{fmt(c.market)}</span>
-            <span className={`ch ${cls}`} style={{ fontWeight: 600 }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>{[c.grader, c.grade].filter(Boolean).join(' ')}</span>
+            <span className="px">{fmt(c.market)}</span>
+            <span className={`ch ${cls}`}>
               {arrow}{gain >= 0 ? '+' : ''}{Number(gain).toFixed(1)}%
             </span>
+            <span className="sep">·</span>
           </span>
         );
       })
     : Array.from({ length: 8 }, (_, i) => (
         <span className="tk" key={i}>
-          <b>---</b>
-          <span className="px mono">$0</span>
-          <span className="ch muted">0%</span>
+          <b style={{ color: 'rgba(255,255,255,0.3)' }}>Loading…</b>
+          <span className="sep">·</span>
         </span>
       ));
 

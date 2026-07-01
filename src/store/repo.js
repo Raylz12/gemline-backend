@@ -9,17 +9,27 @@ export async function makeRepo() {
   return memoryRepo();
 }
 
-// Stripe Connect client. The stub returns fake ids so the engine runs end-to-end
-// without keys. Swap for a real implementation backed by the `stripe` SDK:
+// ── Stripe stub ────────────────────────────────────────────────────────────────
+// Real Stripe is wired in api/index.js when STRIPE_SECRET_KEY is set.
+// This stub returns fake ids so the engine runs end-to-end without keys.
+//
 //   authorize → PaymentIntent (capture_method:'manual')
 //   capture   → paymentIntents.capture
+//   capturePartial → paymentIntents.capture with amount_to_capture
 //   transfer  → transfers.create (to seller's connected account)
-//   refund    → refunds.create / paymentIntents.cancel
+//   refund    → refunds.create
+//   partialRefund → refunds.create with amount
+//   cancel    → paymentIntents.cancel
+
 let _seq = 0;
 const fakeId = (p) => `${p}_${Date.now()}_${++_seq}`;
+
 export const stripeStub = {
-  async authorize({ amount }) { return { id: fakeId('pi'), amount, status: 'requires_capture' }; },
-  async capture(piId) { return { id: piId, status: 'succeeded' }; },
-  async transfer({ amount, destination }) { return { id: fakeId('tr'), amount, destination }; },
-  async refund(piId) { return { id: fakeId('re'), payment_intent: piId, status: 'refunded' }; },
+  async authorize({ amount })               { return { id: fakeId('pi'), amount, status: 'requires_capture' }; },
+  async capture(piId)                       { return { id: piId, status: 'succeeded' }; },
+  async capturePartial(piId, amount)        { return { id: piId, amount, status: 'succeeded' }; },
+  async transfer({ amount, destination })   { return { id: fakeId('tr'), amount, destination }; },
+  async refund(piId)                        { return { id: fakeId('re'), payment_intent: piId, status: 'succeeded' }; },
+  async partialRefund(piId, amount)         { return { id: fakeId('re'), payment_intent: piId, amount, status: 'succeeded' }; },
+  async cancel(piId)                        { return { id: piId, status: 'canceled' }; },
 };

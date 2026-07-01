@@ -29,6 +29,9 @@ export default function PortfolioPage() {
   const [subTab, setSubTab] = useState('cards');
   const [showSearch, setShowSearch] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [listingItem, setListingItem] = useState(null); // item to list for sale
+  const [listingPrice, setListingPrice] = useState('');
+  const [listingSubmitting, setListingSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -137,6 +140,31 @@ export default function PortfolioPage() {
       toast('Failed to remove card', true);
     }
   }, [token, authFetch, fetchPortfolio]);
+
+  // List card for sale
+  const listCardForSale = useCallback(async () => {
+    if (!listingItem || !listingPrice) return;
+    const price = parseFloat(listingPrice);
+    if (isNaN(price) || price <= 0) { toast('Enter a valid price', true); return; }
+    setListingSubmitting(true);
+    try {
+      const res = await authFetch('/api/portfolio/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portfolioItemId: listingItem.id, price: Math.round(price * 100) }),
+      });
+      if (res.ok) {
+        toast('Card listed for sale ✓');
+        setListingItem(null);
+        setListingPrice('');
+        fetchPortfolio();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast(d.error || 'Failed to list card', true);
+      }
+    } catch { toast('Failed to list card', true); }
+    finally { setListingSubmitting(false); }
+  }, [listingItem, listingPrice, authFetch, fetchPortfolio]);
 
   // Camera scan result handler
   const handleScanResult = useCallback(async (cardInfo) => {
@@ -334,8 +362,22 @@ export default function PortfolioPage() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                {item.isListed && (
+                {item.isListed ? (
                   <span style={{ fontSize: 10, color: 'var(--gold)', fontFamily: 'var(--mono)', padding: '2px 6px', background: 'var(--gold-soft)', borderRadius: 4 }}>LISTED</span>
+                ) : (
+                  <button
+                    onClick={() => { setListingItem(item); setListingPrice(item.marketValue ? (item.marketValue).toFixed(2) : ''); }}
+                    title="List for sale"
+                    style={{
+                      padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                      background: 'var(--panel-2)', border: '1px solid var(--line)',
+                      color: 'var(--muted)', cursor: 'pointer', transition: '.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-soft)'; e.currentTarget.style.color = 'var(--gold)'; e.currentTarget.style.borderColor = 'var(--gold)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.color = 'var(--muted)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
+                  >
+                    Sell
+                  </button>
                 )}
                 <button
                   onClick={() => removeCard(item)}
@@ -366,6 +408,59 @@ export default function PortfolioPage() {
               background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
             Show more ({items.length - showCount} remaining)
           </button>
+        </div>
+      )}
+
+      {/* List for Sale Modal */}
+      {listingItem && (
+        <div className="overlay on" onClick={e => e.target === e.currentTarget && setListingItem(null)}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <button className="modal-close" onClick={() => setListingItem(null)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </button>
+            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>List for Sale</h2>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
+              {listingItem.player} · {[listingItem.grader, listingItem.grade].filter(Boolean).join(' ')}
+            </div>
+            {listingItem.marketValue > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 12, fontFamily: 'var(--mono)' }}>
+                Market value: <span style={{ color: 'var(--gold)' }}>{fmt(listingItem.marketValue)}</span>
+              </div>
+            )}
+            <label style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>LISTING PRICE ($)</label>
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)', fontFamily: 'var(--mono)' }}>$</span>
+              <input
+                type="number"
+                value={listingPrice}
+                onChange={e => setListingPrice(e.target.value)}
+                placeholder="0.00"
+                min="1"
+                step="0.01"
+                autoFocus
+                style={{
+                  width: '100%', padding: '10px 14px 10px 28px',
+                  background: 'var(--ink)', border: '1px solid var(--line)',
+                  borderRadius: 8, color: 'var(--txt)', fontSize: 16,
+                  fontFamily: 'var(--mono)', outline: 'none',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setListingItem(null)} style={{
+                padding: '10px 20px', fontSize: 13, borderRadius: 8,
+                background: 'none', border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer',
+              }}>Cancel</button>
+              <button
+                onClick={listCardForSale}
+                disabled={listingSubmitting || !listingPrice || parseFloat(listingPrice) <= 0}
+                className="btn-primary"
+                style={{ padding: '10px 24px', fontSize: 13, opacity: listingSubmitting ? 0.6 : 1 }}
+              >
+                {listingSubmitting ? 'Listing…' : 'List for Sale'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
