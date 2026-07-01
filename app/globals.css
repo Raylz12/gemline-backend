@@ -2926,3 +2926,10 @@ main>*{animation:fade .3s ease}
   .statbar{grid-template-columns:repeat(2,1fr);gap:10px}
   .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
 }
+
+/* ── Landing nav fixes (light bg needs dark wordmark) ── */
+#landing .lp-nav .wordmark{color:var(--txt)}
+#landing .lp-nav .tagline{color:var(--muted)}
+.lp-live-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.lp-hiw-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:768px){.lp-live-grid,.lp-hiw-grid{grid-template-columns:1fr}}

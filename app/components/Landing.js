@@ -463,7 +463,7 @@ export default function Landing() {
               <h2 style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 800, margin: 0 }}>What\'s Moving Right Now</h2>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="lp-live-grid">
             <LiveMovers />
             <CommunityPreview />
           </div>
@@ -479,7 +479,7 @@ export default function Landing() {
             <h2 style={{ fontFamily: 'var(--disp)', fontSize: 24, fontWeight: 800 }}>Simple as a card show</h2>
             <p style={{ color: 'var(--muted)', maxWidth: 480, margin: '8px auto 0', fontSize: 14 }}>Bring cards from anywhere — your collection, eBay grabs, your LCS, or the mail. List, trade, and get paid.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div className="lp-hiw-grid">
             {[
               { step: '01', icon: '📦', title: 'Bring Your Cards', desc: 'From any source — your collection, eBay, local shop, card shows. If you own it, list it here.' },
               { step: '02', icon: '🔄', title: 'List or Trade', desc: 'Set your price, make a trade offer, or drop it in a live auction. You\'re in control.' },
