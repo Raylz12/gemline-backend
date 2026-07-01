@@ -3,10 +3,53 @@
 // Users can list portfolio cards on the marketplace or offer them in trades.
 
 export async function list(repo, userId) {
+  // Fast path: single JOIN query when Postgres is available
+  if (repo.pool) {
+    const { rows } = await repo.pool.query(`
+      SELECT p.id, p.card_id, p.purchase_price, p.cert_number, p.notes,
+             p.is_listed, p.listing_id, p.acquired_at,
+             c.player, c.sport, c.card_set, c.variant, c.number,
+             c.grader, c.grade, c.image_url, c.ebay_thumb,
+             c.catalog_price,
+             (SELECT MIN(l.price) FROM listings l WHERE l.card_id = c.id AND l.status = 'active') AS market_value
+      FROM portfolios p
+      JOIN cards c ON c.id = p.card_id
+      WHERE p.user_id = $1
+      ORDER BY c.catalog_price DESC NULLS LAST
+    `, [userId]);
+    return rows.map(item => {
+      const costBasis = item.purchase_price ? Number(item.purchase_price) : null;
+      const marketValue = item.market_value ? Number(item.market_value) : (item.catalog_price ? Number(item.catalog_price) : null);
+      const pnl = (marketValue && costBasis) ? marketValue - costBasis : null;
+      const pnlPct = (pnl && costBasis) ? +((pnl / costBasis) * 100).toFixed(1) : null;
+      return {
+        id: item.id,
+        cardId: item.card_id,
+        player: item.player,
+        sport: item.sport,
+        set: item.card_set,
+        variant: item.variant,
+        num: item.number,
+        grader: item.grader,
+        grade: item.grade,
+        imageUrl: item.ebay_thumb || item.image_url || null,
+        certNumber: item.cert_number || null,
+        notes: item.notes || null,
+        purchasePrice: costBasis,
+        marketValue,
+        pnl,
+        pnlPct,
+        isListed: item.is_listed || false,
+        listingId: item.listing_id || null,
+        acquiredAt: item.acquired_at,
+      };
+    });
+  }
+
+  // Fallback for in-memory store (dev)
   const items = await repo.portfolios.list({ user_id: userId });
-  return Promise.all(items.map(async (item) => {
+  return Promise.all(items.filter(i => i.user_id !== '__deleted__').map(async (item) => {
     const card = await repo.cards.get(item.card_id);
-    // Get current market price from active listings for this card
     const listings = await repo.listings.list({ card_id: item.card_id, status: 'active' });
     const prices = listings.map(l => Number(l.price)).filter(p => p > 0);
     const marketValue = prices.length
@@ -127,9 +170,12 @@ export async function remove(repo, { userId, portfolioItemId }) {
     const listing = await repo.listings.get(item.listing_id);
     if (listing) await repo.listings.update({ ...listing, status: 'cancelled' });
   }
-  // Memory store: delete via update with __deleted marker; pg needs a DELETE query
-  // For now mark as removed by storing in a way app.js can filter
-  await repo.portfolios.update({ ...item, user_id: null }); // effectively orphans it
+  // Use DELETE query when Postgres is available, otherwise orphan the row in memory store
+  if (repo.pool) {
+    await repo.pool.query('DELETE FROM portfolios WHERE id = $1', [item.id]);
+  } else {
+    await repo.portfolios.update({ ...item, user_id: '__deleted__' });
+  }
   return { ok: true };
 }
 

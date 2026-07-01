@@ -18,22 +18,6 @@ export function appRouter(repo, stripe) {
     catch (e) { res.status(e.code === 'ILLEGAL_TRANSITION' ? 409 : e.status || 400).json({ error: e.message, code: e.code }); }
   };
 
-  const getMe = (req) => repo.users.get(req.userId);
-
-  async function listingCard(l, myId) {
-    const card = await repo.cards.get(l.card_id);
-    const seller = await repo.users.get(l.seller_id);
-    return {
-      listingId: l.id, cardId: l.card_id, vaultItemId: l.vault_item_id || null,
-      sellerId: l.seller_id, sellerHandle: seller ? seller.handle : 'Seller',
-      ownedByMe: l.seller_id === myId,
-      player: card.player, sport: card.sport, set: card.card_set,
-      variant: card.variant, num: card.number, grader: card.grader, grade: card.grade,
-      price: Number(l.price), boost_rank: l.boost_rank || 0,
-      imageUrl: card.image_url || null,
-    };
-  }
-
   async function priceOf(cardId) {
     const ls = await repo.listings.list({ card_id: cardId });
     return ls.length ? Number(ls[0].price) : 100;
@@ -67,8 +51,47 @@ export function appRouter(repo, stripe) {
   }
 
   async function buildState(userId) {
-    const listings  = await repo.listings.list({ status: 'active' });
-    const cards     = await Promise.all(listings.map(l => listingCard(l, userId)));
+    // Use a single JOIN query when Postgres is available to avoid N+1
+    let cards = [];
+    if (repo.pool) {
+      const { rows: listings } = await repo.pool.query(`
+        SELECT l.id AS listing_id, l.card_id, l.vault_item_id, l.seller_id, l.price, l.boost_rank,
+               c.player, c.sport, c.card_set, c.variant, c.number, c.grader, c.grade, c.image_url,
+               u.handle AS seller_handle
+        FROM listings l
+        JOIN cards c ON c.id = l.card_id
+        JOIN users u ON u.id = l.seller_id
+        WHERE l.status = 'active'
+        ORDER BY l.boost_rank DESC, l.created_at DESC
+        LIMIT 500
+      `);
+      cards = listings.map(l => ({
+        listingId: l.listing_id, cardId: l.card_id, vaultItemId: l.vault_item_id || null,
+        sellerId: l.seller_id, sellerHandle: l.seller_handle || 'Seller',
+        ownedByMe: l.seller_id === userId,
+        player: l.player, sport: l.sport, set: l.card_set,
+        variant: l.variant, num: l.number, grader: l.grader, grade: l.grade,
+        price: Number(l.price), boost_rank: l.boost_rank || 0,
+        imageUrl: l.image_url || null,
+      }));
+    } else {
+      // Fallback: in-memory store (dev/test)
+      const listings = await repo.listings.list({ status: 'active' });
+      cards = await Promise.all(listings.map(async (l) => {
+        const card = await repo.cards.get(l.card_id);
+        const seller = await repo.users.get(l.seller_id);
+        return {
+          listingId: l.id, cardId: l.card_id, vaultItemId: l.vault_item_id || null,
+          sellerId: l.seller_id, sellerHandle: seller ? seller.handle : 'Seller',
+          ownedByMe: l.seller_id === userId,
+          player: card.player, sport: card.sport, set: card.card_set,
+          variant: card.variant, num: card.number, grader: card.grader, grade: card.grade,
+          price: Number(l.price), boost_rank: l.boost_rank || 0,
+          imageUrl: card.image_url || null,
+        };
+      }));
+    }
+
     const ledgerRows = await repo.ledger.list({ user_id: userId });
     const balance   = ledgerRows.reduce((s, x) => s + x.delta, 0);
     const allTrades = await repo.trades.list({});

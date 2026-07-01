@@ -5,11 +5,13 @@ import ClientLayout from './components/ClientLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 
 export const metadata = {
+  metadataBase: new URL('https://gemlinecards.com'),
   title: 'GEMLINE — The Card Exchange',
-  description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, virtual pack rips, and AI-powered search across 150K+ cards.',
+  description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, virtual pack rips, and AI-powered search across 500K+ cards.',
+  robots: { index: true, follow: true },
   openGraph: {
     title: 'GEMLINE — The Card Exchange',
-    description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, and AI-powered search.',
+    description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, and AI-powered search across 500K+ cards.',
     url: 'https://gemlinecards.com',
     siteName: 'GEMLINE',
     images: [{ url: 'https://gemlinecards.com/og-image.png', width: 1200, height: 630, alt: 'GEMLINE — The Card Exchange' }],
@@ -18,7 +20,7 @@ export const metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'GEMLINE — The Card Exchange',
-    description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, and AI-powered search.',
+    description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, and AI-powered search across 500K+ cards.',
     images: ['https://gemlinecards.com/og-image.png'],
   },
 };
@@ -31,6 +33,7 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#07080d" />
+        <link rel="canonical" href="https://gemlinecards.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -7,27 +7,40 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [state, setState] = useState(null);
+  // Keep a ref so authFetch always sees the latest token without re-creating the callback
+  const tokenRef = useRef(null);
 
   useEffect(() => {
-    const t = localStorage.getItem('gemline_token');
+    const t = typeof window !== 'undefined' && localStorage.getItem('gemline_token');
     if (t) {
+      tokenRef.current = t;
       setToken(t);
       loadState(t);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadState = useCallback(async (t) => {
     try {
       const res = await fetch('/api/state', {
         headers: { Authorization: `Bearer ${t}` },
       });
+      if (res.status === 401) {
+        // Token expired or invalid — clear it
+        localStorage.removeItem('gemline_token');
+        tokenRef.current = null;
+        setToken(null);
+        setUser(null);
+        setState(null);
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setState(data);
         setUser(data.me);
       }
     } catch (e) {
-      console.warn('Failed to load state', e);
+      // Network error — keep token, user stays logged in
+      console.warn('Failed to load state (network):', e.message);
     }
   }, []);
 
@@ -40,6 +53,7 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
     localStorage.setItem('gemline_token', data.token);
+    tokenRef.current = data.token;
     setToken(data.token);
     setUser(data.user);
     await loadState(data.token);
@@ -55,6 +69,7 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Signup failed');
     localStorage.setItem('gemline_token', data.token);
+    tokenRef.current = data.token;
     setToken(data.token);
     setUser(data.user);
     await loadState(data.token);
@@ -63,21 +78,27 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('gemline_token');
+    tokenRef.current = null;
     setToken(null);
     setUser(null);
     setState(null);
   }, []);
 
+  // authFetch uses the ref so it's always stable and never stale
   const authFetch = useCallback(async (url, opts = {}) => {
     const headers = { ...opts.headers };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (tokenRef.current) headers.Authorization = `Bearer ${tokenRef.current}`;
     const res = await fetch(url, { ...opts, headers });
+    if (res.status === 401) {
+      // Auto-logout on expired token
+      logout();
+    }
     return res;
-  }, [token]);
+  }, [logout]);
 
   const refreshState = useCallback(() => {
-    if (token) loadState(token);
-  }, [token, loadState]);
+    if (tokenRef.current) loadState(tokenRef.current);
+  }, [loadState]);
 
   return (
     <AuthContext.Provider value={{ token, user, state, login, signup, logout, authFetch, refreshState }}>

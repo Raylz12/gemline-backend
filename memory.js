@@ -17,7 +17,7 @@ function collection() {
 
 export function memoryRepo() {
   const names = ['users', 'cards', 'listings', 'bids', 'orders', 'trades', 'tradeItems',
-    'vault', 'shipments', 'auth', 'ledger', 'boosts', 'disputes', 'escrow', 'events'];
+    'vault', 'shipments', 'auth', 'ledger', 'boosts', 'disputes', 'escrow', 'events', 'portfolios'];
   const repo = {};
   for (const n of names) repo[n] = collection();
   repo.tx = async (fn) => fn(repo);   // memory store has no real transaction

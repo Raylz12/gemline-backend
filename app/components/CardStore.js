@@ -76,15 +76,25 @@ export function CardStoreProvider({ children }) {
   const initialized = useRef(false);
   const fetchTimeout = useRef(null);
 
-  // Server-side fetch with pagination, search, sort, filter
-  const fetchFeed = (opts = {}) => {
+  // Server-side fetch with pagination, search, sort, filter.
+  // Uses refs for stable identity — avoids stale-closure issues in effects.
+  const filterSportRef = useRef(filterSport);
+  const searchQueryRef = useRef(searchQuery);
+  const sortByRef = useRef(sortBy);
+  const filterBrandRef = useRef(filterBrand);
+  filterSportRef.current = filterSport;
+  searchQueryRef.current = searchQuery;
+  sortByRef.current = sortBy;
+  filterBrandRef.current = filterBrand;
+
+  const fetchFeed = useRef((opts = {}) => {
     const page = opts.page || 1;
-    const sport = opts.sport !== undefined ? opts.sport : filterSport;
-    const search = opts.search !== undefined ? opts.search : searchQuery;
-    const sort = opts.sort !== undefined ? opts.sort : sortBy;
+    const sport = opts.sport !== undefined ? opts.sport : filterSportRef.current;
+    const search = opts.search !== undefined ? opts.search : searchQueryRef.current;
+    const sort = opts.sort !== undefined ? opts.sort : sortByRef.current;
+    const brand = opts.brand !== undefined ? opts.brand : filterBrandRef.current;
     const append = opts.append || false;
 
-    const brand = opts.brand !== undefined ? opts.brand : filterBrand;
     const params = new URLSearchParams({ page, limit: 100, sort });
     if (sport && sport !== 'All') params.set('sport', sport);
     if (search) params.set('search', search);
@@ -109,7 +119,7 @@ export function CardStoreProvider({ children }) {
       })
       .catch(err => console.error('Feed error:', err))
       .finally(() => setLoading(false));
-  };
+  }).current;
 
   // Initial load
   useEffect(() => {
@@ -117,13 +127,13 @@ export function CardStoreProvider({ children }) {
       initialized.current = true;
       fetchFeed({ page: 1 });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch when sort, sport, or brand filter changes
   useEffect(() => {
     if (!initialized.current) return;
     fetchFeed({ page: 1, sport: filterSport, sort: sortBy, search: searchQuery, brand: filterBrand });
-  }, [sortBy, filterSport, filterBrand]);
+  }, [sortBy, filterSport, filterBrand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced search
   useEffect(() => {
@@ -133,7 +143,7 @@ export function CardStoreProvider({ children }) {
       fetchFeed({ page: 1, search: searchQuery });
     }, 300);
     return () => clearTimeout(fetchTimeout.current);
-  }, [searchQuery]);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = () => {
     if (currentPage < totalPages && !loading) {

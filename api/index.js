@@ -1234,10 +1234,23 @@ app.post('/api/checkout/intent', requireAuth, async (req, res) => {
 });
 
 // ── Stripe Credits Purchase ──────────────────────────────────────────────────
+// Valid credit packs — must match CREDIT_PACKS in app/lib/data.js
+// Key = price in cents, Value = cr + bonus credits delivered
+const VALID_CREDIT_PACKS = new Map([
+  [999,   100],   // $9.99  → 100 cr + 0  bonus
+  [4999,  600],   // $49.99 → 550 cr + 50 bonus
+  [9999,  1400],  // $99.99 → 1200 cr + 200 bonus
+  [19999, 3600],  // $199.99→ 3000 cr + 600 bonus
+]);
 app.post('/api/credits/checkout', requireAuth, async (req, res) => {
   try {
     const { amount, credits } = req.body;
     if (!amount || !credits) return res.status(400).json({ error: 'amount and credits required' });
+    // Validate amount/credits combo to prevent manipulation
+    const expectedCredits = VALID_CREDIT_PACKS.get(Number(amount));
+    if (!expectedCredits || expectedCredits !== Number(credits)) {
+      return res.status(400).json({ error: 'Invalid credit pack selection' });
+    }
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) return res.status(500).json({ error: 'Stripe not configured' });
     const stripe = (await import('stripe')).default(stripeKey);
@@ -1252,8 +1265,8 @@ app.post('/api/credits/checkout', requireAuth, async (req, res) => {
         quantity: 1,
       }],
       metadata: { userId: req.userId, credits: String(credits) },
-      success_url: 'https://gemlinecards.com/market?credits=success',
-      cancel_url: 'https://gemlinecards.com/market?credits=cancelled',
+      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/market?credits=success`,
+      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/market?credits=cancelled`,
     });
     res.json({ url: session.url, sessionId: session.id });
   } catch (e) {
@@ -1359,8 +1372,8 @@ app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
         quantity: 1,
       }],
       subscription_data: { trial_period_days: 7 },
-      success_url: 'https://gemlinecards.com/arbitrage?sub=success&session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: 'https://gemlinecards.com/arbitrage?sub=cancelled',
+      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/arbitrage?sub=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/arbitrage?sub=cancelled`,
       client_reference_id: req.userId,
     });
     res.json({ url: session.url });
@@ -1672,7 +1685,7 @@ app.post('/api/profile/update', requireAuth, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(500).json({ error: 'No database' });
     const { handle, bio } = req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     // Validate handle
     if (handle) {
@@ -1797,17 +1810,53 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
     return res.status(400).json({ error: `Webhook error: ${e.message}` });
   }
   const r = await getRepo();
+  const pool = r.pool;
   switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      // Credits purchase fulfillment
+      if (session.metadata?.userId && session.metadata?.credits && session.mode === 'payment') {
+        const userId = session.metadata.userId;
+        const credits = parseInt(session.metadata.credits, 10);
+        if (pool && userId && credits > 0) {
+          try {
+            await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [credits, userId]);
+            console.log(`[webhook] Awarded ${credits} credits to user ${userId}`);
+          } catch (e) {
+            console.error('[webhook] Failed to award credits:', e.message);
+          }
+        }
+      }
+      // Subscription fulfillment is handled via subscription.updated event and /api/subscription/return
+      break;
+    }
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object;
+      if (pool && sub.id) {
+        const status = sub.status === 'active' ? 'active' : 'cancelled';
+        const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+        await pool.query(
+          `UPDATE subscriptions SET status = $1, current_period_end = $2 WHERE stripe_subscription_id = $3`,
+          [status, periodEnd, sub.id]
+        ).catch(e => console.error('[webhook] sub update:', e.message));
+      }
+      break;
+    }
     case 'payment_intent.amount_capturable_updated': {
-      // PI authorized — escrow is locked in
       const pi = event.data.object;
-      console.log('[webhook] PI authorized:', pi.id, '$' + (pi.amount/100));
+      console.log('[webhook] PI authorized:', pi.id, '$' + (pi.amount / 100));
       break;
     }
     case 'payment_intent.payment_failed': {
       const pi = event.data.object;
       console.log('[webhook] PI failed:', pi.id);
-      // TODO: update order status to failed
+      if (pool) {
+        await pool.query(
+          `UPDATE orders SET status = 'failed' WHERE payment_intent_id = $1`,
+          [pi.id]
+        ).catch(() => {});
+      }
       break;
     }
     case 'transfer.created': {
