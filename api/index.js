@@ -431,16 +431,27 @@ app.get('/api/market/heatmap', async (req, res) => {
     const sane = `AND catalog_price >= 5 AND COALESCE(sales_7d,0) >= 2`;
     const gainersQ = `SELECT ${cols} FROM cards
       WHERE gain_7d > 0 AND gain_7d <= 500 ${sane}${sportClause}
-      ORDER BY gain_7d DESC, COALESCE(sales_7d,0) DESC LIMIT 50`;
+      ORDER BY gain_7d DESC, COALESCE(sales_7d,0) DESC LIMIT 150`;
     const losersQ = `SELECT ${cols} FROM cards
       WHERE gain_7d < 0 AND gain_7d >= -90 ${sane}${sportClause}
-      ORDER BY gain_7d ASC, COALESCE(sales_7d,0) DESC LIMIT 50`;
+      ORDER BY gain_7d ASC, COALESCE(sales_7d,0) DESC LIMIT 150`;
     
-    const [{ rows: gainers }, { rows: losers }] = await Promise.all([
+    const [{ rows: gainersRaw }, { rows: losersRaw }] = await Promise.all([
       pool.query(gainersQ, params),
       pool.query(losersQ, params),
     ]);
-    const rows = [...gainers, ...losers];
+    // Dedupe: same card appears once per grade tier — keep one entry per
+    // underlying card so the heatmap isn't wallpapered with duplicates.
+    const dedupe = (list) => {
+      const seen = new Set();
+      return list.filter(c => {
+        const key = c.cardhedge_id || `${c.player}|${c.set}|${c.variant}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 50);
+    };
+    const rows = [...dedupe(gainersRaw), ...dedupe(losersRaw)];
     const result = { cards: rows, count: rows.length };
     app._heatmapCache = { data: result, expires: Date.now() + 5 * 60 * 1000 };
     res.json(result);
