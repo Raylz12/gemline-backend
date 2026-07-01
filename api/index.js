@@ -1618,6 +1618,232 @@ app.post('/api/cards/identify', rateLimit({ max: 10, windowMs: 60_000 }), async 
   }
 });
 
+// ── Store / Dealer Accounts ─────────────────────────────────────────────────
+
+app.get('/api/stores', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ stores: [] });
+    const { sport, location, limit = 20, offset = 0 } = req.query;
+    let where = `WHERE u.store_verified = TRUE AND u.account_type = 'store'`;
+    const params = [];
+    if (sport) { params.push(sport); where += ` AND u.store_description ILIKE $${params.length}`; }
+    if (location) { params.push(`%${location}%`); where += ` AND u.store_location ILIKE $${params.length}`; }
+    params.push(parseInt(limit), parseInt(offset));
+    const { rows } = await pool.query(`
+      SELECT u.id, u.handle, u.store_name, u.store_description, u.store_location,
+             u.store_website, u.avatar_url, u.rating,
+             COUNT(DISTINCT l.id) FILTER (WHERE l.active) AS listing_count,
+             COUNT(DISTINCT f.follower_id) AS follower_count
+      FROM users u
+      LEFT JOIN listings l ON l.seller_id = u.id
+      LEFT JOIN follows f ON f.following_id = u.id
+      ${where}
+      GROUP BY u.id
+      ORDER BY listing_count DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `, params);
+    res.json({ stores: rows });
+  } catch (e) {
+    console.error('stores error:', e.message);
+    res.json({ stores: [] });
+  }
+});
+
+app.get('/api/store/:handle', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(404).json({ error: 'Not found' });
+    const { rows } = await pool.query(`
+      SELECT u.id, u.handle, u.store_name, u.store_description, u.store_location,
+             u.store_website, u.store_verified, u.avatar_url, u.rating, u.bio,
+             u.created_at,
+             COUNT(DISTINCT l.id) FILTER (WHERE l.active) AS listing_count,
+             COUNT(DISTINCT f.follower_id) AS follower_count,
+             COALESCE(SUM(o.amount_cents) FILTER (WHERE o.status = 'complete'), 0) AS total_sales_cents
+      FROM users u
+      LEFT JOIN listings l ON l.seller_id = u.id
+      LEFT JOIN follows f ON f.following_id = u.id
+      LEFT JOIN orders o ON o.seller_id = u.id
+      WHERE u.handle = $1 AND u.account_type = 'store'
+      GROUP BY u.id
+    `, [req.params.handle]);
+    if (!rows.length) return res.status(404).json({ error: 'Store not found' });
+    // Get active listings
+    const { rows: listings } = await pool.query(`
+      SELECT l.id, l.ask_cents, l.created_at, l.condition,
+             c.player, c.sport, c.card_set, c.year, c.grader, c.grade, c.ebay_thumb, c.variant
+      FROM listings l
+      JOIN cards c ON c.id = l.card_id
+      WHERE l.seller_id = $1 AND l.active = TRUE
+      ORDER BY l.created_at DESC LIMIT 24
+    `, [rows[0].id]);
+    res.json({ store: rows[0], listings });
+  } catch (e) {
+    console.error('store profile error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/store/apply', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'DB unavailable' });
+    const { store_name, store_description, store_location, store_website } = req.body;
+    if (!store_name?.trim()) return res.status(400).json({ error: 'store_name required' });
+    await pool.query(`
+      UPDATE users SET account_type = 'store', store_name = $1, store_description = $2,
+        store_location = $3, store_website = $4
+      WHERE id = $5
+    `, [store_name.trim(), store_description || '', store_location || '', store_website || '', req.userId]);
+    res.json({ ok: true, message: 'Store application submitted. Verification pending.' });
+  } catch (e) {
+    console.error('store apply error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/store/inventory/bulk', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'DB unavailable' });
+    const { rows: [user] } = await pool.query('SELECT account_type FROM users WHERE id = $1', [req.userId]);
+    if (user?.account_type !== 'store') return res.status(403).json({ error: 'Store account required' });
+    const { cards } = req.body;
+    if (!Array.isArray(cards) || cards.length === 0) return res.status(400).json({ error: 'cards array required' });
+    if (cards.length > 200) return res.status(400).json({ error: 'Max 200 cards per bulk upload' });
+    let created = 0;
+    for (const card of cards) {
+      if (!card.player || !card.ask_cents) continue;
+      try {
+        const { rows: [c] } = await pool.query(`
+          INSERT INTO cards (player, sport, card_set, year, grader, grade, variant, catalog_price)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+        `, [card.player, card.sport || 'Unknown', card.card_set || '', card.year || null,
+            card.grader || 'RAW', card.grade || 'RAW', card.variant || '', card.ask_cents / 100]);
+        await pool.query(`
+          INSERT INTO listings (card_id, seller_id, ask_cents, active, condition)
+          VALUES ($1, $2, $3, TRUE, $4)
+        `, [c.id, req.userId, card.ask_cents, card.condition || 'NM']);
+        created++;
+      } catch { /* skip bad rows */ }
+    }
+    res.json({ ok: true, created });
+  } catch (e) {
+    console.error('bulk upload error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Mystery Pulls ─────────────────────────────────────────────────────────────
+
+app.get('/api/mystery/pools', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ pools: [] });
+    const { rows } = await pool.query(`
+      SELECT mp.id, mp.name, mp.sport, mp.price_credits, mp.min_value_cents, mp.max_value_cents,
+             mp.cards_available, mp.created_at,
+             u.handle AS store_handle, u.store_name, u.store_verified
+      FROM mystery_pools mp
+      JOIN users u ON u.id = mp.store_id
+      WHERE mp.active = TRUE AND mp.cards_available > 0
+      ORDER BY mp.created_at DESC
+    `);
+    res.json({ pools: rows });
+  } catch (e) {
+    console.error('mystery pools error:', e.message);
+    res.json({ pools: [] });
+  }
+});
+
+app.post('/api/mystery/pools/:id/pull', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'DB unavailable' });
+    const poolId = parseInt(req.params.id);
+    // Get pool info
+    const { rows: [mysteryPool] } = await pool.query(
+      'SELECT * FROM mystery_pools WHERE id = $1 AND active = TRUE', [poolId]);
+    if (!mysteryPool) return res.status(404).json({ error: 'Pool not found' });
+    // Check user credits
+    const { rows: [user] } = await pool.query('SELECT credits FROM users WHERE id = $1', [req.userId]);
+    if ((user?.credits || 0) < mysteryPool.price_credits)
+      return res.status(400).json({ error: 'Insufficient credits' });
+    // Pick random unclaimed card
+    const { rows: [card] } = await pool.query(`
+      SELECT * FROM mystery_pool_cards
+      WHERE pool_id = $1 AND claimed = FALSE
+      ORDER BY RANDOM() LIMIT 1
+    `, [poolId]);
+    if (!card) return res.status(400).json({ error: 'No cards available in this pool' });
+    // Claim card + deduct credits in a transaction
+    await pool.query('BEGIN');
+    await pool.query(
+      'UPDATE mystery_pool_cards SET claimed = TRUE, claimed_by = $1, claimed_at = NOW() WHERE id = $2',
+      [req.userId, card.id]);
+    await pool.query(
+      'UPDATE users SET credits = credits - $1 WHERE id = $2',
+      [mysteryPool.price_credits, req.userId]);
+    await pool.query(
+      'UPDATE mystery_pools SET cards_available = cards_available - 1 WHERE id = $1', [poolId]);
+    await pool.query('COMMIT');
+    res.json({ ok: true, card: { name: card.card_name, grade: card.grade, estimatedValue: card.estimated_value_cents } });
+  } catch (e) {
+    await getRepo().then(r => r.pool?.query('ROLLBACK').catch(() => {}));
+    console.error('mystery pull error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/mystery/pools/:id/cards', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'DB unavailable' });
+    const { rows: [user] } = await pool.query('SELECT account_type FROM users WHERE id = $1', [req.userId]);
+    if (user?.account_type !== 'store') return res.status(403).json({ error: 'Store account required' });
+    const { card_name, grade, estimated_value_cents } = req.body;
+    if (!card_name) return res.status(400).json({ error: 'card_name required' });
+    const poolId = parseInt(req.params.id);
+    await pool.query(`
+      INSERT INTO mystery_pool_cards (pool_id, card_name, grade, estimated_value_cents, submitted_by)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [poolId, card_name, grade || 'RAW', estimated_value_cents || 0, req.userId]);
+    await pool.query('UPDATE mystery_pools SET cards_available = cards_available + 1 WHERE id = $1', [poolId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('mystery pool card submit error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/mystery/pools', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'DB unavailable' });
+    const { rows: [user] } = await pool.query('SELECT account_type FROM users WHERE id = $1', [req.userId]);
+    if (user?.account_type !== 'store') return res.status(403).json({ error: 'Store account required' });
+    const { name, sport, price_credits, min_value_cents, max_value_cents } = req.body;
+    if (!name || !price_credits) return res.status(400).json({ error: 'name and price_credits required' });
+    const { rows: [p] } = await pool.query(`
+      INSERT INTO mystery_pools (store_id, name, sport, price_credits, min_value_cents, max_value_cents)
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+    `, [req.userId, name, sport || null, price_credits, min_value_cents || 0, max_value_cents || 0]);
+    res.json({ ok: true, pool: p });
+  } catch (e) {
+    console.error('create pool error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Protected routes ──────────────────────────────────────────────────────────
 app.use('/api', rateLimit({ max: 120, windowMs: 60_000 }));
 // NOTE: Do NOT add blanket requireAuth here — public routes (feed, heatmap, movers) must stay open

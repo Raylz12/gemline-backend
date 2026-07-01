@@ -1,6 +1,151 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+const SPORTS = [
+  { label: 'Basketball', emoji: '🏀', sport: 'Basketball' },
+  { label: 'Baseball', emoji: '⚾', sport: 'Baseball' },
+  { label: 'Football', emoji: '🏈', sport: 'Football' },
+  { label: 'Pokemon', emoji: '🃏', sport: 'Pokemon' },
+  { label: 'Hockey', emoji: '🏒', sport: 'Hockey' },
+  { label: 'Soccer', emoji: '⚽', sport: 'Soccer' },
+];
+
+function fmt(n) {
+  if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'K';
+  return '$' + Number(n).toFixed(2);
+}
+
+function LiveStatBar() {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    fetch('/api/stats/live').then(r => r.json()).then(setStats).catch(() => {});
+    const t = setInterval(() => {
+      fetch('/api/stats/live').then(r => r.json()).then(setStats).catch(() => {});
+    }, 60000);
+    return () => clearInterval(t);
+  }, []);
+  const items = [
+    ['287,000+', 'Cards'],
+    [stats?.active_listings ?? '—', 'Active Listings'],
+    [stats?.trades_this_week ?? '—', 'Trades This Week'],
+    [stats?.total_users ?? '—', 'Collectors'],
+  ];
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, background: 'rgba(232,179,57,.06)', border: '1px solid rgba(232,179,57,.15)', borderRadius: 10, overflow: 'hidden', marginTop: 24 }}>
+      {items.map(([val, label], i) => (
+        <div key={i} style={{ flex: '1 1 120px', padding: '12px 16px', borderRight: i < items.length - 1 ? '1px solid rgba(232,179,57,.1)' : 'none', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 18, color: 'var(--gold)' }}>{val?.toLocaleString?.() ?? val}</div>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LiveMovers() {
+  const [movers, setMovers] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  useEffect(() => {
+    const load = () => fetch('/api/market/movers?limit=5').then(r => r.json()).then(d => { setMovers(d.movers || []); setLastUpdated(new Date()); }).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, []);
+  const sportEmoji = (s) => ({ Basketball: '🏀', Baseball: '⚾', Football: '🏈', Pokemon: '🃏', Hockey: '🏒', Soccer: '⚽' }[s] || '🃏');
+  return (
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '18px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15 }}>Today\'s Biggest Movers</div>
+        {lastUpdated && <div style={{ fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>Updated {lastUpdated.toLocaleTimeString()}</div>}
+      </div>
+      {movers.length === 0 ? (
+        <div style={{ color: 'var(--dim)', fontSize: 12, padding: '12px 0' }}>Loading market data...</div>
+      ) : movers.map((m, i) => {
+        const pct = m.pct_change;
+        const isUp = pct >= 0;
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < movers.length - 1 ? '1px solid var(--line)' : 'none' }}>
+            <span style={{ fontSize: 20 }}>{sportEmoji(m.sport)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.player}</div>
+              <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{m.grader} {m.grade}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--gold)' }}>{fmt(m.catalog_price)}</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: isUp ? 'var(--up)' : 'var(--down)', marginTop: 1 }}>
+                {isUp ? '+' : ''}{pct != null ? pct.toFixed(1) + '%' : 'N/A'}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CommunityPreview() {
+  const [posts, setPosts] = useState([]);
+  useEffect(() => {
+    fetch('/api/posts/feed?limit=3').then(r => r.json()).then(d => setPosts(d.posts || [])).catch(() => {});
+  }, []);
+  const TYPE_COLOR = { pull: 'var(--gold)', trade: '#60a5fa', sale: 'var(--up)' };
+  return (
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '18px 20px' }}>
+      <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15, marginBottom: 14 }}>From the Community</div>
+      {posts.length === 0 ? (
+        <div style={{ color: 'var(--dim)', fontSize: 12, padding: '12px 0' }}>Be the first to post a pull! 🃏</div>
+      ) : posts.map((p, i) => (
+        <div key={p.id} style={{ padding: '10px 0', borderBottom: i < posts.length - 1 ? '1px solid var(--line)' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,var(--gold),#b8851f)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, color: '#000', flexShrink: 0 }}>
+              {(p.handle || 'G')[0].toUpperCase()}
+            </div>
+            <span style={{ fontWeight: 600, fontSize: 12 }}>@{p.handle}</span>
+            <span style={{ fontSize: 10, color: TYPE_COLOR[p.type] || 'var(--dim)', fontFamily: 'var(--mono)', marginLeft: 'auto' }}>{p.type}</span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.body}</p>
+        </div>
+      ))}
+      <Link href="/community" style={{ display: 'block', marginTop: 14, fontSize: 12, color: 'var(--gold)', textDecoration: 'none', fontWeight: 600 }}>Join the conversation →</Link>
+    </div>
+  );
+}
+
+function StoreSpotlight() {
+  const [stores, setStores] = useState([]);
+  useEffect(() => {
+    fetch('/api/stores?limit=4').then(r => r.json()).then(d => setStores(d.stores || [])).catch(() => {});
+  }, []);
+  if (stores.length === 0) return null;
+  return (
+    <section style={{ margin: '40px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div className="eyebrow">Verified Dealers</div>
+          <h2 style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 800, margin: 0 }}>Shop from Real Stores</h2>
+        </div>
+        <Link href="/stores" style={{ fontSize: 13, color: 'var(--gold)', textDecoration: 'none', fontWeight: 600 }}>Browse all stores →</Link>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+        {stores.map(s => (
+          <Link key={s.id} href={`/store/${s.handle}`} style={{ textDecoration: 'none' }}>
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', transition: 'border-color .15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold)'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
+            >
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{s.store_name || s.handle}</div>
+              {s.store_location && <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>📍 {s.store_location}</div>}
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>{Number(s.listing_count) || 0} listings</div>
+              {s.store_verified && <div style={{ fontSize: 10, color: 'var(--gold)', marginTop: 4 }}>✓ Verified</div>}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 const HERO_CARDS = [
   { grader: 'PSA 10', set: 'Topps Chrome', name: 'Cooper Flagg', variant: '2025 Basketball', price: '$268', bg: '#1a1040', image: 'https://942284f33c575895b4be9de571ca6e40.cdn.bubble.io/d112/f1766714753053x119226404538868900/resize' },
@@ -87,7 +232,7 @@ export default function Landing() {
         <div className="lp-nav">
           <div className="brand">
             <div className="logo">G</div>
-            <div><div className="wordmark">GEM<span>LINE</span></div><div className="tagline">THE CARD EXCHANGE</div></div>
+            <div><div className="wordmark">GEM<span>LINE</span></div><div className="tagline">BY COLLECTORS, FOR COLLECTORS</div></div>
           </div>
           <button className="lp-enter-link" onClick={() => enter('/market')}>
             Enter the exchange
@@ -98,14 +243,14 @@ export default function Landing() {
         <section className="lp-hero">
           <div className="lp-copy">
             <span className="lp-badge"><span className="d"></span>Tens of thousands of cards · every grade · every sport</span>
-            <h1 className="lp-h1">Buy · Sell · Trade.<br /><span className="accent">The Card Exchange.</span></h1>
-            <p className="lp-sub">Every major sport, Pokémon, and more — priced live with real market data. AI-powered search, real-time arbitrage, virtual pack rips, and a full exchange built for collectors.</p>
+            <h1 className="lp-h1">The Card Show,<br /><span className="accent">Online.</span></h1>
+            <p className="lp-sub">Bring cards from anywhere — your collection, eBay grabs, your local shop. List, trade, and connect with collectors who actually get it. By collectors, for collectors.</p>
             <div className="lp-cta">
               <button className="btn-xl primary" onClick={() => enter('/market')}>
                 Enter the exchange
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               </button>
-              <button className="btn-xl ghost" onClick={() => enter('/arbitrage')}>See the arbitrage engine</button>
+              <button className="btn-xl ghost" onClick={() => enter('/sell')}>List Your Cards</button>
             </div>
           </div>
 
@@ -304,6 +449,65 @@ export default function Landing() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* ── Live Stat Bar ── */}
+        <LiveStatBar />
+
+        {/* ── Live Market Data + Community ── */}
+        <section style={{ margin: '48px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <div className="eyebrow">Live Market</div>
+              <h2 style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 800, margin: 0 }}>What\'s Moving Right Now</h2>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <LiveMovers />
+            <CommunityPreview />
+          </div>
+        </section>
+
+        {/* ── Store Spotlight ── */}
+        <StoreSpotlight />
+
+        {/* ── How It Works ── */}
+        <section style={{ margin: '48px 0' }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div className="eyebrow">The Swap Meet</div>
+            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 24, fontWeight: 800 }}>Simple as a card show</h2>
+            <p style={{ color: 'var(--muted)', maxWidth: 480, margin: '8px auto 0', fontSize: 14 }}>Bring cards from anywhere — your collection, eBay grabs, your LCS, or the mail. List, trade, and get paid.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            {[
+              { step: '01', icon: '📦', title: 'Bring Your Cards', desc: 'From any source — your collection, eBay, local shop, card shows. If you own it, list it here.' },
+              { step: '02', icon: '🔄', title: 'List or Trade', desc: 'Set your price, make a trade offer, or drop it in a live auction. You\'re in control.' },
+              { step: '03', icon: '💰', title: 'Get Paid', desc: 'Secure payments via Stripe. Funds released when the buyer confirms. Real cards, real money.' },
+            ].map(({ step, icon, title, desc }) => (
+              <div key={step} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '24px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>{icon}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', marginBottom: 6, letterSpacing: '.1em' }}>STEP {step}</div>
+                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
+                <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>{desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Sport Quick Links ── */}
+        <section style={{ margin: '32px 0' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+            {SPORTS.map(({ label, emoji, sport }) => (
+              <Link key={sport} href={`/market?sport=${sport}`} style={{ textDecoration: 'none' }}>
+                <div style={{ padding: '10px 18px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 24, fontSize: 13, fontWeight: 600, color: 'var(--txt)', cursor: 'pointer', transition: 'border-color .15s, color .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.color = 'var(--gold)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--txt)'; }}
+                >
+                  {emoji} {label}
+                </div>
+              </Link>
+            ))}
           </div>
         </section>
 

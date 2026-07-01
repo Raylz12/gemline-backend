@@ -16,6 +16,8 @@ const NAV_ITEMS = [
   { href: '/analytics', label: 'Analytics', key: 'analytics', public: true },
   { href: '/portfolio', label: 'Portfolio', key: 'portfolio', public: true },
   { href: '/community', label: 'Community', key: 'community', public: true },
+  { href: '/stores', label: 'Stores', key: 'stores', public: true },
+  { href: '/packs', label: 'Mystery Pulls', key: 'packs', public: true },
 ];
 
 export default function Header() {
