@@ -7,6 +7,7 @@ import FilterSidebar from '../components/FilterSidebar';
 import CardItem from '../components/CardItem';
 import CardDetail from '../components/CardDetail';
 import Scout from '../components/Scout';
+import { SkeletonCard } from '../components/Skeleton';
 
 const PAGE_SIZE = 50;
 
@@ -284,9 +285,10 @@ export default function MarketplacePage() {
           {/* Card grid or list */}
           {viewMode === 'grid' ? (
             <div className="grid">
-              {paged.map(c => (
-                <CardItem key={c.id} card={c} onClick={setSelectedCard} />
-              ))}
+              {loading && paged.length === 0
+                ? <div style={{ gridColumn: '1/-1' }}><SkeletonCard count={24} /></div>
+                : paged.map(c => <CardItem key={c.id} card={c} onClick={setSelectedCard} />)
+              }
             </div>
           ) : (
             <div className="list-view">
@@ -306,9 +308,10 @@ export default function MarketplacePage() {
           )}
 
           {filtered.length === 0 && (
-            <div className="empty" style={{ gridColumn: '1/-1' }}>
-              <div className="big">No cards match your filters</div>
-              Try broadening your search or adjusting the price range.
+            <div className="empty-state" style={{ gridColumn: '1/-1', paddingTop: 48 }}>
+              <div className="empty-icon">🔍</div>
+              <h3>No cards match your filters</h3>
+              <p>Try broadening your search, adjusting the price range, or selecting a different sport.</p>
             </div>
           )}
 

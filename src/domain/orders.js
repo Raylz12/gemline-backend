@@ -10,7 +10,16 @@ import * as vaultSvc from './vault.js';
 
 const INSPECTION_DAYS = 2;
 
-export async function create(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, method, vaultItemId = null }) {
+export async function create(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, method, vaultItemId = null, userId = null }) {
+  // Accept userId as alias for buyerId (from settlement router injection)
+  if (!buyerId && userId) buyerId = userId;
+  if (!buyerId) throw Object.assign(new Error('buyerId required'), { code: 'VALIDATION', status: 400 });
+  if (!sellerId) throw Object.assign(new Error('sellerId required'), { code: 'VALIDATION', status: 400 });
+  if (buyerId === sellerId) throw Object.assign(new Error('Buyer and seller cannot be the same user'), { code: 'VALIDATION', status: 400 });
+  if (!amount || Number(amount) <= 0) throw Object.assign(new Error('Invalid amount'), { code: 'VALIDATION', status: 400 });
+  const validMethods = ['vault', 'authenticated', 'direct'];
+  if (!validMethods.includes(method)) throw Object.assign(new Error(`Invalid fulfillment method: ${method}`), { code: 'VALIDATION', status: 400 });
+
   const order = await repo.orders.insert({
     listing_id: listingId, card_id: cardId, buyer_id: buyerId, seller_id: sellerId,
     amount, platform_fee: fee, currency: 'USD', fulfillment_method: method,

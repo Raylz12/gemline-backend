@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { fmt, fmtDisplay } from '../lib/data';
 import { toast } from '../lib/toast';
+import { SkeletonList } from '../components/Skeleton';
 import CardDetail from '../components/CardDetail';
 import CameraScanner from '../components/CameraScanner';
 import SignupTeaser from '../components/SignupTeaser';
@@ -290,11 +291,12 @@ export default function PortfolioPage() {
 
       {/* Portfolio items */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>Loading portfolio...</div>
+        <SkeletonList count={8} />
       ) : items.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--muted)' }}>
-          <p style={{ fontSize: 15, marginBottom: 8 }}>Your portfolio is empty</p>
-          <p style={{ fontSize: 13 }}>Search the catalog or scan a card to get started</p>
+        <div className="empty-state">
+          <div className="empty-icon">🗂</div>
+          <h3>No cards in your portfolio</h3>
+          <p>Search the catalog or scan a cert number to add a physical card.</p>
         </div>
       ) : (
         <div className="holdings">
