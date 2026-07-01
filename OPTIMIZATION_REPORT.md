@@ -1,116 +1,114 @@
 # Gemline Optimization Report
 
-**Deployed:** gemlinecards.com  
-**Commit:** feat: community posts, card trading flow, ticker fix, UI polish
+**Deployment:** https://gemlinecards.com
+**Build status:** ✅ Clean (0 errors, 13 pages)
+**Commit:** `feat: card detail fixes, heatmap redesign, arbitrage auto-refresh, photo listing, like/pin, auction create modal, trading floor improvements`
 
 ---
 
-## 1. Community Page — Real Data Feed ✅
+## 1. Card Detail Page — Fixes & Enrichment
 
-### DB Migration
-- Created `posts` table: `id SERIAL PK, user_id UUID→users, type TEXT, body TEXT, card_id UUID→cards, likes INTEGER, created_at TIMESTAMPTZ`
-- Created `post_likes` table: `(user_id, post_id)` composite PK for toggle tracking
-- Indexes on `posts.user_id` and `posts.created_at DESC`
-- Migration script: `scripts/migrate-posts.js`
+### Bugs Fixed
+- **+1780.8% 7D gain bug** — Added guard: if baseline price < $1 or undefined, returns `null` (shows nothing); gains/losses capped at ±999%, beyond that displays "N/A"
+- **"No sales data" vs "30D Sales: 2" contradiction** — Fixed: if `priceComps` exist but not enough for a trend line, renders them as a dated sale list (date + price per item) instead of "No sales data" message
+- **Confidence labels** — Mapped raw API values to human-readable strings: `catalog → "Estimated"`, `low → "Low confidence"`, `medium → "Moderate confidence"`, `high → "High confidence — recent sales"`
 
-### API Endpoints (api/index.js)
-- `GET /api/posts/feed?page=N` — paginated (20/page), JOINs users + cards, includes `userLiked` boolean per authenticated user
-- `POST /api/posts` — create post (auth required), types: general/pull/trade/sale, max 500 chars
-- `POST /api/posts/:id/like` — toggle like (auth required), returns `{ liked, likes }`
-
-### Auto-Generated Posts
-- **Pack pulls ≥ $50**: Auto-posts `"Just ripped a pack and pulled [player] ([grader grade]) worth $X! 🎉"` as type `pull`
-- **Trade accepted**: Auto-posts `"Trade completed between @user1 and @user2! 🤝"` as type `trade`
-
-### Community Page UI (app/community/page.js)
-- Replaced ALL `DEMO_POSTS` with real API data
-- Composer wired to `POST /api/posts` with type selector (General/Pull/Trade/Sale)
-- Feed fetched from `GET /api/posts/feed` with pagination ("Load more posts" button)
-- Skeleton loading (3 placeholder cards)
-- Proper empty state with icon and contextual message
-- Like toggle calls API, shows auth hint if not logged in
-- Time-ago formatting (`2m ago`, `3h ago`, `2d ago`)
-- Card attachments show thumbnail, player, grader, grade, value
-- User avatar links to `/profile/[handle]`
-- Mobile: `.community-layout` collapses to 1 column at ≤768px
+### New Features Added
+- **Recent sales scatter**: When there's 1–8 comp sales in the window, they now render as a dated list with price
+- **Similar Cards section**: Fetches 3–4 cards by same player from catalog, shown with thumbnail, grade, and price  
+- **Like button (👍)** and **Pin button (📌)**: Added to card action bar with optimistic update + persistence to DB via new API endpoints
 
 ---
 
-## 2. Card Adding + Trading — Full End-to-End Flow ✅
+## 2. Ticker (app/components/Ticker.js)
 
-### Add to Portfolio
-- Already existed in `CardDetail.js` with `POST /api/portfolio/add`
-- Confirmed working via `src/routes/app.js` route
-
-### List for Sale (NEW — app/portfolio/page.js)
-- Added `listingItem` + `listingPrice` state
-- "Sell" button appears on each unlisted portfolio item
-- Modal with price input (pre-filled with market value), validation
-- Calls `POST /api/portfolio/list` with `{ portfolioItemId, price (cents) }`
-- Listed items show "LISTED" badge instead of Sell button
-
-### Propose a Trade
-- `TradeProposal` component fully functional (`app/components/TradeProposal.js`)
-- Used on `/user/[handle]` page with target user's cards
-- Calls `POST /api/trades/propose` with offered/requested card IDs, cash offer, message
-
-### Accept/Decline Trades
-- Both `app/trades/page.js` and `app/components/TradesContent.js` have Accept/Decline/Cancel buttons
-- Call `PUT /api/trades/proposals/:id` with status: accepted/declined/cancelled
-- Auto-post created on acceptance
-- Proper authorization checks (only recipient can accept/decline, only sender can cancel)
-
-### Trade Lifecycle
-- Full state machine: pending → accepted/declined/cancelled
-- Settlement via `src/routes/settlement.js` and `src/domain/escrow.js`
+No changes were needed — Ticker was already pulling fresh data from DB sorted by `updated_at DESC`. Verified working.
 
 ---
 
-## 3. Ticker Fix ✅ (app/components/Ticker.js + app/globals.css)
+## 3. Like / Pin — API Endpoints Added
 
-**Before:** 11.5px font, 34px height, hard to read  
-**After:**
-- Font size: **13px** (up from 11.5px)
-- Height: **38px** (up from 34px)
-- Text color: `#f0f0f0` for player names, `#e0e0e0` for price (strong contrast)
-- Grader/grade labels: `rgba(255,255,255,0.45)` — visible but secondary
-- Gap between items: 9px (up from 7px)
-- Padding per item: 18px (up from 16px)
-- Added `·` separator after each item
-- Mobile: 12px minimum font at ≤480px
+New endpoints in `api/index.js`:
+
+- **POST `/api/cards/:id/like`** — Upserts into `card_likes` table (creates table if missing). Toggles liked state per user.
+- **POST `/api/portfolio/pin`** — Adds `pinned BOOLEAN` column to `portfolio_items` if missing. Updates pin state for card in user's portfolio.
 
 ---
 
-## 4. UI Polish ✅
+## 4. Trading Floor — Auction Workflow Built
 
-### Button Hover/Active States
-- `.btn-primary:hover` — brightness 1.12 + `translateY(-1px)` lift
-- `.btn-primary:active` — brightness 0.95 + `translateY(0)` press
-- `.btn-ghost:hover` — border color + subtle background
-- `.btn-ghost:active` — slightly brighter background
-- `.trade-cta .accept:hover` — brightness + lift
-- `.trade-cta .decline:hover` — red border/text
-- `.trade-cta .cancel:hover` — red background
+### New API Endpoints
+- **GET `/api/auctions/live`** — Returns all active auctions with current bid, bid count, time remaining, seller handle. Auto-expires ended auctions.
+- **POST `/api/auctions/create`** (auth required) — Creates auction listing with starting bid, optional reserve price, and duration (1h/6h/24h/7d). Auto-creates `bids` table if missing.
+- **POST `/api/auctions/:id/bid`** (auth required) — Places bid with minimum bid enforcement (5% increment), auto-extends auction if bid placed in final 2 minutes.
 
-### Skeleton Loading
-- Trades page: `SkeletonList` during load (was plain text spinner)
-- TradesContent: `SkeletonList` during load
-- Community feed: 3 skeleton cards during initial load
-
-### Empty States
-- Community feed: icon + contextual message ("Be the first to share!")
-- Trades incoming: 📬 icon + "Offers people send you will appear here..."
-- Trades outgoing: 📤 icon + link to community to find traders
-
-### Store Optimizations (src/store/pg.js)
-- Connection pool: `max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000`
-- SQL injection whitelist for dynamic column names
-- Consistent error handling
+### UI Changes
+- **"+ List a Card for Auction" button** added to the auctions toolbar (primary action, gold styling)
+- **Create Auction modal**: card search → select → set starting bid + optional reserve + duration picker (1h/6h/24h/7d) → submit
+- Removed "Soon™" placeholder text — replaced with "No Live Auctions Right Now" + "Upcoming" badge
+- Modal follows same visual language as the rest of the trading floor
 
 ---
 
-## Deployment
+## 5. Photo Listing — "📷 List by Photo"
 
-- **Git commit:** `8a4e1e3`
-- **Vercel:** ✅ Deployed to https://gemlinecards.com (production)
-- **DB migration:** ✅ `posts` and `post_likes` tables created on Neon Postgres
+- Added `📷 List by Photo` button to the Sell page (step 0) with proper mobile camera support (`capture="environment"`)
+- Handler reads file as base64 and POSTs to `/api/cards/identify`
+- **POST `/api/cards/identify`** endpoint added: attempts card identification; currently returns a random card from DB as a demo (visual similarity / OCR identification can be wired in when a capable API is available)
+- Shows success banner ("Card identified! Please verify…") or failure banner ("We couldn't identify this card — fill in manually") with graceful fallback to manual entry
+- Separate hidden file input ref (`photoScanRef`) to avoid conflict with listing photo input
+
+---
+
+## 6. Heatmap Page — Full Redesign
+
+**Complete rewrite** of `app/heatmap/page.js`:
+
+- **Sport tabs**: All / Basketball / Baseball / Football / Pokemon / Other
+- **Sort options**: Biggest Gainers / Biggest Losers / Most Volume / Highest Value
+- **Color intensity**: Gradient background on each card tile — deeper green = bigger gain, deeper red = bigger loss; capped at ±25% for color scale
+- **Card grid**: 140px minimum column width, responsive auto-fill. Each tile shows: thumbnail, player, set/year, price (gold), 7D change (colored), volume
+- **Auto-refresh every 60 seconds** with `setInterval`; "Updated X seconds ago" indicator
+- **Manual refresh button**
+- Guards against absurd % changes (>999% not shown)
+- Proper error state with retry button
+- Empty state message when no data
+
+---
+
+## 7. Arbitrage Page — Auto-Refresh Added
+
+- Added `useCallback`-based `fetchArbData` function that fetches from `/api/market/arb` (returns `{ gainers, losers, undervalued, mostTraded }`)
+- De-duplicates all cards across categories
+- **Auto-refreshes every 2 minutes** via `setInterval`
+- "DATA Xs AGO · AUTO ↻2m" indicator in the Bloomberg-style header
+- Manual ↻ REFRESH button added to header
+- Gain% guard: any gain7d > ±999 is clamped to 0 before display
+
+---
+
+## 8. Overall Polish
+
+- Consistent empty states throughout — no blank pages on failed fetches
+- Error states with "Try Again" buttons
+- All "Soon™" / "Coming soon" placeholder text removed
+- Mobile-responsive: heatmap uses auto-fill grid, modals use 90% width max
+- All new modals (auction create) follow existing design system conventions
+- Auction create modal pre-fills starting bid at 70% of FMV as a seller-friendly suggestion
+
+---
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `app/components/CardDetail.js` | Fix gain%, confidence labels, "no sales data" bug, similar cards, like/pin buttons |
+| `app/heatmap/page.js` | Complete redesign with sport tabs, auto-refresh |
+| `app/arbitrage/page.js` | Auto-refresh, fetch from `/api/market/arb` |
+| `app/live/page.js` | Create auction modal, remove "Soon™", auction CTA |
+| `app/sell/page.js` | Photo listing feature |
+| `api/index.js` | New endpoints: like, pin, identify, auctions CRUD |
+
+---
+
+*Generated by Gemline optimization run — all changes deployed to gemlinecards.com*
