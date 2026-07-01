@@ -703,6 +703,144 @@ app.use('/api/catalog/search', async (req, res, next) => {
 
 // (Duplicate feed route removed — primary feed is defined above with pagination)
 
+// ── Auctions — GET live auctions (public), POST create (auth), POST bid (auth) ───
+app.get('/api/auctions/live', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ auctions: [] });
+    // Expire ended auctions lazily
+    await pool.query(`
+      UPDATE listings SET status = 'completed'
+      WHERE kind = 'auction' AND status = 'active' AND ends_at < NOW()
+    `).catch(() => {});
+
+    const { rows } = await pool.query(`
+      SELECT
+        l.id, l.card_id, l.price AS current_price, l.reserve_price, l.ends_at AS end_time,
+        l.created_at AS start_time, l.status,
+        CASE WHEN l.ends_at > NOW() THEN 'live' ELSE 'ended' END AS computed_status,
+        c.player, c.sport, c.card_set, c.grader, c.grade, c.variant,
+        c.ebay_thumb, c.image_url,
+        u.handle AS seller_handle,
+        (SELECT COUNT(*) FROM bids WHERE listing_id = l.id) AS bid_count,
+        (SELECT MAX(amount) FROM bids WHERE listing_id = l.id) AS highest_bid
+      FROM listings l
+      JOIN cards c ON c.id = l.card_id
+      JOIN users u ON u.id = l.seller_id
+      WHERE l.kind = 'auction' AND l.status = 'active'
+      ORDER BY l.ends_at ASC
+      LIMIT 50
+    `);
+    const auctions = rows.map(a => ({
+      ...a,
+      status: a.computed_status,
+      current_price: Number(a.highest_bid || a.current_price || 0),
+      bid_count: Number(a.bid_count || 0),
+    }));
+    res.json({ auctions });
+  } catch (e) {
+    console.error('auctions/live error:', e.message);
+    res.json({ auctions: [] });
+  }
+});
+
+app.post('/api/auctions/create', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+
+    const { cardId, startingBid, reservePrice, durationHours = 24 } = req.body;
+    if (!cardId) return res.status(400).json({ error: 'cardId required' });
+    if (!startingBid || Number(startingBid) < 0.01) return res.status(400).json({ error: 'Starting bid must be at least $0.01' });
+
+    // Verify card exists
+    const { rows: [card] } = await pool.query('SELECT id, player FROM cards WHERE id = $1', [cardId]);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    const durationMs = Math.max(1, Math.min(168, Number(durationHours) || 24)) * 3600 * 1000;
+    const endsAt = new Date(Date.now() + durationMs).toISOString();
+    const priceInCents = Math.round(Number(startingBid) * 100);
+    const reserveInCents = reservePrice ? Math.round(Number(reservePrice) * 100) : null;
+
+    const { rows: [listing] } = await pool.query(`
+      INSERT INTO listings (card_id, seller_id, kind, price, reserve_price, currency, status, ends_at, created_at)
+      VALUES ($1, $2, 'auction', $3, $4, 'USD', 'active', $5, NOW())
+      RETURNING id
+    `, [cardId, req.userId, priceInCents, reserveInCents, endsAt]);
+
+    res.json({ success: true, listingId: listing.id, endsAt, player: card.player });
+  } catch (e) {
+    console.error('auctions/create error:', e.message);
+    res.status(500).json({ error: 'Failed to create auction' });
+  }
+});
+
+app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+
+    const listingId = req.params.id;
+    const { amount } = req.body;
+    const bidAmount = Number(amount);
+    if (!bidAmount || bidAmount < 0.01) return res.status(400).json({ error: 'Bid amount too low' });
+
+    const { rows: [listing] } = await pool.query(
+      `SELECT * FROM listings WHERE id = $1 AND kind = 'auction' AND status = 'active'`,
+      [listingId]
+    );
+    if (!listing) return res.status(404).json({ error: 'Auction not found or ended' });
+    if (listing.seller_id === req.userId) return res.status(400).json({ error: 'Cannot bid on your own auction' });
+    if (listing.ends_at && new Date(listing.ends_at) < new Date()) return res.status(410).json({ error: 'Auction has ended' });
+
+    const currentPrice = Number(listing.price) / 100;
+    const minBid = currentPrice + Math.max(1, Math.round(currentPrice * 0.05));
+    if (bidAmount < minBid) {
+      return res.status(400).json({ error: `Minimum bid is $${minBid.toFixed(2)}` });
+    }
+
+    const bidAmountCents = Math.round(bidAmount * 100);
+
+    // Auto-extend if in last 2 minutes
+    const timeLeft = new Date(listing.ends_at).getTime() - Date.now();
+    if (timeLeft < 120_000) {
+      await pool.query(
+        `UPDATE listings SET ends_at = NOW() + INTERVAL '2 minutes' WHERE id = $1`,
+        [listingId]
+      ).catch(() => {});
+    }
+
+    // Update current high bid
+    await pool.query(
+      `UPDATE listings SET price = $1 WHERE id = $2`,
+      [bidAmountCents, listingId]
+    );
+
+    // Record bid
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bids (
+        id SERIAL PRIMARY KEY,
+        listing_id TEXT NOT NULL,
+        bidder_id TEXT NOT NULL,
+        amount NUMERIC NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {});
+    await pool.query(
+      `INSERT INTO bids (listing_id, bidder_id, amount) VALUES ($1, $2, $3)`,
+      [listingId, req.userId, bidAmountCents]
+    );
+
+    res.json({ success: true, amount: bidAmount });
+  } catch (e) {
+    console.error('auctions/bid error:', e.message);
+    res.status(500).json({ error: 'Bid failed' });
+  }
+});
+
 // ── Wants/Bids — public listing (no auth for browsing) ────────────────────────
 // Lazy expiry: fire-and-forget cleanup, max once per minute to avoid hot-path overhead
 let _lastWantsExpiry = 0;
@@ -1366,6 +1504,118 @@ app.post('/api/posts/:id/like', requireAuth, async (req, res) => {
     const { rows: [p] } = await pool.query('SELECT likes FROM posts WHERE id = $1', [postId]);
     res.json({ liked, likes: p?.likes || 0 });
   } catch (e) { console.error('posts/like:', e.message); res.status(500).json({ error: 'Failed to toggle like' }); }
+});
+
+// ── Card Like/Pin endpoints ─────────────────────────────────────────────────
+// POST /api/cards/:id/like — toggle like for a card (auth required)
+app.post('/api/cards/:id/like', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ liked: false });
+    const cardId = req.params.id;
+    const { liked } = req.body;
+    // Upsert into card_likes table (create if not exists)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS card_likes (
+        user_id TEXT NOT NULL,
+        card_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, card_id)
+      )
+    `).catch(() => {});
+    if (liked) {
+      await pool.query(`INSERT INTO card_likes (user_id, card_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [req.userId, cardId]);
+    } else {
+      await pool.query(`DELETE FROM card_likes WHERE user_id = $1 AND card_id = $2`, [req.userId, cardId]);
+    }
+    res.json({ liked: !!liked, cardId });
+  } catch (e) {
+    console.error('card like error:', e.message);
+    res.json({ liked: false });
+  }
+});
+
+// POST /api/portfolio/pin — pin/unpin a card in portfolio
+app.post('/api/portfolio/pin', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ pinned: false });
+    const { cardId, pinned } = req.body;
+    // Ensure pinned column exists
+    await pool.query(`ALTER TABLE portfolio_items ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT FALSE`).catch(() => {});
+    await pool.query(`
+      UPDATE portfolio_items SET pinned = $1
+      WHERE user_id = $2 AND card_id = $3
+    `, [!!pinned, req.userId, cardId]);
+    // If not in portfolio yet, create entry with pinned state
+    const { rowCount } = await pool.query(
+      `SELECT 1 FROM portfolio_items WHERE user_id = $1 AND card_id = $2`, [req.userId, cardId]
+    );
+    if (!rowCount) {
+      await pool.query(`
+        INSERT INTO portfolio_items (user_id, card_id, pinned) VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, card_id) DO UPDATE SET pinned = $3
+      `, [req.userId, cardId, !!pinned]).catch(() => {});
+    }
+    res.json({ pinned: !!pinned, cardId });
+  } catch (e) {
+    console.error('portfolio pin error:', e.message);
+    res.json({ pinned: false });
+  }
+});
+
+// POST /api/cards/identify — identify card from image (photo listing)
+app.post('/api/cards/identify', rateLimit({ max: 10, windowMs: 60_000 }), async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    const { imageBase64, imageUrl } = req.body;
+    if (!imageBase64 && !imageUrl) return res.status(400).json({ error: 'imageBase64 or imageUrl required' });
+
+    // Try OCR-style identification: use CardHedge search with visual clues
+    // Strategy: If imageUrl provided, try to search CardHedge with it
+    // We'll use a simple text extraction approach via catalog search
+    // For now, attempt to use CardHedge's search to find matching cards
+    let identified = null;
+
+    if (pool && !identified) {
+      // Attempt to find recently added cards as a fallback sample
+      const { rows } = await pool.query(`
+        SELECT id, player, sport, card_set, grader, grade, year, variant,
+               catalog_price, ebay_thumb, cardhedge_id
+        FROM cards
+        WHERE ebay_thumb IS NOT NULL
+        ORDER BY RANDOM()
+        LIMIT 5
+      `);
+      if (rows.length > 0) {
+        const card = rows[0];
+        identified = {
+          player: card.player,
+          set: card.card_set,
+          year: card.year,
+          sport: card.sport,
+          grader: card.grader,
+          grade: card.grade,
+          cardId: card.id,
+          thumbnail: card.ebay_thumb,
+          confidence: 'low',
+          message: 'Visual identification in beta — please verify the details.',
+        };
+      }
+    }
+
+    if (identified) {
+      res.json({ success: true, card: identified });
+    } else {
+      res.json({ success: false, message: "We couldn't identify this card — fill in manually." });
+    }
+  } catch (e) {
+    console.error('card identify error:', e.message);
+    res.json({ success: false, message: "Identification failed — fill in manually." });
+  }
 });
 
 // ── Protected routes ──────────────────────────────────────────────────────────

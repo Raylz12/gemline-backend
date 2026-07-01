@@ -91,6 +91,16 @@ export default function LivePage() {
   const [boostAmount, setBoostAmount] = useState(10);
   const [submittingBoost, setSubmittingBoost] = useState(false);
 
+  // Create Auction modal
+  const [createAuctionModal, setCreateAuctionModal] = useState(false);
+  const [auctionSearch, setAuctionSearch] = useState('');
+  const [auctionSearchResults, setAuctionSearchResults] = useState([]);
+  const [auctionCard, setAuctionCard] = useState(null);
+  const [auctionStartBid, setAuctionStartBid] = useState('');
+  const [auctionReserve, setAuctionReserve] = useState('');
+  const [auctionDuration, setAuctionDuration] = useState(24);
+  const [submittingAuction, setSubmittingAuction] = useState(false);
+
   // Match modal
   const [matchModal, setMatchModal] = useState(null);
   const [submittingMatch, setSubmittingMatch] = useState(false);
@@ -182,6 +192,55 @@ export default function LivePage() {
       loadAuctions();
     } catch (e) { toast(e.message, true); }
     finally { setSubmittingBid(false); }
+  };
+
+  /* ─── auction search for create modal ──────────────────────────────── */
+  const searchAuctionCards = async (q) => {
+    if (q.length < 2) { setAuctionSearchResults([]); return; }
+    try {
+      const res = await fetch('/api/catalog/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q }),
+      });
+      const data = await res.json();
+      setAuctionSearchResults(data.results || []);
+    } catch { setAuctionSearchResults([]); }
+  };
+
+  useEffect(() => {
+    const t = setTimeout(() => { if (auctionSearch) searchAuctionCards(auctionSearch); }, 300);
+    return () => clearTimeout(t);
+  }, [auctionSearch]);
+
+  const createAuction = async () => {
+    if (!token) { toast('Please log in first', true); return; }
+    if (!auctionCard) { toast('Select a card first', true); return; }
+    if (!auctionStartBid || Number(auctionStartBid) < 0.01) { toast('Enter a starting bid', true); return; }
+    setSubmittingAuction(true);
+    try {
+      const res = await fetch('/api/auctions/create', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardId: auctionCard.id,
+          startingBid: Number(auctionStartBid),
+          reservePrice: auctionReserve ? Number(auctionReserve) : null,
+          durationHours: auctionDuration,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create auction');
+      toast(`Auction created for ${auctionCard.player}! `);
+      setCreateAuctionModal(false);
+      setAuctionCard(null);
+      setAuctionSearch('');
+      setAuctionStartBid('');
+      setAuctionReserve('');
+      setAuctionDuration(24);
+      loadAuctions();
+    } catch (e) { toast(e.message, true); }
+    finally { setSubmittingAuction(false); }
   };
 
   /* ─── want/bid creation ─────────────────────────────────────────────── */
@@ -386,6 +445,14 @@ export default function LivePage() {
               <option value="newest">Newest</option>
             </select>
             <span className="count">{liveAuctions.length} live · {upcomingAuctions.length} upcoming</span>
+            <div className="spacer" />
+            <button
+              onClick={() => { if (!token) { toast('Please log in first', true); return; } setCreateAuctionModal(true); }}
+              className="live-place-bid-btn"
+              style={{ background: 'var(--gold)', color: '#000', fontWeight: 700 }}
+            >
+              + List a Card for Auction
+            </button>
           </div>
 
           {liveAuctions.length > 0 ? (
@@ -450,7 +517,7 @@ export default function LivePage() {
                   </div>
                   <div className="live-empty-mock-countdown">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    Soon™
+                    Starting soon
                   </div>
                 </div>
                 <div style={{ padding: '14px 16px' }}>
@@ -463,7 +530,7 @@ export default function LivePage() {
               {/* Text content */}
               <div className="live-empty-text">
                 <div className="live-empty-icon"></div>
-                <h2 className="live-empty-title">Auctions are Coming</h2>
+                <h2 className="live-empty-title">No Live Auctions Right Now</h2>
                 <p className="live-empty-sub">Be the first to list a card and kick off the live floor.</p>
 
                 {/* How it works steps */}
@@ -513,7 +580,7 @@ export default function LivePage() {
                           <div className="live-auction-bid-label">STARTING AT</div>
                           <div className="live-auction-bid-amount">{fmt(a.starting_price / 100)}</div>
                         </div>
-                        <span className="live-upcoming-pill">Soon</span>
+                        <span className="live-upcoming-pill">Upcoming</span>
                       </div>
                     </div>
                   </div>
@@ -820,6 +887,111 @@ export default function LivePage() {
                 {submittingMatch ? 'Processing…' : 'Match & Sell'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ── Create Auction Modal ── */}
+      {createAuctionModal && (
+        <div className="overlay on" onClick={e => e.target === e.currentTarget && setCreateAuctionModal(false)}>
+          <div className="live-modal" style={{ maxWidth: 480 }}>
+            <div className="live-modal-header">
+              <h3 className="live-modal-title">List a Card for Auction</h3>
+              <button className="live-modal-close" onClick={() => setCreateAuctionModal(false)}>✕</button>
+            </div>
+
+            {/* Card selection */}
+            {!auctionCard ? (
+              <>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Search for the card you want to auction:</p>
+                <input
+                  type="text"
+                  value={auctionSearch}
+                  onChange={e => setAuctionSearch(e.target.value)}
+                  placeholder="Search player, set..."
+                  autoFocus
+                  style={{ width: '100%', padding: '10px 14px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 10, color: 'var(--txt)', fontSize: 14, outline: 'none', marginBottom: 10 }}
+                />
+                <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {auctionSearchResults.map(c => (
+                    <div key={c.id} onClick={() => { setAuctionCard(c); if (c.catalog_price) setAuctionStartBid(String((Number(c.catalog_price) * 0.7).toFixed(2))); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: 'var(--panel-2)', border: '1px solid var(--line)' }}
+                      onMouseOver={e => e.currentTarget.style.borderColor = 'var(--gold)'}
+                      onMouseOut={e => e.currentTarget.style.borderColor = 'var(--line)'}
+                    >
+                      {(c.ebay_thumb || c.image_url) && (
+                        <img src={c.ebay_thumb || c.image_url} alt="" style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 6 }} onError={e => e.target.style.display='none'} />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.player}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.grader} {c.grade} · {c.card_set}</div>
+                      </div>
+                      {c.catalog_price && <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold)' }}>{fmt(Number(c.catalog_price))}</span>}
+                    </div>
+                  ))}
+                  {auctionSearch.length >= 2 && auctionSearchResults.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: 16, color: 'var(--dim)', fontSize: 12 }}>No cards found.</div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Selected card */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--ink)', borderRadius: 10, marginBottom: 16 }}>
+                  {(auctionCard.ebay_thumb || auctionCard.image_url) && (
+                    <img src={auctionCard.ebay_thumb || auctionCard.image_url} alt="" style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 6 }} onError={e => e.target.style.display='none'} />
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{auctionCard.player}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{auctionCard.grader} {auctionCard.grade} · {auctionCard.card_set}</div>
+                    {auctionCard.catalog_price && <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', marginTop: 2 }}>FMV: {fmt(Number(auctionCard.catalog_price))}</div>}
+                  </div>
+                  <button onClick={() => setAuctionCard(null)} style={{ color: 'var(--muted)', fontSize: 12, padding: '4px 8px', borderRadius: 6, background: 'var(--panel-2)', border: '1px solid var(--line)', cursor: 'pointer' }}>Change</button>
+                </div>
+
+                {/* Auction settings */}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5, display: 'block' }}>STARTING BID</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)', fontFamily: 'var(--mono)' }}>$</span>
+                      <input type="number" value={auctionStartBid} onChange={e => setAuctionStartBid(e.target.value)} placeholder="0.00" min="0.01" step="0.01"
+                        style={{ width: '100%', padding: '10px 10px 10px 24px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 14, fontFamily: 'var(--mono)', outline: 'none' }} />
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5, display: 'block' }}>RESERVE (optional)</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)', fontFamily: 'var(--mono)' }}>$</span>
+                      <input type="number" value={auctionReserve} onChange={e => setAuctionReserve(e.target.value)} placeholder="0.00" min="0" step="0.01"
+                        style={{ width: '100%', padding: '10px 10px 10px 24px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 14, fontFamily: 'var(--mono)', outline: 'none' }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, display: 'block' }}>DURATION</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[{ h: 1, label: '1 hour' }, { h: 6, label: '6 hours' }, { h: 24, label: '24 hours' }, { h: 168, label: '7 days' }].map(opt => (
+                      <button key={opt.h} onClick={() => setAuctionDuration(opt.h)}
+                        style={{
+                          flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          background: auctionDuration === opt.h ? 'var(--gold-soft)' : 'var(--panel-2)',
+                          color: auctionDuration === opt.h ? 'var(--gold)' : 'var(--muted)',
+                          border: `1px solid ${auctionDuration === opt.h ? 'var(--gold)' : 'var(--line)'}`,
+                        }}
+                      >{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="live-modal-actions">
+                  <button onClick={() => setCreateAuctionModal(false)} className="live-modal-cancel">Cancel</button>
+                  <button onClick={createAuction} disabled={submittingAuction} className="live-modal-submit" style={{ background: 'var(--gold)', color: '#000' }}>
+                    {submittingAuction ? 'Creating...' : 'List for Auction'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

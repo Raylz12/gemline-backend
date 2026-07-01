@@ -1,47 +1,294 @@
 'use client';
-import { useState, useEffect } from 'react';
-import Heatmap from '../components/Heatmap';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
+
+const SPORT_TABS = ['All', 'Basketball', 'Baseball', 'Football', 'Pokemon', 'Other'];
+const SORT_OPTIONS = [
+  { value: 'gainers', label: 'Biggest Gainers' },
+  { value: 'losers', label: 'Biggest Losers' },
+  { value: 'volume', label: 'Most Volume' },
+  { value: 'value', label: 'Highest Value' },
+];
+
+function pctColor(gain7d) {
+  if (gain7d === null || gain7d === undefined) return 'rgba(255,255,255,.05)';
+  const clamped = Math.max(-25, Math.min(25, gain7d));
+  if (clamped >= 0) {
+    const t = clamped / 25;
+    return `rgba(52,216,138,${0.12 + t * 0.55})`;
+  } else {
+    const t = (-clamped) / 25;
+    return `rgba(255,92,108,${0.12 + t * 0.55})`;
+  }
+}
+
+function fmt(n) {
+  if (!n || isNaN(n)) return '—';
+  if (n >= 1000) return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  return '$' + Number(n).toFixed(2);
+}
+
+function HeatCard({ c, onClick }) {
+  const gain = typeof c.gain7d === 'number' ? c.gain7d : 0;
+  const absGain = Math.abs(gain);
+  const showGain = absGain > 0 && absGain <= 999;
+  const arrow = gain >= 0 ? '▲' : '▼';
+  const gainColor = gain >= 0 ? 'var(--up)' : 'var(--down)';
+  const bg = pctColor(showGain ? gain : null);
+
+  return (
+    <div
+      onClick={() => onClick(c)}
+      style={{
+        background: bg,
+        border: '1px solid rgba(255,255,255,.07)',
+        borderRadius: 10,
+        padding: '12px 14px',
+        cursor: 'pointer',
+        transition: 'transform .12s, border-color .12s',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        minHeight: 110,
+      }}
+      onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.18)'; }}
+      onMouseOut={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.borderColor = 'rgba(255,255,255,.07)'; }}
+    >
+      {/* Thumb */}
+      {c.thumbnail && (
+        <img
+          src={c.thumbnail}
+          alt=""
+          style={{ width: '100%', height: 52, objectFit: 'cover', borderRadius: 6, marginBottom: 2 }}
+          onError={e => e.target.style.display = 'none'}
+        />
+      )}
+
+      {/* Player */}
+      <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {c.player}
+      </div>
+
+      {/* Set / year */}
+      <div style={{ fontSize: 10, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {[c.set, c.year].filter(Boolean).join(' · ')}
+      </div>
+
+      {/* Price row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
+          {fmt(c.market)}
+        </span>
+        {showGain ? (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: gainColor }}>
+            {arrow}{gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
+          </span>
+        ) : absGain > 999 ? (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>N/A</span>
+        ) : null}
+      </div>
+
+      {/* Volume */}
+      {(c.sales7d > 0 || c.sales30d > 0) && (
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>
+          {c.sales7d > 0 ? `${c.sales7d} sold 7d` : `${c.sales30d} sold 30d`}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function HeatmapPage() {
   const [cards, setCards] = useState([]);
-  const [selectedCard, setSelectedCard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [sport, setSport] = useState('All');
+  const [sort, setSort] = useState('gainers');
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const intervalRef = useRef(null);
 
-  useEffect(() => {
-    fetch('/api/market/heatmap')
-      .then(r => r.json())
-      .then(data => {
-        const mapped = (data.cards || []).map(c => ({
-          id: c.cardId, player: c.player, sport: c.sport, set: c.set,
-          grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
-          num: c.num, market: Number(c.marketPrice) || 0,
-          lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
-          confidence: c.confidence, thumbnail: c.thumbnail || c.image_url,
-          rookie: c.rookie, sales7d: Number(c.sales_7d) || 0,
-          sales30d: Number(c.sales_30d) || 0, gain7d: Number(c.gain_7d) || 0,
-        }));
-        setCards(mapped);
-      })
-      .catch(err => console.error('Heatmap fetch error:', err))
-      .finally(() => setLoading(false));
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/market/heatmap');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      const mapped = (data.cards || []).map(c => ({
+        id: c.cardId,
+        player: c.player,
+        sport: c.sport,
+        set: c.set,
+        year: c.year,
+        grader: c.grader,
+        grade: c.grade,
+        variant: c.variant,
+        market: Number(c.marketPrice) || 0,
+        lo: Number(c.lo) || 0,
+        hi: Number(c.hi) || 0,
+        gain7d: Number(c.gain_7d || c.gain7d) || 0,
+        sales7d: Number(c.sales_7d || c.sales7d) || 0,
+        sales30d: Number(c.sales_30d || c.sales30d) || 0,
+        confidence: c.confidence,
+        thumbnail: c.thumbnail || c.image_url,
+        rookie: c.rookie,
+        cardhedge_id: c.cardhedge_id,
+        ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase(),
+        theme: ['#2a2a2a', '#555'],
+      }));
+      setCards(mapped);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (e) {
+      setError('Failed to load heatmap data');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const hotCards = cards.filter(c => c.market > 0);
+  useEffect(() => {
+    fetchData();
+    intervalRef.current = setInterval(fetchData, 60_000);
+    return () => clearInterval(intervalRef.current);
+  }, [fetchData]);
+
+  // Filter + sort
+  const displayed = (() => {
+    let pool = cards.filter(c => c.market > 0);
+
+    if (sport !== 'All') {
+      if (sport === 'Other') {
+        const mainSports = ['Basketball', 'Baseball', 'Football', 'Pokemon'];
+        pool = pool.filter(c => !mainSports.includes(c.sport));
+      } else {
+        pool = pool.filter(c => (c.sport || '').toLowerCase() === sport.toLowerCase());
+      }
+    }
+
+    // Guard: remove absurd % changes before sorting
+    const safe = (c) => Math.abs(c.gain7d) <= 999;
+
+    switch (sort) {
+      case 'gainers':
+        return pool.filter(c => safe(c) && c.gain7d > 0).sort((a, b) => b.gain7d - a.gain7d).slice(0, 80);
+      case 'losers':
+        return pool.filter(c => safe(c) && c.gain7d < 0).sort((a, b) => a.gain7d - b.gain7d).slice(0, 80);
+      case 'volume':
+        return pool.sort((a, b) => (b.sales7d + b.sales30d) - (a.sales7d + a.sales30d)).slice(0, 80);
+      case 'value':
+        return pool.sort((a, b) => b.market - a.market).slice(0, 80);
+      default:
+        return pool.slice(0, 80);
+    }
+  })();
+
+  const openCard = (c) => setSelectedCard(c);
+
+  const secondsAgo = lastUpdated
+    ? Math.round((Date.now() - lastUpdated.getTime()) / 1000)
+    : null;
 
   return (
     <>
-      <div className="eyebrow">Market Heatmap</div>
-      <h1 className="page">7-Day Price Movement</h1>
-      <p className="sub">
-        Top 100 movers by price change and volume. Tile size = 30-day volume. Color = 7-day gain.
-        {!loading && ` ${hotCards.length} active cards tracked.`}
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div className="eyebrow">Market Heatmap</div>
+          <h1 className="page" style={{ marginBottom: 4 }}>Price Movers</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {secondsAgo !== null && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>
+              Updated {secondsAgo < 5 ? 'just now' : `${secondsAgo}s ago`}
+            </span>
+          )}
+          <button
+            onClick={() => { setLoading(true); fetchData(); }}
+            style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer' }}
+          >
+            ↻ Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Sport tabs */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+        {SPORT_TABS.map(s => (
+          <button
+            key={s}
+            onClick={() => setSport(s)}
+            style={{
+              padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              background: sport === s ? 'var(--gold)' : 'var(--panel-2)',
+              color: sport === s ? '#000' : 'var(--muted)',
+              border: `1px solid ${sport === s ? 'var(--gold)' : 'var(--line)'}`,
+              transition: 'all .12s',
+            }}
+          >{s}</button>
+        ))}
+      </div>
+
+      {/* Sort options */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+        {SORT_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setSort(opt.value)}
+            style={{
+              padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              background: sort === opt.value ? 'var(--violet)' : 'var(--panel-2)',
+              color: sort === opt.value ? '#fff' : 'var(--muted)',
+              border: `1px solid ${sort === opt.value ? 'var(--violet)' : 'var(--line)'}`,
+              transition: 'all .12s',
+            }}
+          >{opt.label}</button>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
+        <span>Color intensity = price movement magnitude</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: 'rgba(255,92,108,.7)' }} /> Decline
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: 'rgba(52,216,138,.7)' }} /> Gain
+        </span>
+      </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>Loading heatmap data...</div>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--muted)' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⬛⬛⬛</div>
+          Loading heatmap data...
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--down)' }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>⚠️</div>
+          {error}
+          <div style={{ marginTop: 12 }}>
+            <button onClick={fetchData} style={{ padding: '8px 18px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      ) : displayed.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>
+          No cards with price movement data in this view.
+        </div>
       ) : (
-        <Heatmap cards={hotCards} onSelect={setSelectedCard} />
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gap: 8,
+        }}>
+          {displayed.map(c => (
+            <HeatCard key={c.id} c={c} onClick={openCard} />
+          ))}
+        </div>
+      )}
+
+      {displayed.length > 0 && !loading && (
+        <div style={{ marginTop: 16, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)' }}>
+          {displayed.length} cards · Auto-refreshes every 60s
+        </div>
       )}
 
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}

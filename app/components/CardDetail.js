@@ -142,9 +142,14 @@ function PriceChart({ prices, comps = [], lo, hi, currentPrice }) {
     return '$' + Number(v).toFixed(2);
   };
 
-  const pctChange = vals.length >= 2
-    ? (((vals[vals.length - 1] - vals[0]) / vals[0]) * 100).toFixed(1)
+  const firstVal = vals[0];
+  const lastVal = vals[vals.length - 1];
+  // Guard: if baseline is near-zero, don't show a wild percentage
+  const pctChange = vals.length >= 2 && firstVal >= 1
+    ? (((lastVal - firstVal) / firstVal) * 100).toFixed(1)
     : null;
+  // Cap display at ±999%
+  const pctDisplay = pctChange !== null && Math.abs(Number(pctChange)) > 999 ? null : pctChange;
 
   return (
     <div style={{ position: 'relative' }}>
@@ -153,9 +158,9 @@ function PriceChart({ prices, comps = [], lo, hi, currentPrice }) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>
           {validPrices.length} data points
         </span>
-        {pctChange !== null && (
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: Number(pctChange) >= 0 ? 'var(--up)' : 'var(--down)' }}>
-            {Number(pctChange) >= 0 ? '▲' : '▼'} {Math.abs(pctChange)}%
+        {pctDisplay !== null && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: Number(pctDisplay) >= 0 ? 'var(--up)' : 'var(--down)' }}>
+            {Number(pctDisplay) >= 0 ? '▲' : '▼'} {Math.abs(pctDisplay)}%
           </span>
         )}
       </div>
@@ -288,6 +293,19 @@ function PriceChart({ prices, comps = [], lo, hi, currentPrice }) {
   );
 }
 
+// Map raw confidence values to human-readable labels
+const CONFIDENCE_LABELS = {
+  catalog: 'Estimated',
+  low: 'Low confidence',
+  medium: 'Moderate confidence',
+  high: 'High confidence — recent sales',
+  very_high: 'Very high confidence',
+};
+function confidenceLabel(raw) {
+  if (!raw) return '';
+  return CONFIDENCE_LABELS[raw.toLowerCase()] || raw;
+}
+
 function FMVBar({ lo, market, hi }) {
   if (!lo || !hi || !market) return null;
   const range = hi - lo || 1;
@@ -332,6 +350,9 @@ export default function CardDetail({ card: c, onClose }) {
   const [bidFormAmount, setBidFormAmount] = useState('');
   const [bidFormBoost, setBidFormBoost] = useState(0);
   const [submittingBid, setSubmittingBid] = useState(false);
+  const [similarCards, setSimilarCards] = useState([]);
+  const [isLiked, setIsLiked] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
   if (!c) return null;
 
   const isRC = c.rookie || (c.variant || '').toLowerCase().includes('rc') ||
@@ -435,6 +456,52 @@ export default function CardDetail({ card: c, onClose }) {
   const hasRange = c.lo > 0 && c.hi > 0;
 
   // Close on Escape key
+  // Fetch similar cards (same player or same set)
+  useEffect(() => {
+    if (!c.player) return;
+    const params = new URLSearchParams({ q: c.player });
+    fetch(`/api/catalog/search?${params}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: c.player }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        const results = (d.results || [])
+          .filter(r => r.id !== c.id && Number(r.catalog_price) > 0)
+          .slice(0, 4);
+        setSimilarCards(results);
+      })
+      .catch(() => {});
+  }, [c.id, c.player]);
+
+  const handleLike = async () => {
+    if (!token) { toast('Please log in to like cards', true); return; }
+    const newState = !isLiked;
+    setIsLiked(newState);
+    try {
+      await fetch(`/api/cards/${c.id}/like`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ liked: newState }),
+      });
+    } catch { setIsLiked(!newState); }
+  };
+
+  const handlePin = async () => {
+    if (!token) { toast('Please log in to pin cards', true); return; }
+    const newState = !isPinned;
+    setIsPinned(newState);
+    try {
+      await fetch(`/api/portfolio/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId: c.id, pinned: newState }),
+      });
+      toast(newState ? 'Pinned to portfolio ✓' : 'Unpinned');
+    } catch { setIsPinned(!newState); }
+  };
+
   useEffect(() => {
     const esc = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', esc);
@@ -461,7 +528,7 @@ export default function CardDetail({ card: c, onClose }) {
               </div>
             </div>
             <div style={{ marginTop: 18, textAlign: 'center' }}>
-              {c.confidence && <span className={`conf-badge conf-${c.confidence.toLowerCase()}`} style={{ fontSize: 12, padding: '4px 10px' }}>Card Hedge {c.confidence}</span>}
+              {c.confidence && <span className={`conf-badge conf-${c.confidence.toLowerCase()}`} style={{ fontSize: 12, padding: '4px 10px' }}>{confidenceLabel(c.confidence)}</span>}
               {c.saleCount > 0 && <span className="pill" style={{ fontSize: 11, marginLeft: 8 }}>{c.saleCount} recent sales</span>}
             </div>
           </div>
@@ -590,13 +657,30 @@ export default function CardDetail({ card: c, onClose }) {
                       {(c.lo || c.hi) && <span><span style={{ color: 'rgba(155,123,255,.6)', marginRight: 4 }}>■</span>FMV range</span>}
                     </div>
                   </div>
+                ) : priceComps.length > 0 ? (
+                  /* Has comp sales but not enough for a trend line — show them as a scatter */
+                  <div style={{ background: 'var(--panel-2)', borderRadius: 10, padding: '12px 10px 8px' }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', marginBottom: 8 }}>
+                      {priceComps.length} sale{priceComps.length !== 1 ? 's' : ''} in the last {chartDays}D
+                    </div>
+                    {priceComps.slice(0, 8).map((comp, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,.04)' }}>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>
+                          {comp.date ? new Date(comp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                        </span>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
+                          ${Number(comp.price).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div style={{
-                    height: 80, background: 'var(--panel-2)', borderRadius: 10,
+                    height: 60, background: 'var(--panel-2)', borderRadius: 10,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'var(--dim)', fontSize: 12,
                   }}>
-                    No sales data for this {chartDays}D window
+                    No price history available for this {chartDays}D window
                   </div>
                 )}
               </div>
@@ -618,7 +702,7 @@ export default function CardDetail({ card: c, onClose }) {
                     <div className="mono" style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>{c.sales30d}</div>
                   </div>
                 )}
-                {c.gain7d !== undefined && c.gain7d !== 0 && (
+                {c.gain7d !== undefined && c.gain7d !== 0 && Math.abs(c.gain7d) <= 999 && (
                   <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>7D GAIN</div>
                     <div className={`mono ${c.gain7d >= 0 ? 'up' : 'down'}`} style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>
@@ -626,10 +710,16 @@ export default function CardDetail({ card: c, onClose }) {
                     </div>
                   </div>
                 )}
+                {c.gain7d !== undefined && Math.abs(c.gain7d) > 999 && (
+                  <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>7D GAIN</div>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 600, marginTop: 4, color: 'var(--dim)' }}>N/A</div>
+                  </div>
+                )}
                 {c.confidence && (
                   <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>CONFIDENCE</div>
-                    <div className={`mono conf-badge conf-${c.confidence.toLowerCase()}`} style={{ fontSize: 14, fontWeight: 600, marginTop: 6, display: 'inline-block' }}>{c.confidence}</div>
+                    <div className={`mono conf-badge conf-${c.confidence.toLowerCase()}`} style={{ fontSize: 13, fontWeight: 600, marginTop: 6, display: 'inline-block' }}>{confidenceLabel(c.confidence)}</div>
                   </div>
                 )}
               </div>
@@ -749,6 +839,28 @@ export default function CardDetail({ card: c, onClose }) {
               </button>
               <button className={`offer watch ${w ? 'on' : ''}`} onClick={() => toggleWatch(c.id)} style={{ width: 'auto' }}>♥</button>
               <button
+                onClick={handleLike}
+                title={isLiked ? 'Unlike' : 'Like'}
+                style={{
+                  width: 'auto', padding: '8px 12px', borderRadius: 8, fontSize: 16, cursor: 'pointer',
+                  background: isLiked ? 'rgba(255,92,108,.15)' : 'var(--panel-2)',
+                  color: isLiked ? '#FF5C6C' : 'var(--muted)',
+                  border: `1px solid ${isLiked ? 'rgba(255,92,108,.4)' : 'var(--line)'}`,
+                  transition: 'all .15s',
+                }}
+              >👍</button>
+              <button
+                onClick={handlePin}
+                title={isPinned ? 'Unpin' : 'Pin to portfolio'}
+                style={{
+                  width: 'auto', padding: '8px 12px', borderRadius: 8, fontSize: 16, cursor: 'pointer',
+                  background: isPinned ? 'rgba(232,179,57,.15)' : 'var(--panel-2)',
+                  color: isPinned ? 'var(--gold)' : 'var(--muted)',
+                  border: `1px solid ${isPinned ? 'rgba(232,179,57,.4)' : 'var(--line)'}`,
+                  transition: 'all .15s',
+                }}
+              >📌</button>
+              <button
                 className="offer"
                 disabled={addingToPortfolio}
                 style={{ width: 'auto', fontSize: 12 }}
@@ -824,6 +936,27 @@ export default function CardDetail({ card: c, onClose }) {
                         )}
                       </div>
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>@{w.buyer_handle}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Similar Cards */}
+            {similarCards.length > 0 && (
+              <div className="mr-section" style={{ marginBottom: 16 }}>
+                <h4>Similar Cards</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                  {similarCards.map((sc, i) => (
+                    <div key={i} style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--line)', cursor: 'pointer' }}>
+                      {sc.ebay_thumb && (
+                        <img src={sc.ebay_thumb} alt="" style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 6, marginBottom: 6 }} onError={e => e.target.style.display='none'} />
+                      )}
+                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.player}</div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{sc.grader} {sc.grade}</div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
+                        {sc.catalog_price ? fmtDisplay(Number(sc.catalog_price)) : '—'}
+                      </div>
                     </div>
                   ))}
                 </div>

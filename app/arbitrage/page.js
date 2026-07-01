@@ -382,28 +382,49 @@ export default function ArbitragePage() {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    fetch('/api/market/feed?limit=200&sort=gain')
-      .then(r => r.json())
-      .then(data => {
-        const feed = data.feed || [];
-        setCards(feed.map(c => ({
-          id: c.cardId, player: c.player, sport: c.sport, set: c.set,
-          grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
-          num: c.num, market: Number(c.marketPrice) || 0,
-          lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
-          confidence: c.confidence, thumbnail: c.thumbnail,
-          rookie: c.rookie, sales7d: Number(c.sales7d) || Number(c.sales_7d) || 0,
-          sales30d: Number(c.sales30d) || Number(c.sales_30d) || 0,
-          gain7d: Number(c.gain7d) || 0,
-          cardhedge_id: c.cardhedge_id || null,
-          theme: ['#1a1d28', '#252838'],
-          ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-        })));
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const arbIntervalRef = useRef(null);
+
+  const fetchArbData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/market/arb');
+      const data = await res.json();
+      // Merge all categories into a de-duped pool
+      const allCards = [
+        ...(data.gainers || []),
+        ...(data.losers || []),
+        ...(data.undervalued || []),
+        ...(data.mostTraded || []),
+      ];
+      const seen = new Set();
+      const unique = allCards.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+
+      setCards(unique.map(c => ({
+        id: c.id, player: c.player, sport: c.sport, set: c.set,
+        grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
+        market: Number(c.market) || 0,
+        lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
+        confidence: c.confidence, thumbnail: c.thumbnail,
+        rookie: c.rookie, sales7d: Number(c.sales7d) || 0,
+        sales30d: Number(c.sales30d) || 0,
+        gain7d: Math.abs(Number(c.gain7d)) <= 999 ? Number(c.gain7d) : 0,
+        cardhedge_id: c.cardhedge_id || null,
+        theme: ['#1a1d28', '#252838'],
+        ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+      })));
+      setLastUpdated(new Date());
+    } catch {
+      // silently keep old data
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchArbData();
+    arbIntervalRef.current = setInterval(fetchArbData, 120_000); // 2min auto-refresh
+    return () => clearInterval(arbIntervalRef.current);
+  }, [fetchArbData]);
 
   // Derived datasets
   const cardsWithEdge = useMemo(() => cards
@@ -462,6 +483,15 @@ export default function ArbitragePage() {
             <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: '#34D88A' }}>LIVE</span>
           </div>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'rgba(255,255,255,.4)', letterSpacing: '.06em' }}>{now}</span>
+          {lastUpdated && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.3)', letterSpacing: '.06em' }}>
+              DATA {Math.round((Date.now() - lastUpdated.getTime()) / 1000)}s AGO · AUTO ↻2m
+            </span>
+          )}
+          <button
+            onClick={() => { setLoading(true); fetchArbData(); }}
+            style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', color: 'rgba(255,255,255,.5)', cursor: 'pointer', fontFamily: 'var(--mono)' }}
+          >↻ REFRESH</button>
         </div>
       </div>
 

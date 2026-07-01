@@ -33,7 +33,12 @@ export default function SellPage() {
   const [editId, setEditId] = useState(null);
   const [editPrice, setEditPrice] = useState('');
 
+  // Photo listing state
+  const [photoIdentifying, setPhotoIdentifying] = useState(false);
+  const [photoIdResult, setPhotoIdResult] = useState(null); // null | 'success' | 'failed'
+
   const fileRef = useRef(null);
+  const photoScanRef = useRef(null);
 
   // Search catalog
   useEffect(() => {
@@ -89,6 +94,52 @@ export default function SellPage() {
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handlePhotoScan = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoIdentifying(true);
+    setPhotoIdResult(null);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = reader.result;
+        const res = await fetch('/api/cards/identify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64 }),
+        });
+        const data = await res.json();
+        if (data.success && data.card) {
+          // Pre-fill search and select
+          setSearchQ(data.card.player || '');
+          const fakeCard = {
+            id: data.card.cardId,
+            player: data.card.player,
+            card_set: data.card.set,
+            year: data.card.year,
+            sport: data.card.sport,
+            grader: data.card.grader,
+            grade: data.card.grade,
+            ebay_thumb: data.card.thumbnail,
+            catalog_price: null,
+          };
+          selectCard(fakeCard);
+          setPhotoIdResult('success');
+          toast(`Found: ${data.card.player} — please verify the details below`);
+        } else {
+          setPhotoIdResult('failed');
+          toast("We couldn't identify this card — fill in manually", true);
+        }
+      } catch {
+        setPhotoIdResult('failed');
+        toast("Identification failed — fill in manually", true);
+      } finally {
+        setPhotoIdentifying(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const submit = async () => {
@@ -216,9 +267,47 @@ export default function SellPage() {
           {/* Step 0: Search */}
           {step === 0 && (
             <div className="sell-card-panel" style={{ background: 'var(--panel)', borderRadius: 'var(--r)', padding: 24 }}>
-              <h3 style={{ fontFamily: 'var(--disp)', marginBottom: 12 }}>Find your card</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontFamily: 'var(--disp)', margin: 0 }}>Find your card</h3>
+                <button
+                  onClick={() => photoScanRef.current?.click()}
+                  disabled={photoIdentifying}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    background: photoIdentifying ? 'var(--panel-2)' : 'var(--gold-soft)',
+                    color: photoIdentifying ? 'var(--muted)' : 'var(--gold)',
+                    border: '1px solid var(--gold)',
+                    cursor: photoIdentifying ? 'wait' : 'pointer',
+                  }}
+                >
+                  {photoIdentifying ? (
+                    <><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>◌</span> Scanning...</>
+                  ) : (
+                    <>📷 List by Photo</>
+                  )}
+                </button>
+                <input
+                  ref={photoScanRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  style={{ display: 'none' }}
+                  onChange={handlePhotoScan}
+                />
+              </div>
+              {photoIdResult === 'failed' && (
+                <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,92,108,.1)', border: '1px solid rgba(255,92,108,.3)', color: 'var(--down)', fontSize: 12 }}>
+                  We couldn't identify this card — fill in the details manually below.
+                </div>
+              )}
+              {photoIdResult === 'success' && (
+                <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(52,216,138,.1)', border: '1px solid rgba(52,216,138,.3)', color: 'var(--up)', fontSize: 12 }}>
+                  Card identified! Please verify the details are correct.
+                </div>
+              )}
               <input
-                type="text" placeholder="Search player, set, year..."
+                type="text" placeholder="Or search player, set, year..."
                 value={searchQ} onChange={e => setSearchQ(e.target.value)}
                 style={{
                   width: '100%', padding: '12px 16px', background: 'var(--ink)', border: '1px solid var(--line)',
