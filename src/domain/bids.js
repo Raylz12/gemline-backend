@@ -100,15 +100,21 @@ export async function getAuctionState(repo, listingId) {
 
 export async function listActiveAuctions(repo) {
   const all = await repo.listings.list({ kind: 'auction', status: 'active' });
-  // Filter out expired ones and auto-close them
   const now = new Date();
   const live = [];
+  const expired = [];
   for (const l of all) {
     if (l.ends_at && new Date(l.ends_at) < now) {
-      await repo.listings.update(l.id, { status: 'sold' });
+      expired.push(l);
     } else {
       live.push(l);
     }
+  }
+  // Batch-close expired auctions rather than N individual queries
+  if (expired.length > 0) {
+    const ids = expired.map(l => l.id);
+    // Fire-and-forget — don't block the response
+    Promise.allSettled(ids.map(id => repo.listings.update(id, { status: 'sold' }))).catch(() => {});
   }
   return live;
 }

@@ -49,6 +49,31 @@ app.get('/health', (_req, res) => res.json({
     : 'Running in-memory — set DATABASE_URL for persistent multi-user data',
 }));
 
+// ── Live platform stats (cached 5 min) ──────────────────────────────────────
+app.get('/api/stats/live', async (req, res) => {
+  try {
+    if (app._liveStatsCache?.expires > Date.now())
+      return res.json(app._liveStatsCache.data);
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({});
+    const [listingsRes, usersRes, pullsRes, cardsRes] = await Promise.allSettled([
+      pool.query(`SELECT COUNT(*) AS c FROM listings WHERE status = 'active'`),
+      pool.query(`SELECT COUNT(*) AS c FROM users`),
+      pool.query(`SELECT COUNT(*) AS c FROM pack_pulls`),
+      pool.query(`SELECT COUNT(*) AS c FROM mv_card_feed`),
+    ]);
+    const data = {
+      activeListings: listingsRes.status === 'fulfilled' ? parseInt(listingsRes.value.rows[0].c) : 0,
+      users:          usersRes.status === 'fulfilled'    ? parseInt(usersRes.value.rows[0].c) : 0,
+      totalPulls:     pullsRes.status === 'fulfilled'    ? parseInt(pullsRes.value.rows[0].c) : 0,
+      totalCards:     cardsRes.status === 'fulfilled'    ? parseInt(cardsRes.value.rows[0].c) : 0,
+    };
+    app._liveStatsCache = { data, expires: Date.now() + 5 * 60 * 1000 };
+    res.json(data);
+  } catch (e) { res.json({}); }
+});
+
 // ── Auth routes (rate-limited, no token required) ─────────────────────────────
 app.use('/api/auth', rateLimit({ max: 20, windowMs: 60_000, message: 'Too many auth attempts' }));
 app.use('/api/auth', async (req, res, next) => {
@@ -246,9 +271,12 @@ app.post('/api/scout/search', async (req, res) => {
 // ── Card Hedge proxy: FMV + AI explanation ───────────────────────────────────
 app.get('/api/cards/:cardhedgeId/fmv', async (req, res) => {
   try {
-    const CH = process.env.CARDHEDGE_API_KEY || 'inNtDlct1UCWnsJutpdTnJkKdt22xuJ222RTsLHs';
+    const CH = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
     const grade = req.query.grade || 'PSA 10';
+    const cacheKey = `fmv_${req.params.cardhedgeId}_${grade}`;
+    if (app._fmvCache?.[cacheKey]?.expires > Date.now())
+      return res.json(app._fmvCache[cacheKey].data);
 
     // Get FMV from Card Hedge
     const r = await fetch('https://api.cardhedger.com/v1/cards/card-fmv', {
@@ -296,7 +324,10 @@ app.get('/api/cards/:cardhedgeId/fmv', async (req, res) => {
       } catch {}
     }
 
-    res.json({ ...fmv, comps: comps ? { price: comps.comp_price, lo: comps.low, hi: comps.high, count: comps.count_used } : null });
+    const result = { ...fmv, comps: comps ? { price: comps.comp_price, lo: comps.low, hi: comps.high, count: comps.count_used } : null };
+    if (!app._fmvCache) app._fmvCache = {};
+    app._fmvCache[cacheKey] = { expires: Date.now() + 20 * 60 * 1000, data: result };
+    res.json(result);
   } catch (e) { res.json({ error: e.message }); }
 });
 
@@ -540,18 +571,37 @@ app.post('/api/catalog/search', async (req, res) => {
     const pool = r.pool;
     const q = (req.body?.q || req.query.q || '').trim();
     if (!pool || !q) return res.json({ results: [], canCreate: true });
-    // Trigram similarity search — uses GIN index, fast on 500K rows
-    const { rows } = await pool.query(
-      `SELECT id, player, grader, grade, card_set, variant, sport, catalog_price, ebay_thumb, image_url,
-              similarity(player, $1) AS sim
-       FROM cards
-       WHERE player % $1 OR card_set ILIKE $2 OR variant ILIKE $2
-       ORDER BY sim DESC, catalog_price DESC NULLS LAST
-       LIMIT 20`,
-      [q, `%${q}%`]
-    );
+    if (q.length > 200) return res.status(400).json({ error: 'Query too long' });
+
+    // Try MV first (faster, pre-aggregated), fall back to cards table
+    let rows = [];
+    try {
+      const mvRes = await pool.query(
+        `SELECT id, player, grader, grade, card_set as "card_set", variant, sport,
+                catalog_price, ebay_thumb as "ebay_thumb", image_url,
+                similarity(player, $1) AS sim
+         FROM mv_card_feed
+         WHERE player % $1 OR card_set ILIKE $2
+         ORDER BY sim DESC, catalog_price DESC NULLS LAST
+         LIMIT 20`,
+        [q, `%${q}%`]
+      );
+      rows = mvRes.rows;
+    } catch {
+      // MV search failed — fall back to cards table
+      const fallback = await pool.query(
+        `SELECT id, player, grader, grade, card_set, variant, sport, catalog_price, ebay_thumb, image_url,
+                similarity(player, $1) AS sim
+         FROM cards
+         WHERE player % $1 OR card_set ILIKE $2 OR variant ILIKE $2
+         ORDER BY sim DESC, catalog_price DESC NULLS LAST
+         LIMIT 20`,
+        [q, `%${q}%`]
+      );
+      rows = fallback.rows;
+    }
     res.json({ results: rows, canCreate: true, total: rows.length });
-  } catch(e) { res.json({ results: [], canCreate: true }); }
+  } catch(e) { console.error('catalog/search:', e.message); res.json({ results: [], canCreate: true }); }
 });
 
 // ── Public routes (no auth) ──────────────────────────────────────────────────
@@ -805,12 +855,12 @@ app.post('/api/packs/rip', requireAuth, async (req, res) => {
     // Shuffle so the chase card isn't always last
     cards.sort(() => Math.random() - 0.5);
 
-    // Save pulls to pack_pulls
-    for (const card of cards) {
-      await pool.query(
-        'INSERT INTO pack_pulls (user_id, card_id, pack_type) VALUES ($1, $2, $3)',
-        [req.userId, card.id, packType]
-      );
+    // Save pulls to pack_pulls — batch insert instead of N individual queries
+    if (cards.length > 0) {
+      const vals = cards.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(', ');
+      const params = [req.userId];
+      cards.forEach(c => params.push(c.id, packType));
+      await pool.query(`INSERT INTO pack_pulls (user_id, card_id, pack_type) VALUES ${vals}`, params);
     }
 
     // Get updated credits
@@ -1590,22 +1640,19 @@ app.get('/api/profile/:handle', async (req, res) => {
     );
     listings = listingRows;
 
-    // Stats
-    const { rows: [pullCount] } = await pool.query(
-      'SELECT COUNT(DISTINCT card_id) as digital, COUNT(DISTINCT DATE_TRUNC(\'second\', pulled_at)) as packs FROM pack_pulls WHERE user_id = $1', [user.id]
-    );
-    const { rows: [portfolioCount] } = await pool.query(
-      'SELECT COUNT(*) as physical FROM portfolios WHERE user_id = $1', [user.id]
-    ).catch(() => ({ rows: [{ physical: 0 }] }));
-    const { rows: [tradeCount] } = await pool.query(
-      `SELECT COUNT(*) as trades FROM trades WHERE (proposer_id = $1 OR counterparty_id = $1) AND status = 'completed'`, [user.id]
-    ).catch(() => ({ rows: [{ trades: 0 }] }));
-    const { rows: [digitalVal] } = await pool.query(
-      `SELECT COALESCE(SUM(c.catalog_price), 0) as total FROM pack_pulls pp JOIN cards c ON pp.card_id = c.id WHERE pp.user_id = $1`, [user.id]
-    );
-    const { rows: [physicalVal] } = await pool.query(
-      `SELECT COALESCE(SUM(c.catalog_price), 0) as total FROM portfolios p JOIN cards c ON p.card_id = c.id WHERE p.user_id = $1`, [user.id]
-    );
+    // Stats — parallelized to reduce latency from 5 round-trips to 1
+    const [pullCountRes, portfolioCountRes, tradeCountRes, digitalValRes, physicalValRes] = await Promise.allSettled([
+      pool.query("SELECT COUNT(DISTINCT card_id) as digital, COUNT(DISTINCT DATE_TRUNC('second', pulled_at)) as packs FROM pack_pulls WHERE user_id = $1", [user.id]),
+      pool.query('SELECT COUNT(*) as physical FROM portfolios WHERE user_id = $1', [user.id]),
+      pool.query(`SELECT COUNT(*) as trades FROM trades WHERE (proposer_id = $1 OR counterparty_id = $1) AND status = 'completed'`, [user.id]),
+      pool.query(`SELECT COALESCE(SUM(c.catalog_price), 0) as total FROM pack_pulls pp JOIN cards c ON pp.card_id = c.id WHERE pp.user_id = $1`, [user.id]),
+      pool.query(`SELECT COALESCE(SUM(c.catalog_price), 0) as total FROM portfolios p JOIN cards c ON p.card_id = c.id WHERE p.user_id = $1`, [user.id]),
+    ]);
+    const pullCount = pullCountRes.status === 'fulfilled' ? pullCountRes.value.rows[0] : { digital: 0, packs: 0 };
+    const portfolioCount = portfolioCountRes.status === 'fulfilled' ? portfolioCountRes.value.rows[0] : { physical: 0 };
+    const tradeCount = tradeCountRes.status === 'fulfilled' ? tradeCountRes.value.rows[0] : { trades: 0 };
+    const digitalVal = digitalValRes.status === 'fulfilled' ? digitalValRes.value.rows[0] : { total: 0 };
+    const physicalVal = physicalValRes.status === 'fulfilled' ? physicalValRes.value.rows[0] : { total: 0 };
 
     res.json({
       id: user.id,
