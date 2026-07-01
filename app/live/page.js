@@ -357,6 +357,14 @@ export default function LivePage() {
           </div>
           <h1 className="live-hero-title">The Hobby,<br /><span className="live-hero-gold">In Real Time.</span></h1>
           <p className="live-hero-sub">Bid on live auctions. Post open bids. Boost your offers to stand out.</p>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary btn-lg" onClick={() => { if (!token) { toast('Please log in first', true); return; } setCreateAuctionModal(true); }}>
+              + List a Card for Auction
+            </button>
+            <button className="btn btn-secondary btn-lg" onClick={() => { if (!token) { toast('Please log in first', true); return; } setWantModal(true); }}>
+              Post an Open Bid
+            </button>
+          </div>
         </div>
         <div className="live-hero-orbs" aria-hidden="true">
           <div className="live-orb live-orb-1" />
