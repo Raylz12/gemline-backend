@@ -820,29 +820,24 @@ app.post('/api/packs/rip', requireAuth, async (req, res) => {
     const roll = Math.random() * 100;
 
     if (packType === 'elite') {
-      const commons = await pull(1, 50, 2);
-      const mids = await pull(25, 200, 3);
-      const hits = await pull(200, 10000, 2);
-      const chase = roll < 10 ? await pull(2000, 10000, 2)
-                  : roll < 30 ? await pull(500, 2000, 2)
-                  : await pull(200, 500, 2);
+      // Parallel queries for speed
+      const chaseRange = roll < 10 ? [2000, 10000] : roll < 30 ? [500, 2000] : [200, 500];
+      const [commons, mids, hits, chase] = await Promise.all([
+        pull(1, 50, 2), pull(25, 200, 3), pull(200, 10000, 2), pull(chaseRange[0], chaseRange[1], 2),
+      ]);
       cards = [...commons, ...mids, ...hits, ...chase].slice(0, cardCount);
     } else if (packType === 'premium') {
-      const commons = await pull(1, 50, 2);
-      const mids = await pull(25, 100, 2);
-      const hit = await pull(100, 10000, 1);
-      const chase = roll < 10 ? await pull(1000, 10000, 1)
-                  : roll < 40 ? await pull(200, 1000, 1)
-                  : await pull(50, 200, 1);
+      const chaseRange = roll < 10 ? [1000, 10000] : roll < 40 ? [200, 1000] : [50, 200];
+      const [commons, mids, hit, chase] = await Promise.all([
+        pull(1, 50, 2), pull(25, 100, 2), pull(100, 10000, 1), pull(chaseRange[0], chaseRange[1], 1),
+      ]);
       cards = [...commons, ...mids, ...hit, ...chase].slice(0, cardCount);
     } else {
       // Standard
-      const commons = await pull(1, 25, 3);
-      const mids = await pull(25, 100, 2);
-      const chase = roll < 1 ? await pull(1500, 10000, 1)
-                  : roll < 5 ? await pull(500, 1500, 1)
-                  : roll < 30 ? await pull(100, 500, 1)
-                  : await pull(25, 100, 1);
+      const chaseRange = roll < 1 ? [1500, 10000] : roll < 5 ? [500, 1500] : roll < 30 ? [100, 500] : [25, 100];
+      const [commons, mids, chase] = await Promise.all([
+        pull(1, 25, 3), pull(25, 100, 2), pull(chaseRange[0], chaseRange[1], 1),
+      ]);
       cards = [...commons, ...mids, ...chase].slice(0, cardCount);
     }
 

@@ -7,6 +7,7 @@ import Ticker from './Ticker';
 import Header from './Header';
 import MobileNav from './MobileNav';
 import AuthModal from './AuthModal';
+import NetworkStatus from './NetworkStatus';
 
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
@@ -41,6 +42,7 @@ export default function ClientLayout({ children }) {
           </div>
         </div>
       </footer>}
+      <NetworkStatus />
     </>
   );
 }

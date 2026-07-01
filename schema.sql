@@ -263,3 +263,34 @@ ALTER TABLE listings   ADD CONSTRAINT fk_listing_vault   FOREIGN KEY (vault_item
 ALTER TABLE escrow_holds ADD CONSTRAINT fk_escrow_order  FOREIGN KEY (order_id) REFERENCES orders(id);
 ALTER TABLE escrow_holds ADD CONSTRAINT fk_escrow_trade  FOREIGN KEY (trade_id) REFERENCES trades(id);
 ALTER TABLE vault_items ADD CONSTRAINT fk_vault_shipment FOREIGN KEY (intake_shipment_id) REFERENCES shipments(id);
+
+-- ─────────────────────── Performance indexes (added 2025) ───────────────────
+-- These were added as CONCURRENTLY migrations after initial schema creation.
+-- Included here for reference and fresh installs.
+
+CREATE INDEX IF NOT EXISTS idx_listings_seller_id ON listings (seller_id);
+CREATE INDEX IF NOT EXISTS idx_listings_card_id ON listings (card_id);
+CREATE INDEX IF NOT EXISTS idx_listings_status_seller ON listings (status, seller_id);
+CREATE INDEX IF NOT EXISTS idx_listings_status_active ON listings (status) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_pack_pulls_user_id ON pack_pulls (user_id, pulled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pack_pulls_card_id ON pack_pulls (card_id);
+CREATE INDEX IF NOT EXISTS idx_price_history_card_id ON price_history (card_id);
+CREATE INDEX IF NOT EXISTS idx_cards_cardhedge_id ON cards (cardhedge_id);
+CREATE INDEX IF NOT EXISTS idx_cards_sport_price ON cards (sport, catalog_price DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_users_handle ON users (LOWER(handle));
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (LOWER(email));
+CREATE INDEX IF NOT EXISTS idx_wants_user_id ON wants (user_id);
+CREATE INDEX IF NOT EXISTS idx_wants_card_id ON wants (card_id);
+CREATE INDEX IF NOT EXISTS idx_wants_status ON wants (status);
+CREATE INDEX IF NOT EXISTS idx_trade_proposals_from ON trade_proposals (from_user_id);
+CREATE INDEX IF NOT EXISTS idx_trade_proposals_to ON trade_proposals (to_user_id);
+CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios (user_id);
+CREATE INDEX IF NOT EXISTS idx_portfolios_card_id ON portfolios (card_id);
+CREATE INDEX IF NOT EXISTS idx_user_badges_user_id ON user_badges (user_id);
+CREATE INDEX IF NOT EXISTS idx_trades_proposer ON trades (proposer_id);
+CREATE INDEX IF NOT EXISTS idx_trades_counterparty ON trades (counterparty_id);
+CREATE INDEX IF NOT EXISTS idx_trades_status ON trades (status);
+CREATE INDEX IF NOT EXISTS idx_trades_proposer_status ON trades (proposer_id, status);
+CREATE INDEX IF NOT EXISTS idx_trades_counterparty_status ON trades (counterparty_id, status);
+CREATE INDEX IF NOT EXISTS idx_trade_items_card_id ON trade_items (card_id);
+CREATE INDEX IF NOT EXISTS idx_trade_items_side ON trade_items (trade_id, side);
