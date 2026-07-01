@@ -12,7 +12,10 @@ const STEPS = ['Search', 'Price', 'Type', 'Photos', 'Review'];
 export default function SellPage() {
   const { token, user } = useAuth();
   const { cards } = useCardStore();
-  const [tab, setTab] = useState('list'); // list | my
+  const [tab, setTab] = useState('list'); // list | my | store
+  const [storeForm, setStoreForm] = useState({ store_name: '', store_description: '', store_location: '', store_website: '' });
+  const [storeSubmitting, setStoreSubmitting] = useState(false);
+  const [storeMsg, setStoreMsg] = useState('');
   const [step, setStep] = useState(0);
 
   // Listing form state
@@ -240,6 +243,7 @@ export default function SellPage() {
       <div className="sell-tabs" style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
         <button className={`chip ${tab === 'list' ? 'on' : ''}`} onClick={() => setTab('list')}>+ List a Card</button>
         <button className={`chip ${tab === 'my' ? 'on' : ''}`} onClick={() => setTab('my')}>My Listings</button>
+        <button className={`chip ${tab === 'store' ? 'on' : ''}`} onClick={() => setTab('store')}>🏪 Apply to Sell as Store</button>
       </div>
 
       {tab === 'list' && (
@@ -646,6 +650,64 @@ export default function SellPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'store' && (
+        <div style={{ maxWidth: 560 }}>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 16, padding: 28, marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 20 }}>
+              <div style={{ fontSize: 36 }}>🏪</div>
+              <div>
+                <h2 style={{ fontFamily: 'var(--disp)', fontSize: 20, fontWeight: 800, margin: '0 0 6px' }}>Apply to Sell as a Store</h2>
+                <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0, lineHeight: 1.6 }}>Verified stores get a dedicated storefront, bulk inventory upload, verified badge on all listings, and the ability to create Mystery Pull pools.</p>
+              </div>
+            </div>
+            {storeMsg ? (
+              <div style={{ background: storeMsg.startsWith('✓') ? 'rgba(52,216,138,.1)' : 'rgba(255,92,108,.1)', border: `1px solid ${storeMsg.startsWith('✓') ? 'rgba(52,216,138,.3)' : 'rgba(255,92,108,.3)'}`, borderRadius: 10, padding: '12px 16px', fontSize: 13, color: storeMsg.startsWith('✓') ? 'var(--up)' : 'var(--down)', marginBottom: 16 }}>{storeMsg}</div>
+            ) : null}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { key: 'store_name', label: 'Store Name', placeholder: 'e.g. Pacific Coast Cards', required: true },
+                { key: 'store_location', label: 'Location', placeholder: 'e.g. San Diego, CA' },
+                { key: 'store_website', label: 'Website', placeholder: 'e.g. https://yourshop.com' },
+              ].map(({ key, label, placeholder, required }) => (
+                <div key={key}>
+                  <label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 6 }}>{label} {required && <span style={{ color: 'var(--gold)' }}>*</span>}</label>
+                  <input value={storeForm[key]} onChange={e => setStoreForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder}
+                    style={{ width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              ))}
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 6 }}>About Your Store</label>
+                <textarea value={storeForm.store_description} onChange={e => setStoreForm(f => ({ ...f, store_description: e.target.value }))}
+                  placeholder="Tell collectors what you specialize in — sports, eras, brands, grades..."
+                  rows={3} style={{ width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13, outline: 'none', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              </div>
+              <button onClick={async () => {
+                if (!storeForm.store_name.trim()) { setStoreMsg('Store name is required'); return; }
+                setStoreSubmitting(true); setStoreMsg('');
+                try {
+                  const res = await fetch('/api/store/apply', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(storeForm) });
+                  const data = await res.json();
+                  if (!res.ok) setStoreMsg(data.error || 'Submission failed');
+                  else setStoreMsg('✓ Application submitted! We will review and verify your store within 24 hours.');
+                } catch { setStoreMsg('Something went wrong. Try again.'); }
+                finally { setStoreSubmitting(false); }
+              }} disabled={storeSubmitting}
+                style={{ padding: '12px 0', borderRadius: 10, background: 'linear-gradient(135deg,var(--gold),#c89b2a)', color: '#000', fontWeight: 800, fontSize: 14, border: 'none', cursor: storeSubmitting ? 'wait' : 'pointer', opacity: storeSubmitting ? 0.7 : 1 }}>
+                {storeSubmitting ? 'Submitting...' : 'Submit Application'}
+              </button>
+            </div>
+          </div>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '16px 20px' }}>
+            <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 10 }}>What you get as a verified store</div>
+            {[['🏪','Dedicated storefront page at gemlinecards.com/store/yourname'],['✓','Verified badge on every listing'],['📦','Bulk inventory upload (up to 200 cards at once)'],['🎴','Create and manage Mystery Pull pools'],['📊','Sales analytics dashboard']].map(([icon, text]) => (
+              <div key={text} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 0', borderBottom: '1px solid var(--line)', fontSize: 12, color: 'var(--muted)' }}>
+                <span style={{ flexShrink: 0, width: 20, textAlign: 'center' }}>{icon}</span>{text}
               </div>
             ))}
           </div>

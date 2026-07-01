@@ -4,7 +4,7 @@ import { useAuth } from '../components/AuthContext';
 import { useCardStore } from '../components/CardStore';
 import { fmt, SPORT_THEME, slabStyle } from '../lib/data';
 import { toast } from '../lib/toast';
-import PackRipContent from '../components/PackRipContent';
+// PackRipContent removed — replaced by Mystery Pulls at /packs
 import PreviewGate, { SampleLivePreview } from '../components/PreviewGate';
 
 
@@ -423,12 +423,7 @@ export default function LivePage() {
             Open Bids
             {wants.length > 0 && <span className="live-tab-badge">{wants.length}</span>}
           </button>
-          <button
-            className={`live-tab-pill ${tab === 'packs' ? 'on' : ''}`}
-            onClick={() => setTab('packs')}
-          >
-            Pack Rip
-          </button>
+
         </div>
       </div>
 
@@ -669,7 +664,7 @@ export default function LivePage() {
       )}
 
       {/* ══════════ PACK RIP TAB ══════════ */}
-      {tab === 'packs' && <PackRipContent />}
+
 
       {/* ══════════ AUCTION BID MODAL ══════════ */}
       {bidModal && (
