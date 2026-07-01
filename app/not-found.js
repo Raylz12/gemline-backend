@@ -19,7 +19,7 @@ export default function NotFound() {
         color: 'var(--gold)',
         lineHeight: 1,
         marginBottom: 16,
-        textShadow: '0 0 40px rgba(232,179,57,.3)',
+        textShadow: '0 0 40px rgba(22,199,132,.3)',
       }}>404</div>
       <h1 style={{
         fontFamily: 'var(--disp)',

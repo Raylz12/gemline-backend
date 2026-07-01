@@ -599,7 +599,7 @@ export default function ProfilePage() {
             background: 'var(--panel)', borderRadius: 16, padding: 32, width: '90%', maxWidth: 360,
             border: `1px solid ${{ diamond: '#B9F2FF', gold: '#E8B339', silver: '#C0C0C0', bronze: '#CD7F32' }[selectedBadge.tier] || 'var(--line)'}`,
             margin: 'auto', textAlign: 'center', position: 'relative',
-            boxShadow: `0 0 40px ${{ diamond: 'rgba(185,242,255,.15)', gold: 'rgba(232,179,57,.15)', silver: 'rgba(192,192,192,.1)', bronze: 'rgba(205,127,50,.1)' }[selectedBadge.tier] || 'none'}`,
+            boxShadow: `0 0 40px ${{ diamond: 'rgba(185,242,255,.15)', gold: 'rgba(22,199,132,.15)', silver: 'rgba(192,192,192,.1)', bronze: 'rgba(205,127,50,.1)' }[selectedBadge.tier] || 'none'}`,
           }}>
             <button onClick={() => setSelectedBadge(null)} style={{
               position: 'absolute', top: 12, right: 12, width: 32, height: 32,
@@ -611,7 +611,7 @@ export default function ProfilePage() {
             <div style={{
               display: 'inline-block', padding: '3px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700,
               fontFamily: 'var(--mono)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 14,
-              background: { diamond: 'rgba(185,242,255,.12)', gold: 'rgba(232,179,57,.12)', silver: 'rgba(192,192,192,.1)', bronze: 'rgba(205,127,50,.1)' }[selectedBadge.tier],
+              background: { diamond: 'rgba(185,242,255,.12)', gold: 'rgba(22,199,132,.12)', silver: 'rgba(192,192,192,.1)', bronze: 'rgba(205,127,50,.1)' }[selectedBadge.tier],
               color: { diamond: '#B9F2FF', gold: '#E8B339', silver: '#C0C0C0', bronze: '#CD7F32' }[selectedBadge.tier],
             }}>{selectedBadge.tier}</div>
             <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5, marginBottom: 16 }}>

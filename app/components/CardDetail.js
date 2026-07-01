@@ -198,9 +198,9 @@ function PriceChart({ prices, comps = [], lo, hi, currentPrice }) {
         {curY !== null && (
           <>
             <line x1={padL} y1={curY} x2={padL + chartW} y2={curY}
-              stroke="rgba(232,179,57,0.5)" strokeWidth="1" strokeDasharray="4 3" />
+              stroke="rgba(22,199,132,0.5)" strokeWidth="1" strokeDasharray="4 3" />
             <text x={padL + chartW + 4} y={curY + 4} fontSize="9"
-              fill="rgba(232,179,57,0.8)" fontFamily="monospace">NOW</text>
+              fill="rgba(22,199,132,0.8)" fontFamily="monospace">NOW</text>
           </>
         )}
 
@@ -854,9 +854,9 @@ export default function CardDetail({ card: c, onClose }) {
                 title={isPinned ? 'Unpin' : 'Pin to portfolio'}
                 style={{
                   width: 'auto', padding: '8px 12px', borderRadius: 8, fontSize: 16, cursor: 'pointer',
-                  background: isPinned ? 'rgba(232,179,57,.15)' : 'var(--panel-2)',
+                  background: isPinned ? 'rgba(22,199,132,.15)' : 'var(--panel-2)',
                   color: isPinned ? 'var(--gold)' : 'var(--muted)',
-                  border: `1px solid ${isPinned ? 'rgba(232,179,57,.4)' : 'var(--line)'}`,
+                  border: `1px solid ${isPinned ? 'rgba(22,199,132,.4)' : 'var(--line)'}`,
                   transition: 'all .15s',
                 }}
               >📌</button>

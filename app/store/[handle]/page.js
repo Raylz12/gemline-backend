@@ -75,7 +75,7 @@ export default function StorePage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{
             width: 72, height: 72, borderRadius: 16, flexShrink: 0,
-            background: 'linear-gradient(135deg, var(--gold), #b8851f)',
+            background: 'linear-gradient(135deg, #16c784, #0d9463)',
             display: 'grid', placeItems: 'center', fontSize: 30, fontWeight: 800, color: '#000',
           }}>{initial}</div>
 
@@ -85,7 +85,7 @@ export default function StorePage() {
                 {store.store_name || store.handle}
               </h1>
               {store.store_verified && (
-                <span style={{ fontSize: 11, color: 'var(--gold)', background: 'rgba(232,179,57,.12)', border: '1px solid rgba(232,179,57,.3)', borderRadius: 5, padding: '2px 7px' }}>✓ Verified Store</span>
+                <span style={{ fontSize: 11, color: 'var(--gold)', background: 'rgba(22,199,132,.12)', border: '1px solid rgba(22,199,132,.3)', borderRadius: 5, padding: '2px 7px' }}>✓ Verified Store</span>
               )}
             </div>
             <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 4 }}>@{store.handle}</div>

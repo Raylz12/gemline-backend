@@ -73,7 +73,7 @@ function RangeBar({ lo, market, hi }) {
     <div style={{ position: 'relative', height: 6, background: 'rgba(255,255,255,.08)', borderRadius: 3 }}>
       <div style={{
         position: 'absolute', inset: 0, borderRadius: 3,
-        background: 'linear-gradient(90deg,rgba(52,216,138,.3),rgba(232,179,57,.3),rgba(255,92,108,.3))',
+        background: 'linear-gradient(90deg,rgba(52,216,138,.3),rgba(22,199,132,.3),rgba(255,92,108,.3))',
       }} />
       <div style={{
         position: 'absolute', top: -2, left: `${pos}%`,

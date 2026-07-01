@@ -1,7 +1,7 @@
 // Shared data constants and helpers — mirrors reference_design.html logic
 
 export const PLATFORMS = [
-  { n: 'GEMLINE', c: '#E8B339' }, { n: 'eBay', c: '#5B8DEF' }, { n: 'COMC', c: '#34D88A' },
+  { n: 'GEMLINE', c: '#16c784' }, { n: 'eBay', c: '#5B8DEF' }, { n: 'COMC', c: '#34D88A' },
   { n: 'PWCC', c: '#9B7BFF' }, { n: 'Goldin', c: '#FF5C6C' }, { n: 'Whatnot', c: '#ff8a3d' },
   { n: 'SportsCardHQ', c: '#22d3ee' },
 ];

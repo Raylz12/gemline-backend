@@ -33,9 +33,9 @@ function LiveStatBar() {
     [stats?.total_users ?? '—', 'Collectors'],
   ];
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, background: 'rgba(232,179,57,.06)', border: '1px solid rgba(232,179,57,.15)', borderRadius: 10, overflow: 'hidden', marginTop: 24 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, background: 'rgba(22,199,132,.06)', border: '1px solid rgba(22,199,132,.15)', borderRadius: 10, overflow: 'hidden', marginTop: 24 }}>
       {items.map(([val, label], i) => (
-        <div key={i} style={{ flex: '1 1 120px', padding: '12px 16px', borderRight: i < items.length - 1 ? '1px solid rgba(232,179,57,.1)' : 'none', textAlign: 'center' }}>
+        <div key={i} style={{ flex: '1 1 120px', padding: '12px 16px', borderRight: i < items.length - 1 ? '1px solid rgba(22,199,132,.1)' : 'none', textAlign: 'center' }}>
           <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 18, color: 'var(--gold)' }}>{val?.toLocaleString?.() ?? val}</div>
           <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
         </div>
@@ -99,7 +99,7 @@ function CommunityPreview() {
       ) : posts.map((p, i) => (
         <div key={p.id} style={{ padding: '10px 0', borderBottom: i < posts.length - 1 ? '1px solid var(--line)' : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,var(--gold),#b8851f)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, color: '#000', flexShrink: 0 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#16c784, #0d9463)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, color: '#000', flexShrink: 0 }}>
               {(p.handle || 'G')[0].toUpperCase()}
             </div>
             <span style={{ fontWeight: 600, fontSize: 12 }}>@{p.handle}</span>
@@ -293,7 +293,7 @@ export default function Landing() {
                 <div className="nft-holo" style={{
                   background: `radial-gradient(circle at ${glareX}% ${glareY}%, 
                     rgba(255,255,255,.2) 0%, 
-                    rgba(232,179,57,.1) 25%, 
+                    rgba(22,199,132,.1) 25%, 
                     rgba(100,200,255,.08) 50%, 
                     rgba(200,100,255,.08) 75%, 
                     transparent 100%)`,

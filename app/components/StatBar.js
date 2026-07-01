@@ -33,7 +33,7 @@ export default function StatBar() {
       v: liveStats?.users != null ? liveStats.users.toLocaleString() : '—',
       d: liveStats?.users != null ? 'Collectors & traders' : 'Loading…',
       cls: 'up',
-      glow: 'rgba(232,179,57,.13)',
+      glow: 'rgba(22,199,132,.13)',
     },
     {
       k: 'Pack Pulls',

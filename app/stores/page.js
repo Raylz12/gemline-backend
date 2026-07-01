@@ -24,7 +24,7 @@ function StoreCard({ store }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
             width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-            background: store.avatar_url ? 'transparent' : 'linear-gradient(135deg, var(--gold), #b8851f)',
+            background: store.avatar_url ? 'transparent' : 'linear-gradient(135deg, #16c784, #0d9463)',
             display: 'grid', placeItems: 'center', fontSize: 22, fontWeight: 800, color: '#000',
             overflow: 'hidden',
           }}>
@@ -38,7 +38,7 @@ function StoreCard({ store }) {
                 {store.store_name || store.handle}
               </div>
               {store.store_verified && (
-                <span style={{ fontSize: 10, color: 'var(--gold)', background: 'rgba(232,179,57,.12)', border: '1px solid rgba(232,179,57,.3)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>✓ Verified</span>
+                <span style={{ fontSize: 10, color: 'var(--gold)', background: 'rgba(22,199,132,.12)', border: '1px solid rgba(22,199,132,.3)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>✓ Verified</span>
               )}
             </div>
             {store.store_location && (

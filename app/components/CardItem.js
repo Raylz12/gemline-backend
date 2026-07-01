@@ -91,7 +91,7 @@ export default function CardItem({ card: c, onClick }) {
             <span style={{
               marginLeft: 4, fontSize: 9, fontWeight: 600, fontFamily: 'var(--mono)',
               padding: '2px 5px', borderRadius: 4, letterSpacing: '.02em',
-              background: 'rgba(232,179,57,.12)', color: 'var(--gold)',
+              background: 'rgba(22,199,132,.12)', color: 'var(--gold)',
               verticalAlign: 'middle', whiteSpace: 'nowrap',
             }}>
               {c.variant.length > 20 ? c.variant.slice(0,18) + '…' : c.variant}

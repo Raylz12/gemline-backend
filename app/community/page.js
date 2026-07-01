@@ -66,7 +66,7 @@ function ProfileCard({ user, token, authFetch }) {
       <Link href={`/profile/${user.handle}`} style={{ flexShrink: 0 }}>
         <div style={{
           width: 52, height: 52, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--gold), #d4a12a)',
+          background: 'linear-gradient(135deg,#16c784,#10b377)',
           display: 'grid', placeItems: 'center', fontSize: 22, fontWeight: 800, color: '#000',
         }}>{initial}</div>
       </Link>
@@ -280,7 +280,7 @@ function FeedPost({ post, authFetch, token, onLiked }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <div style={{
           width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-          background: post.user?.avatarUrl ? `url(${post.user.avatarUrl}) center/cover` : 'linear-gradient(135deg,var(--gold),#b8851f)',
+          background: post.user?.avatarUrl ? `url(${post.user.avatarUrl}) center/cover` : 'linear-gradient(135deg,#16c784, #0d9463)',
           display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16, color: '#000',
         }}>{post.user?.avatarUrl ? '' : initial}</div>
         <div style={{ flex: 1 }}>
@@ -291,7 +291,7 @@ function FeedPost({ post, authFetch, token, onLiked }) {
         </div>
         <div style={{
           fontSize: 10, fontWeight: 600, fontFamily: 'var(--mono)',
-          color: meta.color, background: 'rgba(0,0,0,.3)', border: `1px solid ${meta.color}33`,
+          color: meta.color, background: 'var(--panel-2)', border: `1px solid ${meta.color}33`,
           padding: '3px 9px', borderRadius: 20, letterSpacing: '.08em',
         }}>{meta.icon} {meta.label}</div>
       </div>
@@ -400,7 +400,7 @@ function CommunityFeed({ user, authFetch, token }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{
             width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-            background: 'linear-gradient(135deg,var(--gold),#b8851f)',
+            background: 'linear-gradient(135deg,#16c784, #0d9463)',
             display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 14, color: '#000',
           }}>{user ? (user.handle || 'U')[0].toUpperCase() : 'G'}</div>
           <div style={{ flex: 1 }}>
@@ -629,7 +629,7 @@ export default function CommunityPage() {
                 <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Who to Follow</div>
                 {suggested.slice(0, 4).map(u => (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,var(--gold),#b8851f)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13, color: '#000', flexShrink: 0 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#16c784, #0d9463)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13, color: '#000', flexShrink: 0 }}>
                       {(u.handle || 'U')[0].toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>

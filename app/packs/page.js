@@ -26,7 +26,7 @@ function PoolCard({ pool, onPull, pulling }) {
       <div style={{ height: 90, background: 'linear-gradient(135deg,#1a1f35,#2a3060)', display: 'grid', placeItems: 'center', fontSize: 48, position: 'relative' }}>
         {sportEmoji}
         {pool.store_verified && (
-          <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 9, background: 'rgba(232,179,57,.15)', border: '1px solid rgba(232,179,57,.3)', color: 'var(--gold)', borderRadius: 4, padding: '2px 6px', fontFamily: 'var(--mono)' }}>✓ VERIFIED</div>
+          <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 9, background: 'rgba(22,199,132,.15)', border: '1px solid rgba(22,199,132,.3)', color: 'var(--gold)', borderRadius: 4, padding: '2px 6px', fontFamily: 'var(--mono)' }}>✓ VERIFIED</div>
         )}
         <div style={{ position: 'absolute', top: 8, left: 10, fontSize: 9, background: 'rgba(0,0,0,.5)', color: available > 0 ? 'var(--up)' : 'var(--down)', borderRadius: 4, padding: '2px 6px', fontFamily: 'var(--mono)' }}>
           {available} card{available !== 1 ? 's' : ''} left
@@ -60,7 +60,7 @@ function PoolCard({ pool, onPull, pulling }) {
           style={{
             marginTop: 'auto', padding: '11px 0', borderRadius: 9, fontWeight: 800, fontSize: 14,
             cursor: pulling || available === 0 ? 'not-allowed' : 'pointer',
-            background: available === 0 ? 'var(--panel-2)' : 'linear-gradient(135deg, var(--gold), #c89b2a)',
+            background: available === 0 ? 'var(--panel-2)' : 'linear-gradient(135deg, #16c784, #0fa76f)',
             color: available === 0 ? 'var(--dim)' : '#000',
             border: 'none', transition: 'opacity .15s',
             opacity: pulling ? 0.7 : 1,
@@ -94,7 +94,7 @@ function RevealModal({ card, onClose }) {
           background: revealed ? 'linear-gradient(135deg,#1a2040,#2a3060)' : 'linear-gradient(135deg,#111,#222)',
           border: `2px solid ${revealed ? 'var(--gold)' : 'var(--line)'}`,
           display: 'grid', placeItems: 'center', fontSize: 48,
-          boxShadow: revealed ? '0 0 40px rgba(232,179,57,.4)' : 'none',
+          boxShadow: revealed ? '0 0 40px rgba(22,199,132,.4)' : 'none',
           transition: 'all .6s cubic-bezier(.34,1.56,.64,1)',
           transform: revealed ? 'rotateY(0deg) scale(1.05)' : 'rotateY(90deg)',
         }}>
@@ -172,7 +172,7 @@ export default function MysteryPullsPage() {
       <p className="sub">Real cards, real value. Verified stores submit cards to pools — you pull one and it ships to you.</p>
 
       {/* How it works banner */}
-      <div style={{ background: 'rgba(232,179,57,.06)', border: '1px solid rgba(232,179,57,.15)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+      <div style={{ background: 'rgba(22,199,132,.06)', border: '1px solid rgba(22,199,132,.15)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         {[
           ['🏪', 'Verified stores submit real cards to each pool'],
           ['🎴', 'You buy a pull with credits and get a random card'],

@@ -698,7 +698,7 @@ export default function SellPage() {
                 } catch { setStoreMsg('Something went wrong. Try again.'); }
                 finally { setStoreSubmitting(false); }
               }} disabled={storeSubmitting}
-                style={{ padding: '12px 0', borderRadius: 10, background: 'linear-gradient(135deg,var(--gold),#c89b2a)', color: '#000', fontWeight: 800, fontSize: 14, border: 'none', cursor: storeSubmitting ? 'wait' : 'pointer', opacity: storeSubmitting ? 0.7 : 1 }}>
+                style={{ padding: '12px 0', borderRadius: 10, background: 'linear-gradient(135deg,#16c784, #0fa76f)', color: '#000', fontWeight: 800, fontSize: 14, border: 'none', cursor: storeSubmitting ? 'wait' : 'pointer', opacity: storeSubmitting ? 0.7 : 1 }}>
                 {storeSubmitting ? 'Submitting...' : 'Submit Application'}
               </button>
             </div>
