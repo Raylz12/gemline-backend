@@ -331,7 +331,7 @@ function FeedPost({ post, authFetch, token, onLiked }) {
           style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
             fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)',
             cursor: token ? 'pointer' : 'default', opacity: liking ? 0.6 : 1 }}>
-          <span style={{ fontSize: 14 }}>{liked ? '❤️' : '🤍'}</span> {likeCount}
+          <span style={{ fontSize: 14 }}>{liked ? '❤️' : '♡'}</span> {likeCount}
         </button>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5,
           fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>
