@@ -985,15 +985,26 @@ app.get('/api/users/search', async (req, res) => {
     if (!pool) return res.json({ users: [] });
     const q = (req.query.q || '').trim();
     if (!q || q.length < 1) return res.json({ users: [] });
+    if (q.length > 50) return res.status(400).json({ error: 'Query too long' });
+    // Single query with CTEs to avoid correlated subqueries (faster with many users)
     const { rows } = await pool.query(`
-      SELECT u.id, u.handle, 
-        (SELECT COUNT(*) FROM follows WHERE following_id = u.id) as follower_count,
-        (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) as following_count,
-        (SELECT COUNT(*) FROM portfolios WHERE user_id = u.id) as card_count
-      FROM users u
-      WHERE u.handle ILIKE $1 OR u.email ILIKE $2
-      LIMIT 20
-    `, [`%${q}%`, `${q}%`]);
+      WITH base AS (
+        SELECT u.id, u.handle
+        FROM users u
+        WHERE LOWER(u.handle) LIKE LOWER($1)
+        LIMIT 20
+      )
+      SELECT b.id, b.handle,
+        COUNT(DISTINCT f1.follower_id) AS follower_count,
+        COUNT(DISTINCT f2.following_id) AS following_count,
+        COUNT(DISTINCT p.id) AS card_count
+      FROM base b
+      LEFT JOIN follows f1 ON f1.following_id = b.id
+      LEFT JOIN follows f2 ON f2.follower_id = b.id
+      LEFT JOIN portfolios p ON p.user_id = b.id
+      GROUP BY b.id, b.handle
+      ORDER BY follower_count DESC
+    `, [`%${q}%`]);
     res.json({ users: rows.map(u => ({ ...u, avatar_url: null })) });
   } catch (e) { console.error('users/search:', e.message); res.json({ users: [] }); }
 });

@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Compress all responses for smaller payloads
+  compress: true,
+
+  // Granular image domains
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '942284f33c575895b4be9de571ca6e40.cdn.bubble.io' },
@@ -9,24 +13,41 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.pokemontcg.io' },
       { protocol: 'https', hostname: 'cdn.wnba.com' },
       { protocol: 'https', hostname: '*.cardhedger.com' },
+      { protocol: 'https', hostname: '*.cdninstagram.com' },
     ],
+    // Prefer modern formats
+    formats: ['image/avif', 'image/webp'],
+    // Cache optimized images longer
+    minimumCacheTTL: 86400,
   },
+
   async headers() {
     return [
       {
-        // Apply to all routes
+        // Security headers on all routes
         source: '/(.*)',
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-          // HSTS: only safe once you have HTTPS confirmed end-to-end
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          { key: 'X-DNS-Prefetch-Control', value: 'on' },
+        ],
+      },
+      {
+        // Short cache for API responses — no-store for auth, short for public
+        source: '/api/(.*)',
+        headers: [
+          { key: 'Vary', value: 'Accept-Encoding, Authorization' },
         ],
       },
     ];
   },
+
+  // Turbopack config (used by default in Next.js 16+)
+  turbopack: {},
+
   async rewrites() {
     return [];
   },

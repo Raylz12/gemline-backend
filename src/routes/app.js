@@ -50,22 +50,32 @@ export function appRouter(repo, stripe) {
     };
   }
 
+  // Listings cache: same data for all users, refreshed every 2 minutes
+  let _listingsCache = null;
+
   async function buildState(userId) {
     // Use a single JOIN query when Postgres is available to avoid N+1
     let cards = [];
     if (repo.pool) {
-      const { rows: listings } = await repo.pool.query(`
-        SELECT l.id AS listing_id, l.card_id, l.vault_item_id, l.seller_id, l.price, l.boost_rank,
-               c.player, c.sport, c.card_set, c.variant, c.number, c.grader, c.grade, c.image_url,
-               u.handle AS seller_handle
-        FROM listings l
-        JOIN cards c ON c.id = l.card_id
-        JOIN users u ON u.id = l.seller_id
-        WHERE l.status = 'active'
-        ORDER BY l.boost_rank DESC, l.created_at DESC
-        LIMIT 500
-      `);
-      cards = listings.map(l => ({
+      // Use cached listings for the common part (doesn't depend on userId)
+      if (!_listingsCache || _listingsCache.expires < Date.now()) {
+        const { rows: listings } = await repo.pool.query(`
+          SELECT l.id AS listing_id, l.card_id, l.vault_item_id, l.seller_id, l.price, l.boost_rank,
+                 c.player, c.sport, c.card_set, c.variant, c.number, c.grader, c.grade, c.image_url,
+                 u.handle AS seller_handle
+          FROM listings l
+          JOIN cards c ON c.id = l.card_id
+          JOIN users u ON u.id = l.seller_id
+          WHERE l.status = 'active'
+          ORDER BY l.boost_rank DESC, l.created_at DESC
+          LIMIT 500
+        `);
+        _listingsCache = {
+          rows: listings,
+          expires: Date.now() + 2 * 60 * 1000,
+        };
+      }
+      cards = _listingsCache.rows.map(l => ({
         listingId: l.listing_id, cardId: l.card_id, vaultItemId: l.vault_item_id || null,
         sellerId: l.seller_id, sellerHandle: l.seller_handle || 'Seller',
         ownedByMe: l.seller_id === userId,
@@ -94,9 +104,30 @@ export function appRouter(repo, stripe) {
 
     const ledgerRows = await repo.ledger.list({ user_id: userId });
     const balance   = ledgerRows.reduce((s, x) => s + x.delta, 0);
-    const allTrades = await repo.trades.list({});
-    const incoming  = await Promise.all(allTrades.filter(t => t.counterparty_id === userId && t.status === 'proposed').map(t => myView(t, userId)));
-    const outgoing  = await Promise.all(allTrades.filter(t => t.proposer_id === userId && ['proposed', 'settling'].includes(t.status)).map(t => myView(t, userId)));
+
+    // Use DB-level filter when pool is available — avoids loading all trades in memory
+    let incomingTrades = [], outgoingTrades = [];
+    if (repo.pool) {
+      const [inRes, outRes] = await Promise.all([
+        repo.pool.query(
+          `SELECT * FROM trades WHERE counterparty_id = $1 AND status = 'proposed' ORDER BY created_at DESC LIMIT 20`,
+          [userId]
+        ),
+        repo.pool.query(
+          `SELECT * FROM trades WHERE proposer_id = $1 AND status IN ('proposed','settling') ORDER BY created_at DESC LIMIT 20`,
+          [userId]
+        ),
+      ]);
+      incomingTrades = inRes.rows;
+      outgoingTrades = outRes.rows;
+    } else {
+      const allTrades = await repo.trades.list({});
+      incomingTrades = allTrades.filter(t => t.counterparty_id === userId && t.status === 'proposed');
+      outgoingTrades = allTrades.filter(t => t.proposer_id === userId && ['proposed', 'settling'].includes(t.status));
+    }
+
+    const incoming  = await Promise.all(incomingTrades.map(t => myView(t, userId)));
+    const outgoing  = await Promise.all(outgoingTrades.map(t => myView(t, userId)));
     const me = await repo.users.get(userId);
     return { me: { id: me.id, handle: me.handle }, balance, listings: cards, trades: { incoming, outgoing } };
   }

@@ -53,10 +53,24 @@ export default function AnalyticsPage() {
         <>
           <p className="sub" style={{ marginBottom: 16 }}>
             Tile size reflects market value. Color shows 7-day price change. Green = gaining, Red = losing.
-            {!loading && ` ${heatmapCards.length} active cards tracked.`}
+            {!loading && ` ${heatmapCards.length.toLocaleString()} active cards tracked.`}
           </p>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>Loading heatmap data...</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 4 }}>
+              {Array.from({ length: 48 }).map((_, i) => (
+                <div key={i} className="skeleton-line" style={{
+                  height: 72 + (i % 4) * 16,
+                  borderRadius: 6,
+                  opacity: 0.6 + (i % 3) * 0.1,
+                }} />
+              ))}
+            </div>
+          ) : heatmapCards.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📊</div>
+              <h3>No heatmap data</h3>
+              <p>Check back once cards with price data are loaded.</p>
+            </div>
           ) : (
             <Heatmap cards={heatmapCards} onSelect={setSelectedCard} />
           )}
