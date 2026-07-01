@@ -715,6 +715,15 @@ app.use('/api/catalog/search', async (req, res, next) => {
 // (Duplicate feed route removed — primary feed is defined above with pagination)
 
 // ── Wants/Bids — public listing (no auth for browsing) ────────────────────────
+// Lazy expiry: fire-and-forget cleanup, max once per minute to avoid hot-path overhead
+let _lastWantsExpiry = 0;
+function expireWants(pool) {
+  const now = Date.now();
+  if (now - _lastWantsExpiry < 60_000) return;
+  _lastWantsExpiry = now;
+  pool.query("UPDATE wants SET status = 'expired' WHERE status = 'active' AND expires_at < NOW()").catch(() => {});
+}
+
 app.get('/api/wants', async (req, res) => {
   try {
     const r = await getRepo();
@@ -722,7 +731,7 @@ app.get('/api/wants', async (req, res) => {
     if (!pool) return res.json({ wants: [] });
 
     const { cardId, userId, search, sort = 'newest' } = req.query;
-    await pool.query("UPDATE wants SET status = 'expired' WHERE status = 'active' AND expires_at < NOW()");
+    expireWants(pool);
 
     let query = `
       SELECT w.*, c.player, c.sport, c.card_set, c.grader, c.grade, c.year, c.variant,
@@ -754,7 +763,7 @@ app.get('/api/wants/top', async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ wants: [] });
-    await pool.query("UPDATE wants SET status = 'expired' WHERE status = 'active' AND expires_at < NOW()");
+    expireWants(pool);
     const { rows } = await pool.query(`
       SELECT w.*, c.player, c.sport, c.card_set, c.grader, c.grade,
              c.ebay_thumb, c.image_url, u.handle as buyer_handle
