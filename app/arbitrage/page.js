@@ -499,10 +499,21 @@ export default function ArbitragePage() {
     })
     .sort((a, b) => b.netEdge - a.netEdge), [cards]);
 
-  // Believability guard: only volume-validated, sane moves rank as gainers/losers
+  // Believability guard: only volume-validated, sane moves rank as gainers/losers.
+  // One row per underlying card — grade tiers of the same card move together and
+  // wallpaper the panel otherwise (Wemby ×4 in a 12-row list).
   const saneMove = (c) => Math.abs(c.gain7d || 0) <= 150 && (c.sales7d || 0) >= 5;
-  const gainers = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0 && saneMove(c)).sort((a, b) => b.gain7d - a.gain7d).slice(0, 12), [cards]);
-  const losers  = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0 && saneMove(c)).sort((a, b) => a.gain7d - b.gain7d).slice(0, 12), [cards]);
+  const dedupeFamily = (list) => {
+    const seen = new Set();
+    return list.filter(c => {
+      const key = c.player || c.cardhedge_id; // one row per player in a 12-row panel
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const gainers = useMemo(() => dedupeFamily([...cards].filter(c => c.gain7d > 0 && c.market > 0 && saneMove(c)).sort((a, b) => b.gain7d - a.gain7d)).slice(0, 12), [cards]);
+  const losers  = useMemo(() => dedupeFamily([...cards].filter(c => c.gain7d < 0 && c.market > 0 && saneMove(c)).sort((a, b) => a.gain7d - b.gain7d)).slice(0, 12), [cards]);
   const byVolume = useMemo(() => [...cards].filter(c => c.sales30d > 0).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [cards]);
   const heatCards = useMemo(() => [...cards].filter(c => c.gain7d !== 0 && c.market > 0 && saneMove(c)).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 24), [cards]);
   const tickerCards = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);

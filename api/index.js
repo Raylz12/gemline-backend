@@ -568,11 +568,14 @@ app.get('/api/market/heatmap', async (req, res) => {
          ORDER BY COALESCE(sales_7d,0) DESC LIMIT 1500`, params);
       // Dedupe: same card appears once per grade tier — keep one entry per
       // underlying card so the heatmap isn't wallpapered with duplicates.
+      // Also normalize legacy grader/grade pollution ('Raw Ungraded' etc).
       const seen = new Set();
       const deduped = raw.filter(c => {
         const key = c.cardhedge_id || `${c.player}|${c.set}|${c.variant}`;
         if (seen.has(key)) return false;
         seen.add(key);
+        c.grader = normGrader(c.grader);
+        c.grade = normGrade(c.grade);
         return true;
       });
       cachedPool = { rows: deduped, expires: Date.now() + 5 * 60 * 1000 };
@@ -963,7 +966,7 @@ app.get('/api/market/arb', async (req, res) => {
 
     const mapCard = (c) => ({
       id: c.id, player: c.player, sport: c.sport, set: c.card_set,
-      grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
+      grader: normGrader(c.grader), grade: normGrade(c.grade), year: c.year, variant: c.variant,
       market: Number(c.catalog_price) || 0,
       lo: Number(c.ch_price_lo) || 0, hi: Number(c.ch_price_hi) || 0,
       gain7d: Number(c.gain_7d) || 0, sales7d: Number(c.sales_7d) || 0,

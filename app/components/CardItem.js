@@ -100,10 +100,10 @@ export default function CardItem({ card: c, onClick }) {
         <div className="meta meta-set">{c.set}</div>
         <div className="meta-chips">
           <span className="mchip mchip-grade">{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>
-          {c.variant && c.variant !== 'Base' && (
-            <span className="mchip mchip-var">{c.variant.length > 20 ? c.variant.slice(0, 18) + '…' : c.variant}</span>
-          )}
           {c.num && <span className="mchip">#{String(c.num).replace(/^#/, '')}</span>}
+          {c.variant && c.variant !== 'Base' && (
+            <span className="mchip mchip-var">{c.variant.length > 16 ? c.variant.slice(0, 14) + '…' : c.variant}</span>
+          )}
           {c.gradeCount > 1 && <span className="mchip mchip-grades">{c.gradeCount} grades</span>}
         </div>
         <div className="priceline">

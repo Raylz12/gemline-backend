@@ -106,7 +106,7 @@ export default async function CardPage({ params }) {
   const stat = (label, value, color) => (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '14px 16px' }}>
       <div style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '.1em', color: 'var(--dim)', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-      <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: color || 'var(--ink)' }}>{value}</div>
+      <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: color || 'var(--txt)' }}>{value}</div>
     </div>
   );
 
@@ -173,7 +173,7 @@ export default async function CardPage({ params }) {
             <div style={{ display: 'grid', gap: 6 }}>
               {related.map(rc => (
                 <Link key={rc.id} href={`/card/${rc.id}`}
-                  style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '10px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, textDecoration: 'none', color: 'var(--ink)', fontSize: 13 }}>
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '10px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, textDecoration: 'none', color: 'var(--txt)', fontSize: 13 }}>
                   <span>{cardName(rc)}</span>
                   <span className="mono" style={{ color: 'var(--gold)', fontWeight: 600, whiteSpace: 'nowrap' }}>{usd(rc.catalog_price)}</span>
                 </Link>
