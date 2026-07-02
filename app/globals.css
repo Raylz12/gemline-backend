@@ -275,6 +275,17 @@ body.page-dark .mchip-grade,.cd-dark .mchip-grade{color:var(--gold)}
 .hold .nm small{display:block;color:var(--muted);font-family:var(--mono);font-size:11px}
 .hold .num{font-family:var(--mono);font-size:12.5px;text-align:right}
 .hold .num small{display:block;color:var(--muted);font-size:10px}
+.hold .nm{min-width:0;overflow:hidden}
+/* ≤600px: the 5-column row can't fit — two-row layout (name+market on top,
+   P&L + actions below) instead of a 13px-wide name column overflowing. */
+@media(max-width:600px){
+  .hold{grid-template-columns:38px minmax(0,1fr) auto;row-gap:8px;gap:10px}
+  .hold .mini{grid-row:1 / span 2;grid-column:1}
+  .hold .nm{grid-column:2;grid-row:1}
+  .hold > *:nth-child(3){grid-column:3;grid-row:1}
+  .hold > *:nth-child(4){grid-column:2;grid-row:2;justify-self:start;text-align:left}
+  .hold > *:nth-child(5){grid-column:3;grid-row:2;justify-self:end}
+}
 .alloc{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
 .alloc .bar{display:flex;height:11px;border-radius:6px;overflow:hidden;margin:14px 0}
 .alloc .bar i{height:100%}
