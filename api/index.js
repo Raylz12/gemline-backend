@@ -1337,7 +1337,11 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
 //            PSA_API_TOKEN is configured (publicapi lookup); otherwise 'pending'.
 const VERIFY_REQUIRED_MSG = 'Verify this card before listing — scan it or add its cert';
 
-const vTokens = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+const vTokens = (s) => String(s || '').toLowerCase()
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')   // é → e (Pokémon)
+  .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+// Words that carry no set identity (“Pokémon Trading Card Game” ≈ unreadable set)
+const GENERIC_SET_WORDS = new Set(['pokemon', 'trading', 'card', 'cards', 'game', 'tcg', 'the', 'series']);
 function tokenOverlap(a, b) {
   const ta = vTokens(a); const tb = new Set(vTokens(b));
   if (!ta.length || !tb.size) return 0;
@@ -1353,7 +1357,16 @@ function scanMatchesCard(scan, card) {
   if (cardYear && scanYear && Math.abs(Number(cardYear) - Number(scanYear)) > 1) {
     return { ok: false, reason: `Scan shows a ${scanYear} card — this item is ${cardYear}` };
   }
-  if (card.card_set && scan.set && tokenOverlap(card.card_set, scan.set) === 0 && tokenOverlap(scan.set, card.card_set) === 0) {
+  // Card number is a strong identity signal — an exact number match plus the
+  // player/year checks above outweighs a fuzzy set-name read.
+  const numNorm = (v) => String(v || '').toLowerCase().replace(/[^0-9a-z]/g, '');
+  const numberMatches = card.number && scan.cardNumber &&
+    (numNorm(scan.cardNumber) === numNorm(card.number) ||
+     numNorm(scan.cardNumber).startsWith(numNorm(card.number)) ||
+     numNorm(scan.cardNumber).split(/(?=\D)/)[0] === numNorm(card.number));
+  const scanSetInformative = vTokens(scan.set).some(t => !GENERIC_SET_WORDS.has(t));
+  if (!numberMatches && scanSetInformative &&
+      card.card_set && scan.set && tokenOverlap(card.card_set, scan.set) === 0 && tokenOverlap(scan.set, card.card_set) === 0) {
     return { ok: false, reason: `Scan shows “${scan.set}” — doesn’t match ${card.card_set}` };
   }
   // Grade fraud guard: a graded item must be scanned as the SLAB — a raw copy
