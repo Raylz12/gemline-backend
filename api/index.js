@@ -30,6 +30,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Camera scans post a full-resolution photo — needs a bigger body limit (registered
+// BEFORE the global 128kb parser; express.json skips already-parsed bodies).
+app.use('/api/cards/analyze', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '128kb' }));   // prevent large payload attacks
 app.use(express.static(join(__dirname, '..', 'public')));
 
@@ -384,10 +387,12 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
         headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ card_id: cardhedgeId, grade, days }),
       }),
+      // NOTE: /v1/cards/comps REQUIRES count + grade (limit-only 400s on every card).
+      // include_raw_prices returns the individual sales (raw_prices[]) w/ sale_url.
       fetch('https://api.cardhedger.com/v1/cards/comps', {
         method: 'POST',
         headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_id: cardhedgeId, limit: 20 }),
+        body: JSON.stringify({ card_id: cardhedgeId, grade, count: 20, include_raw_prices: true }),
       }),
     ]);
 
@@ -402,12 +407,14 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
     let comps = [];
     if (compRes.status === 'fulfilled' && compRes.value.ok) {
       const cd = await compRes.value.json();
-      comps = (cd.comps || cd.sales || []).slice(0, 20).map(c => ({
+      comps = (cd.raw_prices || cd.comps || cd.sales || []).slice(0, 20).map(c => ({
         date: c.sale_date || c.date,
-        price: Number(c.sale_price || c.price),
-        source: c.source || 'eBay',
-        url: c.listing_url || null,
-      })).filter(c => c.price > 0);
+        price: Number(c.sale_price ?? c.price),
+        source: c.price_source || c.source || 'eBay',
+        url: c.sale_url || c.listing_url || null,
+        title: c.title || null,
+      })).filter(c => c.price > 0)
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     }
 
     // Stats derived from history
@@ -729,11 +736,68 @@ app.post('/api/catalog/search', async (req, res) => {
 });
 
 // ── Public routes (no auth) ──────────────────────────────────────────────────
+// AI vision card identification from a camera photo. Returns extracted card fields;
+// the client then runs a catalog family search + user confirmation (never auto-adds).
 app.post('/api/cards/analyze', rateLimit({ max: 20, windowMs: 60_000 }), async (req, res) => {
-  const r = await getRepo();
-  const { appRouter } = await import('../src/routes/app.js');
-  // Extract the analyze handler by mounting temporarily
-  appRouter(r, null)(req, res, () => res.status(404).json({ error: 'not found' }));
+  try {
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+    if (!ANTHROPIC_KEY) return res.status(503).json({ error: 'Card scanning is not configured' });
+    const image = String(req.body?.image || '');
+    const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(image);
+    if (!m) return res.status(400).json({ error: 'Send { image: <dataURL> }' });
+    const [, mediaType, b64] = m;
+    if (b64.length > 5_500_000) return res.status(413).json({ error: 'Image too large — try again' });
+
+    const prompt = `Identify the trading card in this photo. Respond with ONLY a JSON object, no other text:
+{"player":"full player/character name","year":"e.g. 2023","set":"product/set name e.g. Panini Prizm","cardNumber":"card number without # if visible","sport":"Football|Basketball|Baseball|Hockey|Soccer|Pokemon|Other","grader":"PSA|BGS|SGC|CGC or null if raw/ungraded","grade":"numeric grade e.g. 10 or null","certNumber":"grading cert number if visible on the slab label, else null","variant":"parallel/insert name if any, else null","condition":"brief condition note for raw cards, else null","confidence":0.0-1.0}
+Use null for anything you cannot read. If the photo does not show a trading card, respond with {"error":"no_card"}.`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 400,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+      }),
+    });
+    if (!aiRes.ok) {
+      const errTxt = await aiRes.text().catch(() => '');
+      console.error('analyze AI:', aiRes.status, errTxt.slice(0, 300));
+      return res.status(502).json({ error: 'Card analysis failed — please try again' });
+    }
+    const data = await aiRes.json();
+    const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    const jsonMatch = txt.match(/\{[\s\S]*\}/);
+    let info = null;
+    try { info = jsonMatch ? JSON.parse(jsonMatch[0]) : null; } catch {}
+    if (!info || info.error || !info.player) {
+      return res.status(422).json({ error: 'Could not identify a card — try a clearer, well-lit photo' });
+    }
+    const clean = (v) => (v === null || v === undefined || v === 'null' || v === '' ? null : String(v).trim());
+    res.json({
+      player: clean(info.player),
+      year: clean(info.year),
+      set: clean(info.set),
+      cardNumber: clean(info.cardNumber),
+      sport: clean(info.sport) || 'Other',
+      grader: clean(info.grader),
+      grade: clean(info.grade),
+      certNumber: clean(info.certNumber),
+      variant: clean(info.variant),
+      condition: clean(info.condition),
+      confidence: Math.max(0, Math.min(1, Number(info.confidence) || 0)),
+    });
+  } catch (e) {
+    console.error('analyze:', e.message);
+    res.status(500).json({ error: 'Card analysis failed — please try again' });
+  }
 });
 
 // GET /api/market/arb — dedicated arbitrage data (cached 5min)
