@@ -3025,6 +3025,14 @@ main>*{animation:fade .3s ease}
   background:#0d1119;color:var(--txt);border:1px solid #232a3b;
   box-shadow:0 40px 100px rgba(0,0,0,.65);width:min(1020px,100%);
 }
+/* Settings (and any modal-box.dark-sheet): same dark intelligence tokens */
+.modal-box.dark-sheet{
+  --ink:#0a0d15;--panel:#11151f;--panel-2:#181d2a;--line:#222839;--line-2:#2e3648;
+  --txt:#eef1f6;--muted:#8b93a6;--dim:#5c6375;
+  --gold-soft:rgba(22,199,132,.13);--up-soft:rgba(22,199,132,.13);--down-soft:rgba(239,68,68,.13);
+  background:#0d1119;color:var(--txt);border:1px solid #232a3b;
+  box-shadow:0 40px 100px rgba(0,0,0,.65);
+}
 .cd-dark .grade{background:rgba(37,99,235,.18);color:#7ea8ff;border-color:rgba(126,168,255,.3)}
 .cd-dark .conf-med{background:rgba(37,99,235,.15);color:#7ea8ff}
 .cd-dark .conf-est{background:var(--panel-2);color:var(--muted)}

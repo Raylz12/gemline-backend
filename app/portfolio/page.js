@@ -454,7 +454,7 @@ export default function PortfolioPage() {
               }} />
               <div className="nm" style={{ flex: 1, minWidth: 0 }}>
                 {item.player}
-                <small>{item.set} · {item.grader} {item.grade}</small>
+                <small style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>{item.set}</span><span className="mchip mchip-grade">{`${item.grader || 'RAW'} ${item.grade || ''}`.trim()}</span></small>
               </div>
               <div className="num">
                 {item.marketValue ? fmt(item.marketValue) : '—'}
@@ -545,7 +545,7 @@ export default function PortfolioPage() {
             </button>
             <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>List for Sale</h2>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
-              {listingItem.player} · {[listingItem.grader, listingItem.grade].filter(Boolean).join(' ')}
+              {listingItem.player} <span className="mchip mchip-grade">{[listingItem.grader, listingItem.grade].filter(Boolean).join(' ') || 'RAW'}</span>
             </div>
             {listingItem.marketValue > 0 && (
               <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 12, fontFamily: 'var(--mono)' }}>
@@ -602,9 +602,9 @@ export default function PortfolioPage() {
                 <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--muted)', marginBottom: 4 }}>📷 SCANNED</div>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {scanInfo.player}
-                  {scanInfo.year ? ` · ${scanInfo.year}` : ''}{scanInfo.set ? ` ${scanInfo.set}` : ''}
-                  {scanInfo.cardNumber ? ` · #${scanInfo.cardNumber}` : ''}
-                  {scanInfo.grader ? ` · ${scanInfo.grader} ${scanInfo.grade || ''}`.trimEnd() : ''}
+                  {scanInfo.year ? ` ${scanInfo.year}` : ''}{scanInfo.set ? ` ${scanInfo.set}` : ''}
+                  {scanInfo.cardNumber ? ` #${scanInfo.cardNumber}` : ''}
+                  {scanInfo.grader ? ` ${scanInfo.grader} ${scanInfo.grade || ''}`.trimEnd() : ''}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pick the exact card and version below — nothing is added until you choose.</div>
               </div>
@@ -654,8 +654,8 @@ export default function PortfolioPage() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{fam.player}</div>
                         <div style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {fam.card_set || ''}{fam.number ? ` #${fam.number}` : ''}{fam.variant && fam.variant !== 'Base' ? ` · ${fam.variant}` : ''}
-                          {fam.sport ? ` · ${fam.sport}` : ''}
+                          {fam.card_set || ''}{fam.number ? ` #${fam.number}` : ''}{fam.variant && fam.variant !== 'Base' ? ` ${fam.variant}` : ''}
+                          {fam.sport ? ` ${fam.sport}` : ''}
                         </div>
                       </div>
                       {fam.topPrice > 0 && (
@@ -709,7 +709,7 @@ export default function PortfolioPage() {
             </button>
             <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>What did you pay?</h2>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-              {costItem.player} · {[costItem.grader, costItem.grade].filter(Boolean).join(' ')}
+              {costItem.player} <span className="mchip mchip-grade">{[costItem.grader, costItem.grade].filter(Boolean).join(' ') || 'RAW'}</span>
               {costItem.marketValue > 0 && <span> · Market <span style={{ color: 'var(--gold)', fontFamily: 'var(--mono)' }}>{fmt(costItem.marketValue)}</span></span>}
             </div>
             <div style={{ position: 'relative', marginBottom: 16 }}>
@@ -746,7 +746,7 @@ export default function PortfolioPage() {
             </button>
             <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Verify this card</h2>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-              {verifyItem.player} · {[verifyItem.grader, verifyItem.grade].filter(Boolean).join(' ')}
+              {verifyItem.player} <span className="mchip mchip-grade">{[verifyItem.grader, verifyItem.grade].filter(Boolean).join(' ') || 'RAW'}</span>
             </div>
             <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 18 }}>
               Buyers trust verified cards. Verify once and this card can be listed for sale —
