@@ -27,7 +27,8 @@ export default function ClientLayout({ children }) {
         {isLanding ? null : children}
       </main>
       {!isLanding && <MobileNav />}
-      <Footer />
+      {/* Landing renders its own Footer inside its fixed scroll container */}
+      {!isLanding && <Footer />}
       <NetworkStatus />
     </>
   );
