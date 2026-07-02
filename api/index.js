@@ -3050,8 +3050,8 @@ app.get('/api/stores', async (req, res) => {
     params.push(Math.min(100, Math.max(1, parseInt(limit) || 20)), Math.max(0, parseInt(offset) || 0));
     const { rows } = await pool.query(`
       SELECT u.id, u.handle, u.store_name, u.store_description, u.store_location,
-             u.store_website, u.avatar_url, u.rating,
-             COUNT(DISTINCT l.id) FILTER (WHERE l.active) AS listing_count,
+             u.store_website, u.store_verified, u.avatar_url, u.rating,
+             COUNT(DISTINCT l.id) FILTER (WHERE l.status = 'active') AS listing_count,
              COUNT(DISTINCT f.follower_id) AS follower_count
       FROM users u
       LEFT JOIN listings l ON l.seller_id = u.id
@@ -3073,13 +3073,16 @@ app.get('/api/store/:handle', async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.status(404).json({ error: 'Not found' });
+    // NOTE: columns must match the real schema — listings has status/price
+    // (cents), orders has amount/status 'settled'; l.active / o.amount_cents /
+    // l.ask_cents never existed and 500'd every store page.
     const { rows } = await pool.query(`
       SELECT u.id, u.handle, u.store_name, u.store_description, u.store_location,
              u.store_website, u.store_verified, u.avatar_url, u.rating, u.bio,
              u.created_at,
-             COUNT(DISTINCT l.id) FILTER (WHERE l.active) AS listing_count,
+             COUNT(DISTINCT l.id) FILTER (WHERE l.status = 'active') AS listing_count,
              COUNT(DISTINCT f.follower_id) AS follower_count,
-             COALESCE(SUM(o.amount_cents) FILTER (WHERE o.status = 'complete'), 0) AS total_sales_cents
+             COALESCE(SUM(o.amount) FILTER (WHERE o.status = 'settled'), 0) AS total_sales_cents
       FROM users u
       LEFT JOIN listings l ON l.seller_id = u.id
       LEFT JOIN follows f ON f.following_id = u.id
@@ -3090,11 +3093,11 @@ app.get('/api/store/:handle', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Store not found' });
     // Get active listings
     const { rows: listings } = await pool.query(`
-      SELECT l.id, l.ask_cents, l.created_at, l.condition,
+      SELECT l.id, l.price AS ask_cents, l.created_at,
              c.player, c.sport, c.card_set, c.year, c.grader, c.grade, c.ebay_thumb, c.variant
       FROM listings l
       JOIN cards c ON c.id = l.card_id
-      WHERE l.seller_id = $1 AND l.active = TRUE
+      WHERE l.seller_id = $1 AND l.status = 'active'
       ORDER BY l.created_at DESC LIMIT 24
     `, [rows[0].id]);
     res.json({ store: rows[0], listings });
