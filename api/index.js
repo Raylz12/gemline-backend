@@ -658,7 +658,7 @@ app.post('/api/catalog/search', async (req, res) => {
                 similarity(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,''), $1) AS sim
          FROM cards
          WHERE ${conds.join(' AND ')}
-         ORDER BY sim DESC, catalog_price DESC NULLS LAST
+         ORDER BY sim DESC, sales_30d DESC NULLS LAST, catalog_price DESC NULLS LAST
          LIMIT 500
        )
        SELECT player, card_set, variant, number, sport,
@@ -686,9 +686,11 @@ app.post('/api/catalog/search', async (req, res) => {
         const grade = normGrade(t.grade);
         const key = `${grader}|${grade}`;
         const price = Number(t.catalog_price) || 0;
+        const sales30d = Number(t.sales_30d) || 0;
         const prev = seen.get(key);
-        if (!prev || price > prev.price) {
-          seen.set(key, { id: t.id, grader, grade, price, sales30d: Number(t.sales_30d) || 0 });
+        // Prefer the most-traded row (liquidity), then price — avoids low-volume price outliers
+        if (!prev || sales30d > prev.sales30d || (sales30d === prev.sales30d && price > prev.price)) {
+          seen.set(key, { id: t.id, grader, grade, price, sales30d });
         }
       }
       const tiers = [...seen.values()].sort((a, b) => {

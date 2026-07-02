@@ -592,7 +592,7 @@ export default function PortfolioPage() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{fam.player}</div>
                         <div style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {fam.card_set || ''}{fam.variant && fam.variant !== 'Base' ? ` · ${fam.variant}` : ''}
+                          {fam.card_set || ''}{fam.number ? ` #${fam.number}` : ''}{fam.variant && fam.variant !== 'Base' ? ` · ${fam.variant}` : ''}
                           {fam.sport ? ` · ${fam.sport}` : ''}
                         </div>
                       </div>
