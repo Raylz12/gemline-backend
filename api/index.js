@@ -597,7 +597,11 @@ app.get('/api/market/feed', async (req, res) => {
     // Sport counts — query from mv (fast, indexed)
     let sportCounts = app._sportCounts;
     if (!sportCounts || sportCounts.expires < Date.now()) {
-      const { rows: sc } = await pool.query('SELECT sport, COUNT(*) as cnt FROM mv_card_feed GROUP BY sport ORDER BY cnt DESC');
+      const { rows: sc } = await pool.query(
+        // Defensive: never surface junk import IDs (^[0-9]+x[0-9]+$) or empty sports
+        `SELECT sport, COUNT(*) as cnt FROM mv_card_feed
+         WHERE sport IS NOT NULL AND sport <> '' AND sport !~ '^[0-9]+x[0-9]+$'
+         GROUP BY sport ORDER BY cnt DESC`);
       sportCounts = { data: sc.map(r => ({ sport: r.sport, count: Number(r.cnt) })), expires: Date.now() + 60 * 60 * 1000 };
       app._sportCounts = sportCounts;
     }
