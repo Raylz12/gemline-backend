@@ -353,6 +353,7 @@ export default function CardDetail({ card: c, onClose }) {
   const [similarCards, setSimilarCards] = useState([]);
   const [isLiked, setIsLiked] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
+  const [tab, setTab] = useState('grades');
   if (!c) return null;
 
   const isRC = c.rookie || (c.variant || '').toLowerCase().includes('rc') ||
@@ -508,293 +509,357 @@ export default function CardDetail({ card: c, onClose }) {
     return () => window.removeEventListener('keydown', esc);
   }, [onClose]);
 
+  // ── Derived market intelligence ──
+  const sales30 = c.sales30d || 0;
+  const sales7 = c.sales7d || 0;
+  const liquidity = sales30 >= 25 ? 'HIGH' : sales30 >= 8 ? 'MEDIUM' : sales30 >= 2 ? 'LOW' : 'THIN';
+  const liqColor = sales30 >= 25 ? 'var(--up)' : sales30 >= 8 ? 'var(--gold)' : sales30 >= 2 ? '#e8b339' : 'var(--dim)';
+  const confKey = (c.confidence || '').toLowerCase();
+  const confScore = { very_high: 95, high: 82, medium: 58, low: 32, catalog: 22 }[confKey] || 40;
+  const salesScore = Math.min(100, sales30 * 4);
+  const trendOk = c.gain7d !== undefined && Math.abs(c.gain7d) <= 999;
+  const stabilityScore = trendOk ? Math.max(0, 100 - Math.min(100, Math.abs(c.gain7d) * 2)) : 50;
+  const marketScore = Math.round(salesScore * 0.4 + confScore * 0.4 + stabilityScore * 0.2);
+  const scoreColor = marketScore >= 70 ? 'var(--up)' : marketScore >= 45 ? '#e8b339' : 'var(--down)';
+  const spreadPct = hasRange && c.market > 0 ? Math.round(((c.hi - c.lo) / c.market) * 100) : null;
+
+  const gainDisplay = trendOk && c.gain7d !== 0 ? c.gain7d : null;
+
+  const TABS = [
+    { id: 'grades', label: 'Price & Grades' },
+    { id: 'insight', label: 'Market Insight' },
+    { id: 'comps', label: `Comps${priceComps.length ? ` (${priceComps.length})` : ''}` },
+  ];
+
+  const openOffer = () => {
+    if (lowestListing) {
+      setShowOfferModal(lowestListing.id);
+      setOfferAmount(String(Math.round(Number(lowestListing.price) * 0.85)));
+    } else {
+      setShowBidForm(v => !v);
+    }
+  };
+
   return (
-    <div className="overlay on" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ position: 'relative', maxHeight: '90vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <button className="modal-close" onClick={onClose} style={{ minWidth: 44, minHeight: 44, width: 44, height: 44, cursor: 'pointer', zIndex: 10 }}>
+    <div className="overlay on cd-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal cd-dark" style={{ position: 'relative', maxHeight: '92vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <button className="modal-close cd-close" onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
-        <div className="modal-grid">
-          {/* Left: card image */}
-          <div className="modal-left">
-            <div className="bigslab">
+
+        <div className="cd-grid">
+          {/* ── Left slab rail ── */}
+          <aside className="cd-rail">
+            <div className="cd-slab">
               {c.thumbnail ? (
-                <img src={c.thumbnail} alt={c.player} style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 12 }}
+                <img src={c.thumbnail} alt={c.player}
                      onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
               ) : null}
-              <div style={{ display: c.thumbnail ? 'none' : 'flex', width: '100%', height: 260, borderRadius: 12, background: `linear-gradient(150deg,${c.theme[0]},${c.theme[1]})`, alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
-                <span style={{ fontFamily: 'var(--disp)', fontSize: 36, fontWeight: 800, color: 'rgba(255,255,255,.7)' }}>{c.ini}</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'rgba(255,255,255,.5)' }}>{c.player}</span>
+              <div className="cd-slab-fallback" style={{ display: c.thumbnail ? 'none' : 'flex', background: `linear-gradient(150deg,${c.theme?.[0] || '#1a1f2e'},${c.theme?.[1] || '#12151f'})` }}>
+                <span className="cd-slab-ini">{c.ini}</span>
+                <span className="cd-slab-name">{c.player}</span>
               </div>
+              <span className={`grade cd-slab-grade ${gradeClass(c.grader)}`}>{c.grader} {c.grade}</span>
             </div>
-            <div style={{ marginTop: 18, textAlign: 'center' }}>
-              {c.confidence && <span className={`conf-badge conf-${c.confidence.toLowerCase()}`} style={{ fontSize: 12, padding: '4px 10px' }}>{confidenceLabel(c.confidence)}</span>}
-              {c.saleCount > 0 && <span className="pill" style={{ fontSize: 11, marginLeft: 8 }}>{c.saleCount} recent sales</span>}
-            </div>
-          </div>
 
-          {/* Right: details */}
-          <div className="modal-right">
-            <div className="mr-head">
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="cd-rail-badges">
+              {c.confidence && <span className={`conf-badge conf-${c.confidence.toLowerCase()}`}>{confidenceLabel(c.confidence)}</span>}
+              {c.saleCount > 0 && <span className="pill">{c.saleCount} recent sales</span>}
+            </div>
+
+            <div className="cd-facts">
+              {c.sport && <div className="cd-fact"><span>Sport</span><b>{c.sport}</b></div>}
+              {c.set && <div className="cd-fact"><span>Set</span><b>{c.set}</b></div>}
+              {c.num && <div className="cd-fact"><span>Card #</span><b>{c.num}</b></div>}
+              {c.variant && <div className="cd-fact"><span>Variant</span><b>{c.variant}</b></div>}
+              <div className="cd-fact"><span>Grade</span><b>{c.grader} {c.grade}</b></div>
+              {isRC && <div className="cd-fact"><span>Rookie</span><b style={{ color: 'var(--gold)' }}>Yes — RC</b></div>}
+            </div>
+          </aside>
+
+          {/* ── Right: intelligence panel ── */}
+          <div className="cd-main">
+            <div className="cd-head">
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h2>{c.player}</h2>
                   {isRC && <span className="rc-tag" style={{ fontSize: 11, padding: '3px 7px' }}>RC</span>}
                 </div>
-                <div className="meta">{c.set}{c.variant ? ` · ${c.variant}` : ''}{c.num ? ` · ${c.num}` : ''}</div>
+                <div className="cd-meta">{c.set}{c.variant ? ` · ${c.variant}` : ''}{c.num ? ` · ${c.num}` : ''}</div>
               </div>
-              <span className={`grade ${gradeClass(c.grader)}`}>{c.grader} {c.grade}</span>
-            </div>
-
-            {/* Price section */}
-            <div className="mr-price">
-              {hasPrice ? (
-                <>
-                  <span className="ask mono">{fmtDisplay(c.market)}</span>
-                  <span style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)', paddingBottom: 7 }}>catalog price</span>
-                </>
-              ) : (
-                <span className="ask mono" style={{ color: 'var(--dim)' }}>Price TBD</span>
-              )}
-            </div>
-
-            {/* FMV Range Bar */}
-            {hasRange && (
-              <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>FMV Range</h4>
-                <FMVBar lo={c.lo} market={c.market} hi={c.hi} />
-              </div>
-            )}
-
-            {/* Price History Chart */}
-            {c.cardhedge_id && (
-              <div className="mr-section" style={{ marginBottom: 20 }}>
-                {/* Chart header: title + range tabs */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <h4 style={{ margin: 0 }}>Price History</h4>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {[7, 30, 90].map(d => (
-                      <button key={d} onClick={() => setChartDays(d)} style={{
-                        fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
-                        padding: '3px 8px', borderRadius: 5, cursor: 'pointer', border: 'none',
-                        background: chartDays === d ? 'var(--violet)' : 'var(--panel-2)',
-                        color: chartDays === d ? '#fff' : 'var(--muted)',
-                        transition: 'background .15s',
-                      }}>{d}D</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Grade selector — show if card has multiple grades */}
-                {c.grades && c.grades.length > 1 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                    <button onClick={() => setChartGrade(null)} style={{
-                      fontFamily: 'var(--mono)', fontSize: 9, padding: '2px 7px',
-                      borderRadius: 4, cursor: 'pointer', border: 'none',
-                      background: !chartGrade ? 'var(--gold)' : 'var(--panel-2)',
-                      color: !chartGrade ? '#000' : 'var(--muted)',
-                    }}>
-                      {c.grader} {c.grade}
-                    </button>
-                    {c.grades
-                      .filter(g => !(g.grader === c.grader && String(g.grade) === String(c.grade)))
-                      .slice(0, 5)
-                      .map((g, i) => {
-                        const gLabel = `${g.grader} ${g.grade}`;
-                        return (
-                          <button key={i} onClick={() => setChartGrade(gLabel)} style={{
-                            fontFamily: 'var(--mono)', fontSize: 9, padding: '2px 7px',
-                            borderRadius: 4, cursor: 'pointer', border: 'none',
-                            background: chartGrade === gLabel ? 'var(--gold)' : 'var(--panel-2)',
-                            color: chartGrade === gLabel ? '#000' : 'var(--muted)',
-                          }}>{gLabel}</button>
-                        );
-                      })}
-                  </div>
-                )}
-
-                {/* Chart body */}
-                {historyLoading ? (
-                  <div style={{
-                    height: 180, background: 'var(--panel-2)', borderRadius: 10,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--dim)', fontSize: 12,
+              <div className="cd-head-icons">
+                <button className={`cd-icon ${isLiked ? 'on-like' : ''}`} onClick={handleLike} title={isLiked ? 'Unlike' : 'Like'}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill={isLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                </button>
+                <button className={`cd-icon ${isPinned ? 'on-pin' : ''}`} onClick={handlePin} title={isPinned ? 'Unpin' : 'Pin to portfolio'}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg>
+                </button>
+                <button className="cd-icon" disabled={addingToPortfolio} title="Add to portfolio"
+                  onClick={async () => {
+                    if (!token) { toast('Please log in first', true); return; }
+                    setAddingToPortfolio(true);
+                    try {
+                      const res = await fetch('/api/portfolio/add', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ cardId: c.id, quantity: 1 }),
+                      });
+                      if (res.ok) toast('Added to portfolio ✓');
+                      else { const d = await res.json().catch(() => ({})); toast(d.error || 'Failed to add', true); }
+                    } catch { toast('Failed to add to portfolio', true); }
+                    finally { setAddingToPortfolio(false); }
                   }}>
-                    <span style={{ animation: 'spin 1s linear infinite', marginRight: 8, display: 'inline-block' }}>◌</span>
-                    Loading price data...
-                  </div>
-                ) : priceHistory.length > 1 ? (
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 10, padding: '12px 10px 4px' }}>
-                    <PriceChart
-                      prices={priceHistory}
-                      comps={priceComps}
-                      lo={c.lo || null}
-                      hi={c.hi || null}
-                      currentPrice={c.market || null}
-                    />
-                    {/* Stats bar */}
-                    {priceStats && (
-                      <div style={{ display: 'flex', gap: 8, marginTop: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                        {[
-                          { label: 'OPEN', val: priceStats.open },
-                          { label: 'CLOSE', val: priceStats.close },
-                          { label: `${chartDays}D LOW`, val: priceStats.low },
-                          { label: `${chartDays}D HIGH`, val: priceStats.high },
-                        ].map(({ label, val }) => (
-                          <div key={label} style={{ flex: '1 1 60px', background: 'rgba(255,255,255,.04)', borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', letterSpacing: '.08em' }}>{label}</div>
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, marginTop: 2 }}>
-                              {val >= 1000 ? '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '$' + Number(val).toFixed(2)}
-                            </div>
-                          </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Hero price */}
+            <div className="cd-hero">
+              <div className="cd-hero-price">
+                {hasPrice ? (
+                  <>
+                    <span className="cd-price mono">{fmtDisplay(c.market)}</span>
+                    <span className="cd-price-label">market value</span>
+                    {gainDisplay !== null && (
+                      <span className={`cd-delta mono ${gainDisplay >= 0 ? 'up' : 'down'}`}>
+                        {gainDisplay >= 0 ? '▲' : '▼'} {Math.abs(gainDisplay).toFixed(1)}% 7D
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="cd-price mono" style={{ color: 'var(--dim)' }}>Price TBD</span>
+                )}
+              </div>
+              {hasRange && <FMVBar lo={c.lo} market={c.market} hi={c.hi} />}
+            </div>
+
+            {/* Tabs */}
+            <div className="cd-tabs">
+              {TABS.map(t => (
+                <button key={t.id} className={`cd-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+              ))}
+            </div>
+
+            {/* ── Tab: Price & Grades ── */}
+            {tab === 'grades' && (
+              <div className="cd-tabbody">
+                {c.cardhedge_id && (
+                  <div className="cd-block">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <h4 className="cd-h4">Price History</h4>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {[7, 30, 90].map(d => (
+                          <button key={d} onClick={() => setChartDays(d)} className={`cd-chip ${chartDays === d ? 'on' : ''}`}>{d}D</button>
                         ))}
                       </div>
+                    </div>
+                    {c.grades && c.grades.length > 1 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                        <button onClick={() => setChartGrade(null)} className={`cd-chip sm ${!chartGrade ? 'gold' : ''}`}>{c.grader} {c.grade}</button>
+                        {c.grades
+                          .filter(g => !(g.grader === c.grader && String(g.grade) === String(c.grade)))
+                          .slice(0, 5)
+                          .map((g, i) => {
+                            const gLabel = `${g.grader} ${g.grade}`;
+                            return <button key={i} onClick={() => setChartGrade(gLabel)} className={`cd-chip sm ${chartGrade === gLabel ? 'gold' : ''}`}>{gLabel}</button>;
+                          })}
+                      </div>
                     )}
-                    {/* Legend */}
-                    <div style={{ display: 'flex', gap: 12, padding: '4px 4px 8px', fontSize: 9, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
-                      <span><span style={{ color: priceHistory.length > 1 && priceHistory[priceHistory.length-1]?.price >= priceHistory[0]?.price ? 'var(--up)' : 'var(--down)', marginRight: 4 }}>●</span>Price trend</span>
-                      {priceComps.length > 0 && <span><span style={{ color: 'var(--gold)', marginRight: 4 }}>●</span>Actual sales ({priceComps.length})</span>}
-                      {(c.lo || c.hi) && <span><span style={{ color: 'rgba(155,123,255,.6)', marginRight: 4 }}>■</span>FMV range</span>}
-                    </div>
-                  </div>
-                ) : priceComps.length > 0 ? (
-                  /* Has comp sales but not enough for a trend line — show them as a scatter */
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 10, padding: '12px 10px 8px' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', marginBottom: 8 }}>
-                      {priceComps.length} sale{priceComps.length !== 1 ? 's' : ''} in the last {chartDays}D
-                    </div>
-                    {priceComps.slice(0, 8).map((comp, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,.04)' }}>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>
-                          {comp.date ? new Date(comp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                        </span>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
-                          ${Number(comp.price).toFixed(2)}
-                        </span>
+                    {historyLoading ? (
+                      <div className="cd-empty" style={{ height: 180 }}>
+                        <span style={{ animation: 'spin 1s linear infinite', marginRight: 8, display: 'inline-block' }}>◌</span>
+                        Loading price data...
                       </div>
-                    ))}
+                    ) : priceHistory.length > 1 ? (
+                      <div className="cd-chartwrap">
+                        <PriceChart prices={priceHistory} comps={priceComps} lo={c.lo || null} hi={c.hi || null} currentPrice={c.market || null} />
+                        {priceStats && (
+                          <div className="cd-tiles" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 10 }}>
+                            {[
+                              { label: 'OPEN', val: priceStats.open },
+                              { label: 'CLOSE', val: priceStats.close },
+                              { label: `${chartDays}D LOW`, val: priceStats.low },
+                              { label: `${chartDays}D HIGH`, val: priceStats.high },
+                            ].map(({ label, val }) => (
+                              <div key={label} className="cd-tile">
+                                <div className="cd-tile-label">{label}</div>
+                                <div className="cd-tile-val mono">
+                                  {val >= 1000 ? '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '$' + Number(val).toFixed(2)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="cd-legend">
+                          <span><span style={{ color: priceHistory[priceHistory.length - 1]?.price >= priceHistory[0]?.price ? 'var(--up)' : 'var(--down)', marginRight: 4 }}>●</span>Price trend</span>
+                          {priceComps.length > 0 && <span><span style={{ color: '#e8b339', marginRight: 4 }}>●</span>Actual sales ({priceComps.length})</span>}
+                          {(c.lo || c.hi) && <span><span style={{ color: 'rgba(155,123,255,.6)', marginRight: 4 }}>■</span>FMV range</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="cd-empty" style={{ height: 64 }}>No price history for this {chartDays}D window</div>
+                    )}
                   </div>
-                ) : (
-                  <div style={{
-                    height: 60, background: 'var(--panel-2)', borderRadius: 10,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--dim)', fontSize: 12,
-                  }}>
-                    No price history available for this {chartDays}D window
+                )}
+
+                {/* Grade ladder */}
+                {c.grades && c.grades.length > 0 && (
+                  <div className="cd-block">
+                    <h4 className="cd-h4">Grade Ladder ({c.grades.length})</h4>
+                    <div className="cd-ladder">
+                      <div className="cd-ladder-head">
+                        <span>Grade</span><span>Price</span><span>Range</span><span>Sales 7/30</span>
+                      </div>
+                      {[...c.grades]
+                        .sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
+                        .map((g, i) => {
+                          const isCurrent = g.grader === c.grader && String(g.grade) === String(c.grade);
+                          const maxP = Math.max(...c.grades.map(x => Number(x.price) || 0), 1);
+                          const barW = Math.max(3, Math.round(((Number(g.price) || 0) / maxP) * 100));
+                          return (
+                            <div key={`${g.grader}-${g.grade}-${i}`} className={`cd-ladder-row ${isCurrent ? 'cur' : ''}`}>
+                              <span className="cd-ladder-grade">
+                                <span className={gradeClass(g.grader)} style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>{g.grader} {g.grade}</span>
+                                {isCurrent && <span className="cd-cur-dot">●</span>}
+                              </span>
+                              <span className="cd-ladder-price mono">
+                                {g.price > 0 ? fmtDisplay(g.price) : '—'}
+                                <span className="cd-ladder-bar"><i style={{ width: `${barW}%` }} /></span>
+                              </span>
+                              <span className="mono cd-ladder-dim">{g.lo > 0 && g.hi > 0 ? fmtRange(g.lo, g.hi) : '—'}</span>
+                              <span className="mono cd-ladder-dim">{(g.sales7d || 0) + (g.sales30d || 0) > 0 ? `${g.sales7d || 0} / ${g.sales30d || 0}` : '—'}</span>
+                            </div>
+                          );
+                        })}
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Market Stats */}
-            <div className="mr-section" style={{ marginBottom: 16 }}>
-              <h4>Market Stats</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                {c.sales7d > 0 && (
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>7D SALES</div>
-                    <div className="mono" style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>{c.sales7d}</div>
+            {/* ── Tab: Market Insight ── */}
+            {tab === 'insight' && (
+              <div className="cd-tabbody">
+                <div className="cd-tiles">
+                  <div className="cd-tile big">
+                    <div className="cd-tile-label">MARKET SCORE</div>
+                    <div className="cd-tile-val mono" style={{ fontSize: 26, color: scoreColor }}>{marketScore}</div>
+                    <div className="cd-scorebar"><i style={{ width: `${marketScore}%`, background: scoreColor }} /></div>
+                  </div>
+                  <div className="cd-tile">
+                    <div className="cd-tile-label">LIQUIDITY</div>
+                    <div className="cd-tile-val mono" style={{ color: liqColor }}>{liquidity}</div>
+                  </div>
+                  <div className="cd-tile">
+                    <div className="cd-tile-label">CONFIDENCE</div>
+                    <div className="cd-tile-val" style={{ fontSize: 12 }}>{c.confidence ? confidenceLabel(c.confidence) : '—'}</div>
+                  </div>
+                  <div className="cd-tile">
+                    <div className="cd-tile-label">7D SALES</div>
+                    <div className="cd-tile-val mono">{sales7 || '—'}</div>
+                  </div>
+                  <div className="cd-tile">
+                    <div className="cd-tile-label">30D SALES</div>
+                    <div className="cd-tile-val mono">{sales30 || '—'}</div>
+                  </div>
+                  <div className="cd-tile">
+                    <div className="cd-tile-label">7D TREND</div>
+                    <div className={`cd-tile-val mono ${gainDisplay !== null ? (gainDisplay >= 0 ? 'up' : 'down') : ''}`}>
+                      {gainDisplay !== null ? `${gainDisplay >= 0 ? '+' : ''}${gainDisplay.toFixed(1)}%` : '—'}
+                    </div>
+                  </div>
+                  {spreadPct !== null && (
+                    <div className="cd-tile">
+                      <div className="cd-tile-label">FMV SPREAD</div>
+                      <div className="cd-tile-val mono">{spreadPct}%</div>
+                    </div>
+                  )}
+                  {c.saleCount > 0 && (
+                    <div className="cd-tile">
+                      <div className="cd-tile-label">TOTAL COMPS</div>
+                      <div className="cd-tile-val mono">{c.saleCount}</div>
+                    </div>
+                  )}
+                </div>
+
+                {c.cardhedge_id && c.market > 0 && (
+                  <div className="cd-block">
+                    <WhyCheap cardhedgeId={c.cardhedge_id} grade={`${c.grader} ${c.grade}`} market={c.market} />
                   </div>
                 )}
-                {c.sales30d > 0 && (
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>30D SALES</div>
-                    <div className="mono" style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>{c.sales30d}</div>
-                  </div>
-                )}
-                {c.gain7d !== undefined && c.gain7d !== 0 && Math.abs(c.gain7d) <= 999 && (
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>7D GAIN</div>
-                    <div className={`mono ${c.gain7d >= 0 ? 'up' : 'down'}`} style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>
-                      {c.gain7d >= 0 ? '+' : ''}{c.gain7d.toFixed(1)}%
+
+                {similarCards.length > 0 && (
+                  <div className="cd-block">
+                    <h4 className="cd-h4">Similar Cards</h4>
+                    <div className="cd-similar">
+                      {similarCards.map((sc, i) => (
+                        <div key={i} className="cd-sim-card">
+                          {sc.ebay_thumb && (
+                            <img src={sc.ebay_thumb} alt="" onError={e => e.target.style.display = 'none'} />
+                          )}
+                          <div className="cd-sim-name">{sc.player}</div>
+                          <div className="cd-sim-grade">{sc.grader} {sc.grade}</div>
+                          <div className="cd-sim-price mono">{sc.catalog_price ? fmtDisplay(Number(sc.catalog_price)) : '—'}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
-                {c.gain7d !== undefined && Math.abs(c.gain7d) > 999 && (
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>7D GAIN</div>
-                    <div className="mono" style={{ fontSize: 14, fontWeight: 600, marginTop: 4, color: 'var(--dim)' }}>N/A</div>
-                  </div>
-                )}
-                {c.confidence && (
-                  <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>CONFIDENCE</div>
-                    <div className={`mono conf-badge conf-${c.confidence.toLowerCase()}`} style={{ fontSize: 13, fontWeight: 600, marginTop: 6, display: 'inline-block' }}>{confidenceLabel(c.confidence)}</div>
-                  </div>
-                )}
               </div>
-            </div>
+            )}
 
-            {/* Available Grades */}
-            {c.grades && c.grades.length > 1 && (
-              <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>Available Grades ({c.grades.length})</h4>
-                <div style={{ marginTop: 8, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--line)' }}>
-                  <div style={{
-                    display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr',
-                    padding: '8px 12px', background: 'var(--panel-2)',
-                    fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)',
-                    letterSpacing: '.08em', textTransform: 'uppercase',
-                  }}>
-                    <span>Grade</span><span>Price</span><span>Range</span><span>Sales</span>
-                  </div>
-                  {c.grades.map((g, i) => {
-                    const isCurrent = g.grader === c.grader && g.grade === c.grade;
-                    return (
-                      <div key={`${g.grader}-${g.grade}-${i}`} style={{
-                        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr',
-                        padding: '8px 12px', fontSize: 13, alignItems: 'center',
-                        background: isCurrent ? 'var(--gold-soft, rgba(255,215,0,.08))' : 'transparent',
-                        borderTop: '1px solid var(--line)',
-                      }}>
-                        <span style={{ fontWeight: isCurrent ? 700 : 500 }}>
-                          <span className={gradeClass(g.grader)} style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>
-                            {g.grader} {g.grade}
+            {/* ── Tab: Comps ── */}
+            {tab === 'comps' && (
+              <div className="cd-tabbody">
+                <div className="cd-block">
+                  <h4 className="cd-h4">Recent Sales ({chartDays}D)</h4>
+                  {priceComps.length > 0 ? (
+                    <div className="cd-comps">
+                      {priceComps.slice(0, 12).map((comp, i) => (
+                        <div key={i} className="cd-comp-row">
+                          <span className="mono cd-ladder-dim">
+                            {comp.date ? new Date(comp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                           </span>
-                          {isCurrent && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--gold)' }}>●</span>}
-                        </span>
-                        <span className="mono" style={{ fontWeight: 600 }}>
-                          {g.price > 0 ? fmtDisplay(g.price) : '—'}
-                        </span>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                          {g.lo > 0 && g.hi > 0 ? fmtRange(g.lo, g.hi) : '—'}
-                        </span>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                          {(g.sales7d || 0) + (g.sales30d || 0) > 0
-                            ? `${g.sales7d || 0}/${g.sales30d || 0}`
-                            : '—'}
-                        </span>
-                      </div>
-                    );
-                  })}
+                          <span className="cd-comp-src">{comp.source || 'sale'}</span>
+                          <span className="mono cd-comp-price">${Number(comp.price).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="cd-empty" style={{ height: 56 }}>No comp sales in this window — try a longer range on the chart tab</div>
+                  )}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 6 }}>
-                  Sales shown as 7d/30d. Displaying highest-grade price.
-                </div>
+
+                {cardWants.length > 0 && (
+                  <div className="cd-block">
+                    <h4 className="cd-h4">Open Bids ({cardWants.length})</h4>
+                    <div className="cd-comps">
+                      {cardWants.slice(0, 5).map(wt => (
+                        <div key={wt.id} className="cd-comp-row">
+                          <span className="cd-ladder-dim">@{wt.buyer_handle}</span>
+                          <span className="cd-comp-src">{wt.boost_credits > 0 ? `${wt.boost_credits}cr boost` : 'bid'}</span>
+                          <span className="mono cd-comp-price">{fmtDisplay(Number(wt.bid_amount) / 100)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Why is it priced this way? */}
-            {c.cardhedge_id && c.market > 0 && (
-              <WhyCheap cardhedgeId={c.cardhedge_id} grade={`${c.grader} ${c.grade}`} market={c.market} />
-            )}
-
-            {/* Active Listings */}
-            {listings.length > 0 && (
-              <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4 style={{ marginBottom: 10 }}>For Sale ({listings.length})</h4>
+            {/* ── For Sale (always visible) ── */}
+            <div className="cd-block cd-forsale">
+              <h4 className="cd-h4">For Sale {listings.length > 0 ? `(${listings.length})` : ''}</h4>
+              {loadingListings ? (
+                <div className="cd-empty" style={{ height: 48 }}>Loading listings...</div>
+              ) : listings.length > 0 ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   {listings.slice(0, 5).map(l => (
-                    <div key={l.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 14px', borderRadius: 8, background: 'var(--panel)',
-                      border: '1px solid var(--line)',
-                    }}>
+                    <div key={l.id} className="cd-listing">
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>
-                            {fmtDisplay(Number(l.price))}
-                          </span>
+                          <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>{fmtDisplay(Number(l.price))}</span>
                           <DealBadge listingPrice={Number(l.price)} card={c} />
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
@@ -803,13 +868,11 @@ export default function CardDetail({ card: c, onClose }) {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => handleBuy(l)} disabled={buying === l.id}
-                          style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'var(--gold)', color: '#000', cursor: buying === l.id ? 'wait' : 'pointer' }}>
+                        <button onClick={() => handleBuy(l)} disabled={buying === l.id} className="cd-mini-buy">
                           {buying === l.id ? '...' : 'Buy Now'}
                         </button>
                         {(l.open_to_offers || l.listing_type === 'offer') && (
-                          <button onClick={() => { setShowOfferModal(l.id); setOfferAmount(String(Math.round(Number(l.price) * 0.85))); }}
-                            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line)' }}>
+                          <button className="cd-mini-ghost" onClick={() => { setShowOfferModal(l.id); setOfferAmount(String(Math.round(Number(l.price) * 0.85))); }}>
                             Offer
                           </button>
                         )}
@@ -817,81 +880,22 @@ export default function CardDetail({ card: c, onClose }) {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {listings.length === 0 && !loadingListings && (
-              <div className="mr-section" style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, color: 'var(--muted)', fontSize: 12 }}>
-                No active listings for this card.
-              </div>
-            )}
-
-            <div className="mr-actions">
-              {lowestListing ? (
-                <button className="buy" onClick={() => handleBuy(lowestListing)} disabled={buying === lowestListing?.id}>
-                  {buying === lowestListing?.id ? 'Processing...' : `Buy Now · ${fmtDisplay(Number(lowestListing.price))}`}
-                </button>
               ) : (
-                <button className="buy" style={{ opacity: 0.5, cursor: 'default' }}>No listings</button>
+                <div className="cd-empty" style={{ height: 56, flexDirection: 'column', gap: 4 }}>
+                  <span>No active listings — be the first.</span>
+                  <a href={`/sell?card=${c.id}`} style={{ color: 'var(--gold)', fontSize: 12, fontWeight: 600 }}>List yours →</a>
+                </div>
               )}
-              <button className="offer" onClick={() => setShowBidForm(!showBidForm)} style={{ background: showBidForm ? 'var(--gold-soft)' : undefined, color: showBidForm ? 'var(--gold)' : undefined, borderColor: showBidForm ? 'var(--gold)' : undefined }}>
-                Place a Bid
-              </button>
-              <button className={`offer watch ${w ? 'on' : ''}`} onClick={() => toggleWatch(c.id)} style={{ width: 'auto' }}>♥</button>
-              <button
-                onClick={handleLike}
-                title={isLiked ? 'Unlike' : 'Like'}
-                style={{
-                  width: 'auto', padding: '8px 12px', borderRadius: 8, fontSize: 16, cursor: 'pointer',
-                  background: isLiked ? 'rgba(255,92,108,.15)' : 'var(--panel-2)',
-                  color: isLiked ? '#FF5C6C' : 'var(--muted)',
-                  border: `1px solid ${isLiked ? 'rgba(255,92,108,.4)' : 'var(--line)'}`,
-                  transition: 'all .15s',
-                }}
-              >👍</button>
-              <button
-                onClick={handlePin}
-                title={isPinned ? 'Unpin' : 'Pin to portfolio'}
-                style={{
-                  width: 'auto', padding: '8px 12px', borderRadius: 8, fontSize: 16, cursor: 'pointer',
-                  background: isPinned ? 'rgba(22,199,132,.15)' : 'var(--panel-2)',
-                  color: isPinned ? 'var(--gold)' : 'var(--muted)',
-                  border: `1px solid ${isPinned ? 'rgba(22,199,132,.4)' : 'var(--line)'}`,
-                  transition: 'all .15s',
-                }}
-              >📌</button>
-              <button
-                className="offer"
-                disabled={addingToPortfolio}
-                style={{ width: 'auto', fontSize: 12 }}
-                onClick={async () => {
-                  if (!token) { toast('Please log in first', true); return; }
-                  setAddingToPortfolio(true);
-                  try {
-                    const res = await fetch('/api/portfolio/add', {
-                      method: 'POST',
-                      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ cardId: c.id, quantity: 1 }),
-                    });
-                    if (res.ok) toast('Added to portfolio ✓');
-                    else { const d = await res.json().catch(() => ({})); toast(d.error || 'Failed to add', true); }
-                  } catch { toast('Failed to add to portfolio', true); }
-                  finally { setAddingToPortfolio(false); }
-                }}
-              >
-                {addingToPortfolio ? '...' : '+ Portfolio'}
-              </button>
             </div>
 
-            {/* Bid Form */}
+            {/* Bid form */}
             {showBidForm && (
-              <div className="card-bids-section" style={{ marginBottom: 16 }}>
-                <h4 style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 10 }}>Place a Bid</h4>
+              <div className="cd-block cd-bidform">
+                <h4 className="cd-h4">Place a Bid</h4>
                 <div style={{ position: 'relative', marginBottom: 10 }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)', fontFamily: 'var(--mono)' }}>$</span>
                   <input type="number" value={bidFormAmount} onChange={e => setBidFormAmount(e.target.value)}
-                    placeholder="How much would you pay?" min="1" step="0.01"
-                    style={{ width: '100%', padding: '10px 14px 10px 28px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 16, fontFamily: 'var(--mono)', outline: 'none' }} />
+                    placeholder="How much would you pay?" min="1" step="0.01" className="cd-input" />
                 </div>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                   {[
@@ -901,81 +905,35 @@ export default function CardDetail({ card: c, onClose }) {
                     { credits: 50, label: '50cr' },
                   ].map(b => (
                     <button key={b.credits} onClick={() => setBidFormBoost(b.credits)}
-                      style={{
-                        flex: 1, padding: '6px 4px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: bidFormBoost === b.credits ? 'var(--gold-soft)' : 'var(--panel-2)',
-                        color: bidFormBoost === b.credits ? 'var(--gold)' : 'var(--muted)',
-                        border: `1px solid ${bidFormBoost === b.credits ? 'var(--gold)' : 'var(--line)'}`,
-                      }}>
+                      className={`cd-chip ${bidFormBoost === b.credits ? 'gold' : ''}`} style={{ flex: 1 }}>
                       {b.label}
                     </button>
                   ))}
                 </div>
-                <button onClick={handlePlaceBid} disabled={submittingBid}
-                  style={{ width: '100%', padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: 'var(--gold)', color: '#000', cursor: submittingBid ? 'wait' : 'pointer' }}>
+                <button onClick={handlePlaceBid} disabled={submittingBid} className="cd-mini-buy" style={{ width: '100%', padding: 10 }}>
                   {submittingBid ? 'Placing...' : 'Submit Bid'}
                 </button>
               </div>
             )}
-
-            {/* Existing Bids */}
-            {cardWants.length > 0 && (
-              <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>Open Bids ({cardWants.length})</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {cardWants.slice(0, 5).map(w => (
-                    <div key={w.id} className="card-bid-item">
-                      <div>
-                        <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--gold)' }}>
-                          {fmtDisplay(Number(w.bid_amount) / 100)}
-                        </span>
-                        {w.boost_credits > 0 && (
-                          <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--gold-soft)', color: 'var(--gold)', fontFamily: 'var(--mono)' }}>
-                            {w.boost_credits >= 50 ? '' : w.boost_credits >= 25 ? '' : ''} {w.boost_credits}cr
-                          </span>
-                        )}
-                      </div>
-                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>@{w.buyer_handle}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Similar Cards */}
-            {similarCards.length > 0 && (
-              <div className="mr-section" style={{ marginBottom: 16 }}>
-                <h4>Similar Cards</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
-                  {similarCards.map((sc, i) => (
-                    <div key={i} style={{ background: 'var(--panel-2)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--line)', cursor: 'pointer' }}>
-                      {sc.ebay_thumb && (
-                        <img src={sc.ebay_thumb} alt="" style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 6, marginBottom: 6 }} onError={e => e.target.style.display='none'} />
-                      )}
-                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.player}</div>
-                      <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{sc.grader} {sc.grade}</div>
-                      <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
-                        {sc.catalog_price ? fmtDisplay(Number(sc.catalog_price)) : '—'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Card info summary */}
-            <div className="mr-section">
-              <h4>Card Details</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                {c.sport && <div style={{ fontSize: 13 }}><span style={{ color: 'var(--muted)' }}>Sport:</span> {c.sport}</div>}
-                {c.set && <div style={{ fontSize: 13 }}><span style={{ color: 'var(--muted)' }}>Set:</span> {c.set}</div>}
-                {c.grader && <div style={{ fontSize: 13 }}><span style={{ color: 'var(--muted)' }}>Grader:</span> {c.grader} {c.grade}</div>}
-                {c.num && <div style={{ fontSize: 13 }}><span style={{ color: 'var(--muted)' }}>Card #:</span> {c.num}</div>}
-                {c.variant && <div style={{ fontSize: 13 }}><span style={{ color: 'var(--muted)' }}>Variant:</span> {c.variant}</div>}
-                {isRC && <div style={{ fontSize: 13 }}><span className="rc-tag">Rookie Card</span></div>}
-              </div>
-            </div>
           </div>
+        </div>
+
+        {/* ── Sticky action bar: Buy / Offer / Trade / List / Watch ── */}
+        <div className="cd-actionbar">
+          {lowestListing ? (
+            <button className="cd-act buy" onClick={() => handleBuy(lowestListing)} disabled={buying === lowestListing?.id}>
+              {buying === lowestListing?.id ? 'Processing...' : `Buy · ${fmtDisplay(Number(lowestListing.price))}`}
+            </button>
+          ) : (
+            <button className="cd-act buy dim" onClick={openOffer}>No listings — Bid</button>
+          )}
+          <button className={`cd-act ghost ${showBidForm ? 'active' : ''}`} onClick={openOffer}>Offer</button>
+          <a className="cd-act ghost" href="/trades">Trade</a>
+          <a className="cd-act ghost" href={`/sell?card=${c.id}`}>List</a>
+          <button className={`cd-act ghost watch ${w ? 'on' : ''}`} onClick={() => toggleWatch(c.id)} title={w ? 'Unwatch' : 'Watch'}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill={w ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span className="cd-act-label">Watch</span>
+          </button>
         </div>
       </div>
 
@@ -983,8 +941,8 @@ export default function CardDetail({ card: c, onClose }) {
       {showOfferModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 100, display: 'grid', placeItems: 'center' }}
              onClick={e => e.target === e.currentTarget && setShowOfferModal(null)}>
-          <div style={{ background: 'var(--panel)', borderRadius: 'var(--r)', padding: 24, width: '90%', maxWidth: 380, border: '1px solid var(--line)' }}>
-            <h3 style={{ fontFamily: 'var(--disp)', marginBottom: 12, fontSize: 16 }}>Make an Offer</h3>
+          <div className="cd-dark" style={{ background: 'var(--panel)', borderRadius: 14, padding: 24, width: '90%', maxWidth: 380, border: '1px solid var(--line-2)' }}>
+            <h3 style={{ fontFamily: 'var(--disp)', marginBottom: 12, fontSize: 16, color: 'var(--txt)' }}>Make an Offer</h3>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
               Listed at {fmtDisplay(Number(listings.find(l => l.id === showOfferModal)?.price || 0))}
               {hasPrice && <> · Market {fmtDisplay(c.market)}</>}
@@ -992,14 +950,11 @@ export default function CardDetail({ card: c, onClose }) {
             <div style={{ position: 'relative', marginBottom: 14 }}>
               <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)', fontFamily: 'var(--mono)' }}>$</span>
               <input type="number" value={offerAmount} onChange={e => setOfferAmount(e.target.value)}
-                placeholder="0.00" min="1" step="0.01"
-                style={{ width: '100%', padding: '12px 14px 12px 28px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 10, color: 'var(--txt)', fontSize: 16, fontFamily: 'var(--mono)', outline: 'none' }} />
+                placeholder="0.00" min="1" step="0.01" className="cd-input" />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowOfferModal(null)}
-                style={{ flex: 1, padding: '10px', borderRadius: 8, background: 'var(--panel-2)', color: 'var(--muted)', fontSize: 13 }}>Cancel</button>
-              <button onClick={handleOffer} disabled={submittingOffer}
-                style={{ flex: 1, padding: '10px', borderRadius: 8, background: 'var(--gold)', color: '#000', fontSize: 13, fontWeight: 600 }}>
+              <button onClick={() => setShowOfferModal(null)} className="cd-mini-ghost" style={{ flex: 1, padding: 10 }}>Cancel</button>
+              <button onClick={handleOffer} disabled={submittingOffer} className="cd-mini-buy" style={{ flex: 1, padding: 10 }}>
                 {submittingOffer ? '...' : 'Submit Offer'}
               </button>
             </div>
