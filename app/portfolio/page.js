@@ -45,6 +45,7 @@ export default function PortfolioPage() {
   const [expandedFam, setExpandedFam] = useState(null); // family key with open tier picker
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState(null); // cardId being added
+  const [scanInfo, setScanInfo] = useState(null); // AI-extracted card info from camera scan (confirmation mode)
 
   // Fetch portfolio
   const fetchPortfolio = useCallback(async () => {
@@ -98,9 +99,10 @@ export default function PortfolioPage() {
   }, []);
 
   useEffect(() => {
+    if (scanInfo) return; // scan flow sets results directly; typing clears scanInfo and resumes text search
     const t = setTimeout(() => doSearch(searchQuery), 300);
     return () => clearTimeout(t);
-  }, [searchQuery, doSearch]);
+  }, [searchQuery, doSearch, scanInfo]);
 
   // Add card to portfolio — keeps the search modal OPEN so you can bulk-add
   const addCard = useCallback(async (cardId, { closeAfter = false } = {}) => {
@@ -214,53 +216,55 @@ export default function PortfolioPage() {
     finally { setListingSubmitting(false); }
   }, [listingItem, listingPrice, authFetch, fetchPortfolio]);
 
-  // Camera scan result handler
+  // Camera scan result handler — opens a confirmation picker. NEVER auto-adds.
   const handleScanResult = useCallback(async (cardInfo) => {
     setShowCamera(false);
     if (!cardInfo || !cardInfo.player) {
-      toast('Could not identify card', true);
+      toast('Could not identify the card — try a clearer, well-lit photo', true);
       return;
     }
-    // Search catalog for a match
+    setScanInfo(cardInfo);
+    setAddedIds(new Set());
+    setSearchQuery('');
+    setSearchResults([]);
+    setExpandedFam(null);
+    setShowSearch(true);
+    setSearching(true);
     try {
-      const res = await fetch('/api/catalog/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: cardInfo.player }),
-      });
-      const data = await res.json();
-      if (data.results && data.results.length > 0) {
-        // Find best match by grader/grade
-        const match = data.results.find(r =>
-          r.grader === cardInfo.grader && r.grade === cardInfo.grade
-        ) || data.results[0];
-        await addCard(match.id);
-      } else {
-        // Create via catalog/create if no match, then add
-        const createRes = await authFetch('/api/catalog/create', {
+      // Progressive family search: full context (player + year + set) first, then fewer tokens.
+      const parts = [cardInfo.player, cardInfo.year, cardInfo.set]
+        .map(s => (s || '').toString().trim())
+        .filter(Boolean);
+      const queries = [];
+      for (let n = parts.length; n >= 1; n--) queries.push(parts.slice(0, n).join(' '));
+      let fams = [];
+      for (const q of [...new Set(queries)]) {
+        const res = await fetch('/api/catalog/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            player: cardInfo.player,
-            year: cardInfo.year,
-            set: cardInfo.set,
-            cardNumber: cardInfo.cardNumber,
-            grader: cardInfo.grader || 'RAW',
-            grade: cardInfo.grade || '',
-            sport: cardInfo.sport || 'Other',
-          }),
+          body: JSON.stringify({ q }),
         });
-        if (createRes.ok) {
-          const newCard = await createRes.json();
-          await addCard(newCard.id);
-        } else {
-          toast('Could not add scanned card', true);
-        }
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data.families) && data.families.length) { fams = data.families; break; }
+      }
+      // Rank exact card-number matches first when the scan read a number.
+      const norm = (v) => String(v || '').replace(/[^0-9a-z]/gi, '').toLowerCase();
+      const scanNum = norm(cardInfo.cardNumber);
+      if (scanNum && fams.length > 1) {
+        fams = [...fams].sort((a, b) =>
+          (norm(a.number) === scanNum ? 0 : 1) - (norm(b.number) === scanNum ? 0 : 1));
+      }
+      setSearchResults(fams);
+      // Single confident match → open its tier picker so the user just picks a version.
+      if (fams.length === 1) {
+        setExpandedFam(`${fams[0].player}|${fams[0].card_set}|${fams[0].variant || ''}|0`);
       }
     } catch {
-      toast('Failed to search catalog', true);
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
     }
-  }, [addCard, authFetch]);
+  }, []);
 
   // Calculate totals
   const totalValue = items.reduce((s, i) => s + (i.marketValue || 0), 0);
@@ -327,7 +331,7 @@ export default function PortfolioPage() {
       {subTab === 'cards' && <>
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 10, marginTop: 20, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button className="buy" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => { setAddedIds(new Set()); setShowSearch(true); }}>
+        <button className="buy" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => { setAddedIds(new Set()); setScanInfo(null); setShowSearch(true); }}>
           + Search &amp; Add Card
         </button>
         <button className="offer" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => setShowCamera(true)}>
@@ -546,29 +550,46 @@ export default function PortfolioPage() {
 
       {/* Search Catalog Modal */}
       {showSearch && (
-        <div className="overlay on" onClick={e => e.target === e.currentTarget && setShowSearch(false)}>
+        <div className="overlay on" onClick={e => { if (e.target === e.currentTarget) { setShowSearch(false); setScanInfo(null); } }}>
           <div className="modal" style={{ maxWidth: 520 }}>
-            <button className="modal-close" onClick={() => setShowSearch(false)}>
+            <button className="modal-close" onClick={() => { setShowSearch(false); setScanInfo(null); }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
             </button>
-            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Search Catalog</h2>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like — the search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
+            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{scanInfo ? 'Is this your card?' : 'Search Catalog'}</h2>
+            {scanInfo ? (
+              <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--muted)', marginBottom: 4 }}>📷 SCANNED</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {scanInfo.player}
+                  {scanInfo.year ? ` · ${scanInfo.year}` : ''}{scanInfo.set ? ` ${scanInfo.set}` : ''}
+                  {scanInfo.cardNumber ? ` · #${scanInfo.cardNumber}` : ''}
+                  {scanInfo.grader ? ` · ${scanInfo.grader} ${scanInfo.grade || ''}`.trimEnd() : ''}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pick the exact card and version below — nothing is added until you choose.</div>
+              </div>
+            ) : (
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like — the search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
+            )}
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <input
                 type="text"
-                placeholder="Search by player name, set, sport..."
+                placeholder={scanInfo ? 'Not right? Type to search the catalog…' : 'Search by player name, set, sport...'}
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                autoFocus
+                onChange={e => { setScanInfo(null); setSearchQuery(e.target.value); }}
+                autoFocus={!scanInfo}
                 style={{
                   width: '100%', background: 'var(--panel)', border: '1px solid var(--line)',
                   borderRadius: 10, padding: '11px 14px', color: 'var(--txt)', fontSize: 14, outline: 'none',
                 }}
               />
             </div>
-            {searching && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 12 }}>Searching...</div>}
-            {!searching && searchResults.length === 0 && searchQuery.length >= 2 && (
-              <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>No cards found</div>
+            {searching && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 12 }}>{scanInfo ? 'Matching your scan against the catalog…' : 'Searching...'}</div>}
+            {!searching && searchResults.length === 0 && (searchQuery.length >= 2 || scanInfo) && (
+              <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>
+                {scanInfo
+                  ? `No catalog match for “${[scanInfo.player, scanInfo.year, scanInfo.set].filter(Boolean).join(' ')}” — edit the search above or re-scan with better lighting.`
+                  : 'No cards found'}
+              </div>
             )}
             <div style={{ maxHeight: 400, overflowY: 'auto' }}>
               {searchResults.map((fam, idx) => {

@@ -135,11 +135,16 @@ export default function CameraScanner({ onResult, onClose }) {
                 {cardInfo.grader && <div><span style={{ color: 'var(--muted)' }}>Grader:</span> {cardInfo.grader} {cardInfo.grade}</div>}
                 {cardInfo.condition && <div><span style={{ color: 'var(--muted)' }}>Condition:</span> {cardInfo.condition}</div>}
                 {cardInfo.cardNumber && <div><span style={{ color: 'var(--muted)' }}>Card #:</span> {cardInfo.cardNumber}</div>}
+                {cardInfo.variant && <div><span style={{ color: 'var(--muted)' }}>Variant:</span> {cardInfo.variant}</div>}
+                {cardInfo.certNumber && <div><span style={{ color: 'var(--muted)' }}>Cert #:</span> {cardInfo.certNumber}</div>}
               </div>
             </div>
+            <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 12px', textAlign: 'center' }}>
+              Next you’ll confirm the exact catalog card — nothing is added yet.
+            </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={retake} className="offer" style={{ flex: 1, padding: '11px 0' }}>Retake</button>
-              <button onClick={confirm} className="buy" style={{ flex: 1, padding: '11px 0' }}>Add to Portfolio</button>
+              <button onClick={confirm} className="buy" style={{ flex: 1, padding: '11px 0' }}>Find My Card</button>
             </div>
           </div>
         )}
