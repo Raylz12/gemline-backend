@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
+import PaymentModal from './PaymentModal';
 
 const CARRIERS = ['USPS', 'UPS', 'FedEx', 'DHL', 'Other'];
 
@@ -29,6 +30,7 @@ function OrderThumb({ o }) {
 function StatusPill({ status }) {
   const map = {
     created: { label: 'PENDING', bg: 'var(--panel-2)', color: 'var(--muted)' },
+    pending_payment: { label: 'PAYMENT DUE', bg: 'rgba(240,180,41,.14)', color: '#f0b429' },
     escrow_held: { label: 'IN ESCROW', bg: 'var(--gold-soft)', color: 'var(--gold)' },
     awaiting_shipment: { label: 'AWAITING SHIPMENT', bg: 'var(--gold-soft)', color: 'var(--gold)' },
     shipped: { label: 'SHIPPED', bg: 'rgba(96,165,250,.12)', color: '#60a5fa' },
@@ -92,6 +94,21 @@ export default function OrdersContent() {
   const [view, setView] = useState('purchases');
   const [shipFormId, setShipFormId] = useState(null);
   const [confirming, setConfirming] = useState(null);
+  const [payModal, setPayModal] = useState(null);
+  const [paying, setPaying] = useState(null);
+
+  // Fetch the client_secret for a pending order and open the Payment Element.
+  const completePayment = async (order) => {
+    setPaying(order.id);
+    try {
+      const res = await authFetch(`/api/orders/${order.id}/payment`);
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Could not load payment');
+      if (!d.requiresPayment) { toast('This order is already paid.'); load(); return; }
+      setPayModal({ ...d.payment, orderId: order.id });
+    } catch (e) { toast(e.message, true); }
+    finally { setPaying(null); }
+  };
 
   const load = useCallback(() => {
     if (!token) { setLoading(false); return; }
@@ -118,6 +135,7 @@ export default function OrdersContent() {
 
   const needShip = sales.filter(o => ['created', 'escrow_held', 'awaiting_shipment'].includes(o.status)).length;
   const needConfirm = purchases.filter(o => ['shipped', 'delivered', 'inspection'].includes(o.status)).length;
+  const needPay = purchases.filter(o => o.status === 'pending_payment').length;
   const rows = view === 'purchases' ? purchases : sales;
 
   if (!token) {
@@ -128,7 +146,7 @@ export default function OrdersContent() {
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {[
-          { id: 'purchases', label: `Purchases${needConfirm > 0 ? ` (${needConfirm} arriving)` : ''}` },
+          { id: 'purchases', label: `Purchases${needPay > 0 ? ` (${needPay} to pay)` : needConfirm > 0 ? ` (${needConfirm} arriving)` : ''}` },
           { id: 'sales', label: `Sales${needShip > 0 ? ` (${needShip} to ship)` : ''}` },
         ].map(t => (
           <button key={t.id} onClick={() => setView(t.id)}
@@ -162,6 +180,7 @@ export default function OrdersContent() {
             const isSale = view === 'sales';
             const canShip = isSale && ['created', 'escrow_held', 'awaiting_shipment'].includes(o.status);
             const canConfirm = !isSale && ['shipped', 'delivered', 'inspection'].includes(o.status);
+            const canPay = !isSale && o.status === 'pending_payment';
             return (
               <div key={o.id} style={{ padding: '12px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -183,6 +202,12 @@ export default function OrdersContent() {
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <StatusPill status={o.status} />
+                    {canPay && (
+                      <button onClick={() => completePayment(o)} disabled={paying === o.id}
+                        style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#f0b429', color: '#141006', border: 'none', cursor: paying === o.id ? 'wait' : 'pointer' }}>
+                        {paying === o.id ? '…' : 'Complete Payment'}
+                      </button>
+                    )}
                     {canShip && (
                       <button onClick={() => setShipFormId(shipFormId === o.id ? null : o.id)}
                         style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'var(--gold)', color: '#141006', border: 'none', cursor: 'pointer' }}>
@@ -217,6 +242,16 @@ export default function OrdersContent() {
             );
           })}
         </div>
+      )}
+
+      {payModal && (
+        <PaymentModal
+          payment={payModal}
+          authFetch={authFetch}
+          cancelOnClose={false}
+          onPaid={() => { setPayModal(null); load(); }}
+          onClose={() => { setPayModal(null); load(); }}
+        />
       )}
     </div>
   );

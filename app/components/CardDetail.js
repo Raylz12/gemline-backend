@@ -4,6 +4,7 @@ import { fmt, fmtDisplay, fmtRange, gradeClass } from '../lib/data';
 import { useCardStore } from './CardStore';
 import { useAuth } from './AuthContext';
 import { toast } from '../lib/toast';
+import PaymentModal from './PaymentModal';
 
 function WhyCheap({ cardhedgeId, grade, market }) {
   const [open, setOpen] = useState(false);
@@ -331,7 +332,8 @@ function FMVBar({ lo, market, hi }) {
 
 export default function CardDetail({ card: c, onClose }) {
   const { watch, toggleWatch } = useCardStore();
-  const { token } = useAuth();
+  const { token, authFetch } = useAuth();
+  const [payModal, setPayModal] = useState(null); // { orderId, clientSecret, amount, fee }
   const [addingToPortfolio, setAddingToPortfolio] = useState(false);
   const [listings, setListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
@@ -425,7 +427,11 @@ export default function CardDetail({ card: c, onClose }) {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
+      if (!res.ok) throw new Error(data.error || 'Purchase failed');
+      if (data.requiresPayment && data.payment) {
+        // Open the Payment Element modal to confirm the manual-capture PI.
+        setPayModal({ ...data.payment, listingId: listing.id });
+      } else if (data.url) window.location.href = data.url;
       else if (data.order) { toast('Purchase complete! '); setListings(prev => prev.filter(l => l.id !== listing.id)); }
       else throw new Error(data.error || 'Purchase failed');
     } catch (e) { toast(e.message, true); }
@@ -960,6 +966,19 @@ export default function CardDetail({ card: c, onClose }) {
             </div>
           </div>
         </div>
+      )}
+
+      {payModal && (
+        <PaymentModal
+          payment={payModal}
+          authFetch={authFetch}
+          onPaid={() => {
+            setPayModal(null);
+            if (payModal.listingId) setListings(prev => prev.filter(l => l.id !== payModal.listingId));
+            toast('Payment complete — your card is on the way!');
+          }}
+          onClose={() => setPayModal(null)}
+        />
       )}
     </div>
   );
