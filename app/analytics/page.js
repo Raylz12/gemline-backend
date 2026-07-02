@@ -74,25 +74,39 @@ function MoversTable({ cards, onSelect, loading }) {
 }
 
 // ── Arbitrage Table ───────────────────────────────────────────────────────────
+const MARKETPLACE_FEE = 0.10; // 10% marketplace fee applied on the sell side
+// Buy at current market (acquire), exit at Card Hedge high (FMV) net of fee.
+function deriveEdge(r) {
+  const buy = Number(r.market) > 0 ? Number(r.market) : Number(r.lo) || 0;
+  const fmv = Number(r.hi) || 0;
+  const netEdge = fmv > 0 && buy > 0 ? fmv * (1 - MARKETPLACE_FEE) - buy : 0;
+  const netPct = buy > 0 ? (netEdge / buy) * 100 : 0;
+  return { buy, fmv, netEdge, netPct };
+}
+
 function ArbTable({ onSelect }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [minSpread, setMinSpread] = useState(10);
+  const [minNet, setMinNet] = useState(10);
+  const [minLiq, setMinLiq] = useState(0);
+  const [arbSport, setArbSport] = useState('All');
 
   const load = () => {
     setLoading(true);
     fetch('/api/market/arb')
       .then(r => r.json())
       .then(d => {
-        // API returns four buckets — merge, dedupe, keep rows with a real bid/ask spread
         const all = [...(d.undervalued || []), ...(d.gainers || []), ...(d.losers || []), ...(d.mostTraded || [])];
         const seen = new Set();
         const merged = all.filter(c => {
           if (!c.id || seen.has(c.id)) return false;
           seen.add(c.id);
-          return (c.lo || 0) > 0 && (c.hi || 0) > 0 && (c.spread || 0) > 0;
-        }).sort((a, b) => (b.spread || 0) - (a.spread || 0));
+          return (c.hi || 0) > 0 && ((c.market || 0) > 0 || (c.lo || 0) > 0);
+        }).map(c => {
+          const e = deriveEdge(c);
+          return { ...c, ...e, momentum: e.netEdge > 0 && (c.gain7d || 0) > 0 };
+        }).sort((a, b) => b.netEdge - a.netEdge);
         setRows(merged);
         setLastUpdated(new Date());
         setLoading(false);
@@ -106,19 +120,36 @@ function ArbTable({ onSelect }) {
     return () => clearInterval(t);
   }, []);
 
-  const filtered = rows.filter(r => (r.spread || 0) >= minSpread);
+  const sportOpts = ['All', ...Array.from(new Set(rows.map(r => r.sport).filter(Boolean))).sort()];
+  const filtered = rows.filter(r =>
+    r.netEdge >= minNet &&
+    (r.sales30d || 0) >= minLiq &&
+    (arbSport === 'All' || r.sport === arbSport)
+  );
+
+  const btn = (active) => ({ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: active ? 'var(--gold)' : 'var(--panel-2)', color: active ? '#000' : 'var(--muted)', border: '1px solid var(--line)' });
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>Min spread:</span>
-          {[10, 25, 50, 100].map(v => (
-            <button key={v} onClick={() => setMinSpread(v)}
-              style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: minSpread === v ? 'var(--gold)' : 'var(--panel-2)', color: minSpread === v ? '#000' : 'var(--muted)', border: '1px solid var(--line)' }}>
-              ${v}+
-            </button>
-          ))}
+      {/* Filter bar: net edge / liquidity / sport */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min net edge:</span>
+            {[0, 10, 25, 50].map(v => (
+              <button key={v} onClick={() => setMinNet(v)} style={btn(minNet === v)}>${v}+</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min liquidity (30d):</span>
+            {[0, 5, 15, 50].map(v => (
+              <button key={v} onClick={() => setMinLiq(v)} style={btn(minLiq === v)}>{v === 0 ? 'Any' : v + '+'}</button>
+            ))}
+          </div>
+          <select value={arbSport} onChange={e => setArbSport(e.target.value)}
+            style={{ padding: '5px 10px', borderRadius: 6, fontSize: 11, background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line)', cursor: 'pointer' }}>
+            {sportOpts.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {lastUpdated && <span style={{ fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
@@ -128,38 +159,58 @@ function ArbTable({ onSelect }) {
 
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[...Array(6)].map((_, i) => <div key={i} style={{ height: 52, background: 'var(--panel-2)', borderRadius: 8, opacity: 0.5 }} />)}
+          {[...Array(6)].map((_, i) => <div key={i} style={{ height: 56, background: 'var(--panel-2)', borderRadius: 8, opacity: 0.5 }} />)}
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={{ color: 'var(--dim)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}><IconZap size={32} /></div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No opportunities at ${minSpread}+ spread</div>
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>Try lowering the minimum spread filter.</p>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>No plays match these filters</div>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>Lower the min net edge or liquidity filter.</p>
         </div>
       ) : (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 70px', gap: 8, padding: '6px 12px', fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--line)' }}>
-            <div>Card</div><div style={{ textAlign: 'right' }}>Buy</div><div style={{ textAlign: 'right' }}>Sell</div><div style={{ textAlign: 'right' }}>Spread</div><div style={{ textAlign: 'right' }}>Conf.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(220px,300px) 96px 82px', gap: 8, padding: '6px 12px', fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--line)' }}>
+            <div>Card</div><div>The Play (after {Math.round(MARKETPLACE_FEE * 100)}% fee)</div><div style={{ textAlign: 'right' }}>Net Edge</div><div style={{ textAlign: 'right' }}>Liquidity</div>
           </div>
-          {filtered.map((r, i) => (
-            <div key={i} onClick={() => onSelect && onSelect(r)}
-              style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 70px', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--line)', cursor: 'pointer', transition: 'background .12s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--panel-2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Thumb card={{ player: r.player, sport: r.sport, ebay_thumb: r.thumbnail }} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.player || r.card}</div>
-                  <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{r.grader || 'RAW'} {r.grade} · {r.year || r.sport}</div>
+          {filtered.map((r, i) => {
+            const liqLabel = (r.sales7d || 0) >= 5 ? 'high' : (r.sales7d || 0) >= 3 ? 'med' : (r.sales30d || 0) > 0 ? 'low' : 'thin';
+            const liqColor = liqLabel === 'high' ? 'var(--up)' : liqLabel === 'med' ? 'var(--muted)' : 'var(--dim)';
+            const netColor = r.netEdge > 0 ? 'var(--up)' : 'var(--down)';
+            return (
+              <div key={i} onClick={() => onSelect && onSelect(r)}
+                style={{ display: 'grid', gridTemplateColumns: '1fr minmax(220px,300px) 96px 82px', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--line)', cursor: 'pointer', transition: 'background .12s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--panel-2)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Thumb card={{ player: r.player, sport: r.sport, ebay_thumb: r.thumbnail }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {r.player || r.card}
+                      {r.momentum && <span title="Undervalued and trending up" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'var(--up-soft)', color: 'var(--up)', letterSpacing: '.04em' }}>🔥 MOMENTUM</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{r.grader || 'RAW'} {r.grade} · {r.year || r.sport}</div>
+                  </div>
+                </div>
+                <div style={{ alignSelf: 'center', fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ color: 'var(--muted)' }}>Buy </span>
+                  <span style={{ color: 'var(--txt)', fontWeight: 700 }}>{fmt(r.buy)}</span>
+                  <span style={{ color: 'var(--dim)' }}> → FMV </span>
+                  <span style={{ color: 'var(--txt)', fontWeight: 700 }}>{fmt(r.fmv)}</span>
+                  <span style={{ color: 'var(--dim)' }}> → </span>
+                  <span style={{ color: netColor, fontWeight: 700 }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)} net</span>
+                </div>
+                <div style={{ textAlign: 'right', alignSelf: 'center' }}>
+                  <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: netColor, opacity: .8 }}>{r.netPct >= 0 ? '+' : ''}{r.netPct.toFixed(0)}%</div>
+                </div>
+                <div style={{ textAlign: 'right', alignSelf: 'center' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: liqColor }}>{liqLabel}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{(r.sales7d || 0)}/{(r.sales30d || 0)}</div>
                 </div>
               </div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--up)', alignSelf: 'center' }}>{fmt(r.lo)}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--down)', alignSelf: 'center' }}>{fmt(r.hi)}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--gold)', alignSelf: 'center' }}>{fmt(r.spread)}</div>
-              <div style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: (r.sales7d || 0) >= 5 ? 'var(--up)' : (r.sales7d || 0) >= 3 ? 'var(--muted)' : 'var(--dim)', alignSelf: 'center' }}>{(r.sales7d || 0) >= 5 ? 'high' : (r.sales7d || 0) >= 3 ? 'med' : 'low'}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
