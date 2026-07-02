@@ -94,11 +94,13 @@ export async function createCheckoutSession({ lineItems, sellerAccountId, applic
 
 // ── Payment Intents (kept for backward compat / escrow flow) ──────────────────
 
+// NOTE: all `amount` values in this adapter are integer CENTS — listings,
+// orders, and escrow rows store cents. Do not multiply by 100 again.
 export async function createPaymentIntent({ amount, currency = 'USD', buyerId, listingId, sellerId, metadata = {} }) {
   const stripe = await getStripe();
   if (!stripe) throw new Error('Stripe not configured — set STRIPE_SECRET_KEY');
 
-  const amountCents = Math.round(amount * 100);
+  const amountCents = Math.round(Number(amount));
   const feeCents = Math.round(amountCents * PLATFORM_FEE_PCT);
 
   const pi = await stripe.paymentIntents.create({
@@ -128,7 +130,7 @@ export async function authorize({ amount, currency = 'usd', payerId }) {
   if (!stripe) {
     return { id: `pi_stub_${Date.now()}`, status: 'requires_capture' };
   }
-  const amountCents = Math.round(Number(amount) * 100);
+  const amountCents = Math.round(Number(amount));
   const pi = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: currency.toLowerCase(),
@@ -138,20 +140,38 @@ export async function authorize({ amount, currency = 'usd', payerId }) {
   return { id: pi.id, status: pi.status, amount: pi.amount };
 }
 
+// Capture is defensive: it never throws. If the PI was never confirmed by the
+// buyer (no payment method attached) it reports that instead of blowing up the
+// order settlement — callers must check `status === 'succeeded'` before paying
+// the seller out of platform funds.
 export async function capture(paymentIntentId) {
   const stripe = await getStripe();
-  if (!stripe || paymentIntentId.startsWith('pi_stub')) return { id: paymentIntentId, status: 'succeeded' };
-  const pi = await stripe.paymentIntents.capture(paymentIntentId);
-  return { id: pi.id, status: pi.status, amount: pi.amount };
+  if (!stripe || !paymentIntentId || paymentIntentId.startsWith('pi_stub')) return { id: paymentIntentId, status: 'succeeded' };
+  try {
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (pi.status === 'succeeded') return { id: pi.id, status: 'succeeded' };
+    if (pi.status !== 'requires_capture') {
+      console.error('capture skipped — PI', paymentIntentId, 'is', pi.status);
+      return { id: pi.id, status: pi.status, error: 'not_capturable' };
+    }
+    const done = await stripe.paymentIntents.capture(paymentIntentId, undefined, { idempotencyKey: `capture_${paymentIntentId}` });
+    return { id: done.id, status: done.status, amount: done.amount };
+  } catch (e) {
+    console.error('Capture failed:', e.message);
+    return { id: paymentIntentId, status: 'failed', error: e.message };
+  }
 }
 
-export async function transfer({ amount, destination }) {
+export async function transfer({ amount, destination, idempotencyKey = null }) {
   const stripe = await getStripe();
   if (!stripe || !destination) return { id: `tr_stub_${Date.now()}` };
-  const amountCents = Math.round(Number(amount) * 100);
+  const amountCents = Math.round(Number(amount));
   if (amountCents <= 0) return { id: `tr_zero_${Date.now()}` };
   try {
-    const tr = await stripe.transfers.create({ amount: amountCents, currency: 'usd', destination });
+    const tr = await stripe.transfers.create(
+      { amount: amountCents, currency: 'usd', destination },
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
     return { id: tr.id };
   } catch (e) {
     console.error('Transfer failed:', e.message);

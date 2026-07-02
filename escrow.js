@@ -18,11 +18,25 @@ export async function hold(repo, stripe, { orderId = null, tradeId = null, payer
 
 export async function release(repo, stripe, escrow, { payeeId } = {}) {
   // Stripe: capture the PI, then Transfer (amount - fee) to seller's connected acct.
-  await stripe.capture(escrow.stripe_payment_intent_id);
+  // Payout-on-delivery hardening:
+  //   • destination is the seller's Stripe *account id*, never their user uuid
+  //   • transfer only fires if the buyer's payment actually captured — never pay
+  //     sellers out of platform balance for uncollected payments
+  //   • transfer is idempotent per escrow row, so retries can't double-pay
+  const payeeUserId = payeeId || escrow.payee_id;
+  let destination = null;
+  try { destination = (await repo.users.get(payeeUserId))?.stripe_account_id || null; } catch {}
+
+  const cap = await stripe.capture(escrow.stripe_payment_intent_id);
+  const captured = cap?.status === 'succeeded';
   const net = Number(escrow.amount) - Number(escrow.platform_fee || 0);
-  const tr = await stripe.transfer({ amount: net, destination: payeeId || escrow.payee_id });
+
+  let tr = { id: null };
+  if (captured && destination) {
+    tr = await stripe.transfer({ amount: net, destination, idempotencyKey: `escrow_release_${escrow.id}` });
+  }
   escrow.stripe_transfer_id = tr.id;
-  return transition(repo, 'escrow', escrow, S.RELEASED, { payload: { net } });
+  return transition(repo, 'escrow', escrow, S.RELEASED, { payload: { net, captured, hasConnectedAccount: !!destination } });
 }
 
 export async function refund(repo, stripe, escrow) {

@@ -9,6 +9,7 @@ import { appRouter } from '../src/routes/app.js';
 import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
 import { rateLimit } from '../src/middleware/rateLimit.js';
 import * as ordersSvc from '../orders.js';
+import { transition } from '../machine.js';
 import { stripeClient, createPaymentIntent, createConnectAccount, createOnboardingLink, getAccountStatus, verifyWebhook } from '../src/adapters/stripe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1272,6 +1273,120 @@ app.post('/api/offers/:id/decline', requireAuth, async (req, res) => {
   } catch (e) {
     console.error('offer decline error:', e.message);
     res.status(500).json({ error: 'Decline failed' });
+  }
+});
+
+// ── Orders — buyer/seller order book with ship + confirm-receipt lifecycle ────
+app.get('/api/orders', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ purchases: [], sales: [] });
+    const base = `
+      SELECT o.id, o.listing_id, o.card_id, o.buyer_id, o.seller_id, o.amount, o.platform_fee,
+             o.fulfillment_method, o.status, o.created_at, o.updated_at, o.inspection_ends_at,
+             c.player, c.card_set, c.grader, c.grade, c.year, c.ebay_thumb, c.image_url,
+             ub.handle AS buyer_handle, us.handle AS seller_handle,
+             s.carrier, s.tracking_number, s.shipped_at, s.delivered_at AS ship_delivered_at
+      FROM orders o
+      JOIN cards c ON c.id = o.card_id
+      LEFT JOIN users ub ON ub.id = o.buyer_id
+      LEFT JOIN users us ON us.id = o.seller_id
+      LEFT JOIN LATERAL (
+        SELECT carrier, tracking_number, shipped_at, delivered_at
+        FROM shipments WHERE order_id = o.id AND direction IN ('seller_to_buyer','hub_to_buyer')
+        ORDER BY created_at DESC LIMIT 1
+      ) s ON true`;
+    const [bought, sold] = await Promise.all([
+      pool.query(`${base} WHERE o.buyer_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [req.userId]),
+      pool.query(`${base} WHERE o.seller_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [req.userId]),
+    ]);
+    const shape = o => ({
+      id: o.id, listingId: o.listing_id, cardId: o.card_id,
+      amount: Number(o.amount) / 100, fee: Number(o.platform_fee) / 100,
+      status: o.status, method: o.fulfillment_method,
+      createdAt: o.created_at, updatedAt: o.updated_at, inspectionEndsAt: o.inspection_ends_at,
+      player: o.player, set: o.card_set, grader: o.grader, grade: o.grade, year: o.year,
+      thumbnail: o.ebay_thumb || o.image_url || null,
+      buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
+      carrier: o.carrier || null, trackingNumber: o.tracking_number || null,
+      shippedAt: o.shipped_at || null, deliveredAt: o.ship_delivered_at || null,
+    });
+    res.json({ purchases: bought.rows.map(shape), sales: sold.rows.map(shape) });
+  } catch (e) {
+    console.error('orders list error:', e.message);
+    res.json({ purchases: [], sales: [] });
+  }
+});
+
+// Seller marks the order shipped with carrier + tracking → buyer notified.
+app.post('/api/orders/:id/ship', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.seller_id !== req.userId) return res.status(403).json({ error: 'Not your sale' });
+    const carrier = String(req.body?.carrier || '').trim().slice(0, 40);
+    const tracking = String(req.body?.tracking_number || '').trim().slice(0, 80);
+    if (!carrier || !tracking) return res.status(400).json({ error: 'carrier and tracking_number required' });
+
+    // Legacy rows predate persisted transitions — walk them forward safely.
+    if (order.status === 'created') await transition(r, 'order', order, 'escrow_held', { actor: req.userId });
+    if (order.status === 'escrow_held') await transition(r, 'order', order, 'awaiting_shipment', { actor: req.userId });
+    if (order.status !== 'awaiting_shipment') return res.status(409).json({ error: `Order is ${order.status} — cannot mark shipped` });
+
+    const { shipment } = await ordersSvc.ship(r, order, { carrier, tracking, insuredValue: order.amount });
+
+    const pool = r.pool;
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+    await notify(pool, order.buyer_id, 'order_shipped',
+      `Shipped: ${card?.player || 'your card'}`,
+      `${carrier} ${tracking} — confirm receipt in Portfolio → Orders when it arrives.`,
+      { orderId: order.id, cardId: order.card_id, carrier, trackingNumber: tracking });
+
+    res.json({ success: true, order: { id: order.id, status: order.status }, shipment: { carrier: shipment.carrier, trackingNumber: shipment.tracking_number } });
+  } catch (e) {
+    console.error('order ship error:', e.message);
+    res.status(500).json({ error: e.message || 'Ship failed' });
+  }
+});
+
+// Buyer confirms the card arrived as described → order settles, seller paid.
+app.post('/api/orders/:id/confirm-receipt', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Not your purchase' });
+    if (!['shipped', 'delivered', 'inspection'].includes(order.status)) {
+      return res.status(409).json({ error: `Order is ${order.status} — nothing to confirm yet` });
+    }
+
+    if (order.status === 'shipped') {
+      const shipments = await r.shipments.list({ order_id: order.id });
+      const inTransit = shipments.find(s => s.status === 'in_transit') || null;
+      await ordersSvc.markDelivered(r, order, inTransit);
+    }
+    if (order.status === 'delivered') await transition(r, 'order', order, 'inspection', { actor: req.userId });
+    await ordersSvc.settle(r, stripe, order);
+
+    const pool = r.pool;
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+    const amt = `$${(Number(order.amount) / 100).toLocaleString()}`;
+    await notify(pool, order.seller_id, 'order_completed',
+      `Sale complete: ${card?.player || 'card'} — ${amt}`,
+      'The buyer confirmed receipt. Your payout has been released from escrow.',
+      { orderId: order.id, cardId: order.card_id });
+    await notify(pool, order.buyer_id, 'order_settled',
+      `Order complete: ${card?.player || 'card'}`,
+      'Receipt confirmed — this order is settled. Enjoy the card!',
+      { orderId: order.id, cardId: order.card_id });
+
+    res.json({ success: true, order: { id: order.id, status: order.status } });
+  } catch (e) {
+    console.error('order confirm-receipt error:', e.message);
+    res.status(500).json({ error: e.message || 'Confirm failed' });
   }
 });
 

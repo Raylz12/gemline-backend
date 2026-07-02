@@ -3,6 +3,9 @@
 // moved what is always reconstructable — the spine of the guarantee.
 import { MACHINES } from './states.js';
 
+// entity type → repo collection name, so transitions persist to the store.
+const REPO_KEY = { order: 'orders', trade: 'trades', vault: 'vault', shipment: 'shipments', escrow: 'escrow' };
+
 export class TransitionError extends Error {
   constructor(type, from, to) {
     super(`Illegal ${type} transition: ${from} → ${to}`);
@@ -23,6 +26,10 @@ export async function transition(repo, type, record, to, { actor = null, payload
   if (!can(type, from, to)) throw new TransitionError(type, from, to);
   record.status = to;
   record.updated_at = new Date().toISOString();
+  // Persist the new state — without this, status changes only lived in memory
+  // and every order stayed 'created' in the database.
+  const key = REPO_KEY[type];
+  if (key && repo[key]?.update) await repo[key].update(record);
   await repo.events.insert({
     entity_type: type, entity_id: record.id, from_state: from, to_state: to,
     actor_id: actor, payload, created_at: record.updated_at,
