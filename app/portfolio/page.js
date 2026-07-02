@@ -199,7 +199,7 @@ export default function PortfolioPage() {
       const res = await authFetch('/api/portfolio/list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ portfolioItemId: listingItem.id, price: Math.round(price * 100) }),
+        body: JSON.stringify({ portfolioItemId: listingItem.id, price }),
       });
       if (res.ok) {
         toast('Card listed for sale ✓');

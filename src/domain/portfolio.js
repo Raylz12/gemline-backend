@@ -1,6 +1,7 @@
 // Portfolio domain — a user's personal card collection.
 // Each portfolio item references a card in the shared catalog.
 // Users can list portfolio cards on the marketplace or offer them in trades.
+import { toCents } from '../store/repo.js';
 
 export async function list(repo, userId) {
   // Fast path: single JOIN query when Postgres is available
@@ -137,7 +138,7 @@ export async function listCard(repo, { userId, portfolioItemId, price }) {
     seller_id: userId,
     vault_item_id: null,
     kind: 'buy_now',
-    price: Number(price),
+    price: toCents(price),   // store cents (was raw dollars — unit bug fixed)
     currency: 'USD',
     status: 'active',
     boost_rank: 0,

@@ -1,6 +1,15 @@
 // Picks the store: Postgres when DATABASE_URL is set, otherwise in-memory.
 import { memoryRepo } from './memory.js';
 
+// ── Money units ────────────────────────────────────────────────────────────────
+// The store keeps all listing/order/escrow amounts as integer CENTS. The API
+// speaks dollars. These are the single source of truth for the conversion so
+// creation paths can't diverge (previously portfolio/list stored raw dollars
+// while POST /api/listings stored cents — a card listed via portfolio read back
+// at 1/100th its price). Always toCents() on write, fromCents() on read.
+export const toCents = (dollars) => Math.round(Number(dollars) * 100);
+export const fromCents = (cents) => Number(cents) / 100;
+
 export async function makeRepo() {
   if (process.env.DATABASE_URL) {
     const { pgRepo } = await import('./pg.js');

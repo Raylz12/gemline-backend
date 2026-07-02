@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
-import { makeRepo, stripeStub } from '../src/store/repo.js';
+import { makeRepo, stripeStub, toCents, fromCents } from '../src/store/repo.js';
 import { settlementRouter } from '../src/routes/settlement.js';
 import { appRouter } from '../src/routes/app.js';
 import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
@@ -1298,7 +1298,7 @@ app.post('/api/listings', requireAuth, async (req, res) => {
     if (!isFinite(dollars) || dollars <= 0) return res.status(400).json({ error: 'Price must be greater than 0' });
     const { rows: [card] } = await pool.query('SELECT id FROM cards WHERE id = $1', [cardId]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
-    const cents = Math.round(dollars * 100);
+    const cents = toCents(dollars);
     const photoUrls = Array.isArray(photos) ? photos.slice(0, 8) : [];
     const { rows: [listing] } = await pool.query(`
       INSERT INTO listings (card_id, seller_id, kind, price, currency, status,
@@ -1307,7 +1307,7 @@ app.post('/api/listings', requireAuth, async (req, res) => {
       RETURNING id, card_id, price, status, open_to_offers, listing_type, created_at
     `, [cardId, req.userId, cents, !!openToOffers, listingType || 'buy_now',
         description || null, JSON.stringify(photoUrls)]);
-    res.json({ ...listing, price: Number(listing.price) / 100 });
+    res.json({ ...listing, price: fromCents(listing.price) });
   } catch (e) {
     console.error('listings/create error:', e.message);
     res.status(500).json({ error: 'Failed to create listing' });
@@ -1327,7 +1327,7 @@ app.put('/api/listings/:id', requireAuth, async (req, res) => {
     if (req.body?.price !== undefined) {
       const dollars = Number(req.body.price);
       if (!isFinite(dollars) || dollars <= 0) return res.status(400).json({ error: 'Price must be greater than 0' });
-      params.push(Math.round(dollars * 100)); updates.push(`price = $${params.length}`);
+      params.push(toCents(dollars)); updates.push(`price = $${params.length}`);
     }
     if (req.body?.openToOffers !== undefined) { params.push(!!req.body.openToOffers); updates.push(`open_to_offers = $${params.length}`); }
     if (req.body?.description !== undefined) { params.push(req.body.description || null); updates.push(`description = $${params.length}`); }
@@ -1335,7 +1335,7 @@ app.put('/api/listings/:id', requireAuth, async (req, res) => {
     params.push(req.params.id);
     const { rows: [upd] } = await pool.query(
       `UPDATE listings SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING id, price, status`, params);
-    res.json({ ...upd, price: Number(upd.price) / 100 });
+    res.json({ ...upd, price: fromCents(upd.price) });
   } catch (e) {
     console.error('listings/update error:', e.message);
     res.status(500).json({ error: 'Failed to update listing' });
