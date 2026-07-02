@@ -397,7 +397,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
     return () => { cancelled = true; };
   }, [cardProp?.id]);
 
-  const c = useMemo(() => {
+  const fam = useMemo(() => {
     if (!cardProp) return cardProp;
     const merged = { ...cardProp };
     if (hydrated) {
@@ -413,6 +413,28 @@ export default function CardDetail({ card: cardProp, onClose }) {
     if (!merged.theme) merged.theme = ['#1a1f2e', '#12151f'];
     return merged;
   }, [cardProp, hydrated]);
+
+  // ── Grade-tier switcher ──
+  // Clicking a tier in the Grade Ladder swaps the WHOLE panel (hero price,
+  // FMV bar, chart, comps, listings) to that tier. null = the card's own tier.
+  const [tier, setTier] = useState(null);
+  useEffect(() => { setTier(null); }, [cardProp?.id]);
+  const c = useMemo(() => {
+    if (!fam || !tier) return fam;
+    return {
+      ...fam,
+      id: tier.id || fam.id,
+      grader: tier.grader || 'RAW',
+      grade: tier.grade || '',
+      market: Number(tier.price) || 0,
+      lo: Number(tier.lo) || 0,
+      hi: Number(tier.hi) || 0,
+      sales7d: Number(tier.sales7d) || 0,
+      sales30d: Number(tier.sales30d) || 0,
+      saleCount: Number(tier.sales30d) || 0,
+      gain7d: Number(tier.gain7d) || 0,
+    };
+  }, [fam, tier]);
   const [payModal, setPayModal] = useState(null); // { orderId, clientSecret, amount, fee }
   const [addingToPortfolio, setAddingToPortfolio] = useState(false);
   const [listings, setListings] = useState([]);
@@ -852,7 +874,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
                 {/* Grade ladder */}
                 {c.grades && c.grades.length > 0 && (
                   <div className="cd-block">
-                    <h4 className="cd-h4">Grade Ladder ({c.grades.length})</h4>
+                    <h4 className="cd-h4">Grade Ladder ({c.grades.length}) <span style={{ fontWeight: 400, fontSize: 10.5, color: 'var(--dim)', textTransform: 'none', letterSpacing: 0 }}>— tap a grade to switch</span></h4>
                     <div className="cd-ladder">
                       <div className="cd-ladder-head">
                         <span>Grade</span><span>Price</span><span>Range</span><span>Sales 7/30</span>
@@ -863,8 +885,14 @@ export default function CardDetail({ card: cardProp, onClose }) {
                           const isCurrent = g.grader === c.grader && String(g.grade) === String(c.grade);
                           const maxP = Math.max(...c.grades.map(x => Number(x.price) || 0), 1);
                           const barW = Math.max(3, Math.round(((Number(g.price) || 0) / maxP) * 100));
+                          const isBase = g.grader === fam.grader && String(g.grade) === String(fam.grade);
                           return (
-                            <div key={`${g.grader}-${g.grade}-${i}`} className={`cd-ladder-row ${isCurrent ? 'cur' : ''}`}>
+                            <div key={`${g.grader}-${g.grade}-${i}`} className={`cd-ladder-row ${isCurrent ? 'cur' : ''}`}
+                              role="button" tabIndex={0}
+                              title={isCurrent ? 'Currently shown' : `Show ${`${g.grader || 'RAW'} ${g.grade || ''}`.trim()} prices`}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => { setChartGrade(null); setTier(isBase ? null : g); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setChartGrade(null); setTier(isBase ? null : g); } }}>
                               <span className="cd-ladder-grade">
                                 <span className={gradeClass(g.grader)} style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>{`${g.grader || 'RAW'} ${g.grade || ''}`.trim()}</span>
                                 {isCurrent && <span className="cd-cur-dot">●</span>}

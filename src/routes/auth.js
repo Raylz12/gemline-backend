@@ -242,6 +242,36 @@ export function authRouter(repo) {
     }
   });
 
+  // Change password — verify current, bcrypt the new one (min 8 chars).
+  r.post('/change-password', requireAuth, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body || {};
+      if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+      if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+      if (newPassword.length > 128) return res.status(400).json({ error: 'Password too long' });
+
+      // 5 attempts/hour per user — stops brute-forcing the current password.
+      const lim = await checkLimit(repo, { bucket: 'change_pw', identifier: `u:${req.userId}`, max: 5, windowSec: 3600 });
+      if (lim.blocked) {
+        res.setHeader('Retry-After', lim.retryAfter);
+        return res.status(429).json({ error: 'Too many attempts — try again later', retryAfter: lim.retryAfter });
+      }
+
+      const user = await repo.users.get(req.userId);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const valid = await verifyPassword(currentPassword, user.password_hash);
+      if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+      const newHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+      if (repo.pool) await repo.pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.userId]);
+      else await repo.users.update({ ...user, password_hash: newHash });
+      if (repo.pool) await pgRateClear(repo.pool, 'change_pw', `u:${req.userId}`).catch(() => {});
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(e.status || 500).json({ error: e.message });
+    }
+  });
+
   r.post('/logout', (req, res) => {
     // Stateless tokens — client just discards. Could add a revocation list if needed.
     res.json({ ok: true });

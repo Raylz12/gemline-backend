@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { toast } from '../lib/toast';
+import AddressForm, { AddressBlock } from './AddressForm';
 
 const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 // Load once at module scope (Stripe recommends not re-creating on every render).
@@ -83,8 +84,98 @@ function CheckoutForm({ payment, onPaid, onClose, authFetch }) {
   );
 }
 
+// ── Shipping address step ───────────────────────────────────────────────────────
+// Buyers must confirm where the card ships BEFORE paying. Saved default is
+// offered one-tap; otherwise we collect the address (also saved to profile).
+// The snapshot lands on orders.shipping_address so later edits never mutate
+// past orders.
+function AddressStep({ orderId, authFetch, onConfirmed }) {
+  const [addresses, setAddresses] = useState(null); // null = loading
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    authFetch('/api/user/addresses')
+      .then(r => (r.ok ? r.json() : { addresses: [] }))
+      .then(d => { if (!cancelled) setAddresses(d.addresses || []); })
+      .catch(() => { if (!cancelled) setAddresses([]); });
+    return () => { cancelled = true; };
+  }, [authFetch]);
+
+  const attach = async (body) => {
+    const res = await authFetch(`/api/orders/${orderId}/shipping-address`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Could not save shipping address');
+    return d.shippingAddress;
+  };
+
+  const useDefault = async (addr) => {
+    setConfirming(true);
+    setErr('');
+    try {
+      const snap = await attach({ addressId: addr.id });
+      onConfirmed(snap);
+    } catch (e) { setErr(e.message); }
+    finally { setConfirming(false); }
+  };
+
+  const submitNew = async (fields) => {
+    const snap = await attach(fields);
+    onConfirmed(snap);
+  };
+
+  if (addresses === null) {
+    return <div style={{ color: '#9ca3af', fontSize: 13 }}>Loading shipping details…</div>;
+  }
+
+  const preferred = addresses.find(a => a.is_default) || addresses[0] || null;
+
+  if (!preferred || editing) {
+    return (
+      <div>
+        <div style={{ color: '#9ca3af', fontSize: 12.5, marginBottom: 12 }}>
+          Where should the seller ship this card?
+        </div>
+        <AddressForm
+          initial={editing && preferred ? preferred : {}}
+          onSubmit={submitNew}
+          onCancel={editing ? () => setEditing(false) : undefined}
+          submitLabel="Ship to this address"
+          busyLabel="Saving…"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ color: '#9ca3af', fontSize: 12.5, marginBottom: 10 }}>Ship to your saved address?</div>
+      <div style={{ background: '#0f1420', border: '1px solid #263042', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+        <AddressBlock address={preferred} />
+      </div>
+      {err && <div style={{ color: '#ff5c6c', fontSize: 12, marginBottom: 10 }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={() => setEditing(true)} disabled={confirming}
+          style={{ padding: '11px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: 'transparent', color: '#9ca3af', border: '1px solid #263042', cursor: 'pointer' }}>
+          Edit
+        </button>
+        <button type="button" onClick={() => useDefault(preferred)} disabled={confirming}
+          style={{ flex: 1, padding: '11px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#16c784', color: '#04120b', border: 'none', cursor: confirming ? 'wait' : 'pointer' }}>
+          {confirming ? 'Saving…' : 'Ship to this address'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function PaymentModal({ payment, onPaid, onClose, authFetch, cancelOnClose = true }) {
   const [closing, setClosing] = useState(false);
+  const [addressDone, setAddressDone] = useState(false);
   const clientSecret = payment?.clientSecret || null;
 
   // Dark Payment Element theme matching the .cd-dark intelligence panel.
@@ -145,7 +236,9 @@ export default function PaymentModal({ payment, onPaid, onClose, authFetch, canc
           Held in escrow until you confirm the card arrived as described. Includes GEMLINE fee {money(payment?.fee || 0)}.
         </div>
 
-        {!PUBLISHABLE_KEY ? (
+        {!addressDone ? (
+          <AddressStep orderId={payment?.orderId} authFetch={authFetch} onConfirmed={() => setAddressDone(true)} />
+        ) : !PUBLISHABLE_KEY ? (
           <div style={{ color: '#f0b429', fontSize: 13, lineHeight: 1.6, background: '#1a1508', border: '1px solid #3a2f10', borderRadius: 8, padding: 14 }}>
             Payments aren’t configured yet (missing publishable key). Your order is reserved — an admin will enable checkout shortly.
           </div>

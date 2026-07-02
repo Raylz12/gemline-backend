@@ -54,6 +54,8 @@ function mapFeedCard(c, i) {
     rookie: c.rookie || false,
     cardhedge_id: c.cardhedge_id || null,
     gradeCount: c.gradeCount || 1,
+    priceMin: c.priceMin || market,
+    priceMax: c.priceMax || market,
     grades: c.grades || [],
   };
 }

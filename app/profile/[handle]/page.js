@@ -48,11 +48,11 @@ function getTierLabel(price) {
   return { label: 'Mythic', cls: 'mythic' };
 }
 
-const BADGE_TIER_ORDER = { diamond: 0, gold: 1, silver: 2, bronze: 3 };
+const BADGE_TIER_ORDER = { diamond: 0, gold: 1, emerald: 2, silver: 3, bronze: 4 };
 
 function getHighestTier(badges) {
   if (!badges || !badges.length) return null;
-  for (const tier of ['diamond', 'gold', 'silver', 'bronze']) {
+  for (const tier of ['diamond', 'gold', 'emerald', 'silver', 'bronze']) {
     if (badges.some(b => b.tier === tier)) return tier;
   }
   return null;
@@ -129,7 +129,7 @@ export default function ProfilePage() {
   const toggleFeaturedBadge = (key) => {
     setFeaturedKeys(prev => {
       if (prev.includes(key)) return prev.filter(k => k !== key);
-      if (prev.length >= 6) return prev;
+      if (prev.length >= 3) return prev; // profiles feature at most 3 badges
       return [...prev, key];
     });
   };
@@ -177,9 +177,9 @@ export default function ProfilePage() {
   const allBadges = (profile.badges || []).sort((a, b) =>
     (BADGE_TIER_ORDER[a.tier] ?? 4) - (BADGE_TIER_ORDER[b.tier] ?? 4)
   );
-  const featured = featuredKeys.length > 0
+  const featured = (featuredKeys.length > 0
     ? featuredKeys.map(k => allBadges.find(b => b.key === k || b.name === k)).filter(Boolean)
-    : allBadges.slice(0, 6);
+    : allBadges).slice(0, 3);
 
   const physicalShowcase = profile.physicalShowcase || [];
 
@@ -304,7 +304,7 @@ export default function ProfilePage() {
         {/* Showcase Cards */}
         <div>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.14em', color: 'var(--dim)', textTransform: 'uppercase', marginBottom: 10 }}>
-            Pinned Grails · {physicalShowcase.length}/3
+            Pinned Grails · {physicalShowcase.length}/5
           </div>
           {physicalShowcase.length > 0 ? (
             <div className="p-showcase-grid">
@@ -390,7 +390,7 @@ export default function ProfilePage() {
                       style={{ cursor: 'pointer', position: 'relative' }}>
                       <button className={`pin-btn ${isShowcased ? 'pinned' : ''}`}
                         onClick={(e) => { e.stopPropagation(); toggleShowcase(card.card_id || card.id, 'physical'); }}
-                        title={isShowcased ? 'Remove from showcase' : 'Pin to showcase (max 3)'}>📌</button>
+                        title={isShowcased ? 'Remove from showcase' : 'Pin to showcase (max 5)'}>📌</button>
                       <div className="slab" style={{
                         background: card.thumbnail ? `url(${card.thumbnail}) center/contain no-repeat var(--panel-2)` : 'linear-gradient(135deg, #2a2a2a, #555)',
                         height: 130,
@@ -420,7 +420,7 @@ export default function ProfilePage() {
               <button className="p-modal-close" onClick={() => setBadgeModalOpen(false)}>✕</button>
             </div>
             <div className="p-modal-hint">
-              Select up to 6 badges to feature on your profile. These will be displayed prominently.
+              Select up to 3 badges to feature on your profile. These will be displayed prominently.
             </div>
             <div className="p-badge-picker">
               {allBadges.map((b, i) => {
@@ -443,7 +443,7 @@ export default function ProfilePage() {
               })}
             </div>
             <div className="p-modal-footer">
-              <span className="p-pick-count">{featuredKeys.length}/6 selected</span>
+              <span className="p-pick-count">{featuredKeys.length} of 3 selected</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="p-btn-secondary" onClick={() => { setFeaturedKeys([]); }}>
                   Clear All

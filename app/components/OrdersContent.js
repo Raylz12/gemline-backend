@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
 import PaymentModal from './PaymentModal';
+import { AddressBlock } from './AddressForm';
 
 const CARRIERS = ['USPS', 'UPS', 'FedEx', 'DHL', 'Other'];
 
@@ -46,6 +47,27 @@ function StatusPill({ status }) {
     <span style={{ fontSize: 9, fontFamily: 'var(--mono)', fontWeight: 700, letterSpacing: '.08em', padding: '3px 8px', borderRadius: 5, background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
       {s.label}
     </span>
+  );
+}
+
+// Seller-facing "ship to" panel — buyer name + full address with a copy
+// button so the seller can hand-write or buy a label elsewhere.
+// Label purchase (EasyPost/Shippo) is a future integration.
+function ShipTo({ order }) {
+  const addr = order.shippingAddress;
+  return (
+    <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
+      <div style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+        Ship to — @{order.buyerHandle}
+      </div>
+      {addr ? (
+        <AddressBlock address={addr} copyable />
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.5 }}>
+          Address not collected (legacy order) — message the buyer @{order.buyerHandle} for their shipping address.
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -235,6 +257,10 @@ export default function OrdersContent() {
                     {o.shippedAt && <span style={{ color: 'var(--dim)', fontSize: 11 }}>shipped {new Date(o.shippedAt).toLocaleDateString()}</span>}
                     {o.deliveredAt && <span style={{ color: 'var(--up)', fontSize: 11 }}>delivered {new Date(o.deliveredAt).toLocaleDateString()}</span>}
                   </div>
+                )}
+
+                {isSale && ['created', 'escrow_held', 'awaiting_shipment'].includes(o.status) && (
+                  <ShipTo order={o} />
                 )}
 
                 {canShip && shipFormId === o.id && (

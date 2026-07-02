@@ -478,21 +478,33 @@ app.get('/api/cards/:id', async (req, res) => {
     if (!pool) return res.status(503).json({ error: 'db unavailable' });
     let { rows: [card] } = await pool.query('SELECT * FROM mv_card_feed WHERE id = $1', [id]);
     if (!card) {
-      // Not in the materialized feed (unpriced/new) — fall back to cards + sibling grade tiers
+      // Not the family's display-tier row (or unpriced/new) — fall back to cards
+      // + sibling grade tiers of the same family (player/set/variant/number).
       const { rows: [raw] } = await pool.query('SELECT * FROM cards WHERE id = $1', [id]);
       if (!raw) return res.status(404).json({ error: 'not found' });
       let grades = [];
-      if (raw.cardhedge_id) {
-        const { rows: sib } = await pool.query(
-          `SELECT grader, grade, catalog_price AS price, ch_price_lo AS lo, ch_price_hi AS hi,
+      const { rows: sib } = await pool.query(
+        `SELECT id, grader, grade, catalog_price AS price, ch_price_lo AS lo, ch_price_hi AS hi,
+                sales_7d AS sales7d, sales_30d AS sales30d, gain_7d AS gain7d
+         FROM cards
+         WHERE player = $1 AND card_set = $2
+           AND COALESCE(variant,'') = $3 AND COALESCE(number,'') = $4
+           AND catalog_price > 0
+         ORDER BY catalog_price DESC NULLS LAST LIMIT 12`,
+        [raw.player, raw.card_set, raw.variant || '', raw.number || '']);
+      grades = sib;
+      if (!grades.length && raw.cardhedge_id) {
+        const { rows: chSib } = await pool.query(
+          `SELECT id, grader, grade, catalog_price AS price, ch_price_lo AS lo, ch_price_hi AS hi,
                   sales_7d AS sales7d, sales_30d AS sales30d, gain_7d AS gain7d
            FROM cards WHERE cardhedge_id = $1 ORDER BY catalog_price DESC NULLS LAST LIMIT 12`,
           [raw.cardhedge_id]);
-        grades = sib;
+        grades = chSib;
       }
       card = { ...raw, grade_count: grades.length || 1, grades };
     }
     const mp = Number(card.catalog_price) || 0;
+    const tiers = dedupeTiers(card.grades);
     res.json({ card: {
       cardId: card.id, player: card.player, sport: card.sport, set: card.card_set,
       grader: card.grader || 'RAW', grade: card.grade || '', year: card.year || '',
@@ -508,9 +520,12 @@ app.get('/api/cards/:id', async (req, res) => {
       thumbnail: card.ebay_thumb || card.image_url || null,
       variant: card.variant || '', num: card.number || '',
       cardhedge_id: card.cardhedge_id || null,
-      gradeCount: Number(card.grade_count) || 1,
-      grades: (card.grades || []).map(g => ({
-        grader: g.grader || 'RAW', grade: g.grade || '',
+      gradeCount: tiers.length || Number(card.grade_count) || 1,
+      priceMin: Number(card.price_min) || mp,
+      priceMax: Number(card.price_max) || mp,
+      grades: tiers.map(g => ({
+        id: g.id || null,
+        grader: normGrader(g.grader), grade: normGrade(g.grade),
         price: Number(g.price) || 0, lo: Number(g.lo) || 0, hi: Number(g.hi) || 0,
         sales7d: Number(g.sales7d) || 0, sales30d: Number(g.sales30d) || 0,
         gain7d: Number(g.gain7d) || 0,
@@ -607,6 +622,34 @@ app.get('/api/market/heatmap', async (req, res) => {
 });
 
 // ── PUBLIC routes (no auth) ───────────────────────────────────────────────────
+// Normalize legacy grader pollution at read time ('Raw', 'NULL', 'null', empty → RAW)
+const normGrader = (g) => {
+  const v = (g || '').trim();
+  if (!v || /^(raw|null)$/i.test(v)) return 'RAW';
+  return v.toUpperCase();
+};
+const normGrade = (g) => {
+  const v = (g || '').trim();
+  if (!v || /^(ungraded|null)$/i.test(v)) return '';
+  return v;
+};
+// Family rows can carry duplicate tiers (e.g. two PSA 10 source rows from
+// polluted imports) — keep the most-traded, then highest-priced per tier.
+function dedupeTiers(grades) {
+  const seen = new Map();
+  for (const g of grades || []) {
+    const key = `${normGrader(g.grader)}|${normGrade(g.grade)}`;
+    const prev = seen.get(key);
+    const s = Number(g.sales30d) || 0, p = Number(g.price) || 0;
+    if (!prev || s > prev._s || (s === prev._s && p > prev._p)) {
+      seen.set(key, { ...g, _s: s, _p: p });
+    }
+  }
+  return [...seen.values()]
+    .sort((a, b) => b._p - a._p)
+    .map(({ _s, _p, ...g }) => g);
+}
+
 app.get('/api/market/feed', async (req, res) => {
   try {
     res.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
@@ -675,9 +718,10 @@ app.get('/api/market/feed', async (req, res) => {
 
     const feed = cards.map(card => {
       const mp = Number(card.catalog_price) || 0;
+      const tiers = dedupeTiers(card.grades);
       return {
         cardId: card.id, player: card.player, sport: card.sport, set: card.card_set,
-        grader: card.grader || 'RAW', grade: card.grade || '', year: card.year || '',
+        grader: normGrader(card.grader), grade: normGrade(card.grade), year: card.year || '',
         marketPrice: mp,
         lo: Number(card.ch_price_lo) || (mp ? Math.round(mp * 0.85) : null),
         hi: Number(card.ch_price_hi) || (mp ? Math.round(mp * 1.18) : null),
@@ -691,10 +735,14 @@ app.get('/api/market/feed', async (req, res) => {
         label: card.ch_confidence ? `Card Hedge Grade ${card.ch_confidence}` : (mp ? 'Catalog price' : ''),
         variant: card.variant || '', num: card.number || '',
         cardhedge_id: card.cardhedge_id || null,
-        gradeCount: Number(card.grade_count) || 1,
-        grades: (card.grades || []).map(g => ({
-          grader: g.grader || 'RAW',
-          grade: g.grade || '',
+        gradeCount: tiers.length || Number(card.grade_count) || 1,
+        // Family price range across grade tiers (MV is family-grouped)
+        priceMin: Number(card.price_min) || mp,
+        priceMax: Number(card.price_max) || mp,
+        grades: tiers.map(g => ({
+          id: g.id || null,
+          grader: normGrader(g.grader),
+          grade: normGrade(g.grade),
           price: Number(g.price) || 0,
           lo: Number(g.lo) || 0,
           hi: Number(g.hi) || 0,
@@ -738,18 +786,6 @@ app.get('/api/market/feed', async (req, res) => {
     res.json({ feed, totalCards: total, page, pages, sportCounts: sportCounts.data, brandCounts: brandCounts.data });
   } catch(e) { console.error('market/feed:', e.message); res.json({ feed: [] }); }
 });
-
-// Normalize legacy grader pollution at read time ('Raw', 'NULL', 'null', empty → RAW)
-const normGrader = (g) => {
-  const v = (g || '').trim();
-  if (!v || /^(raw|null)$/i.test(v)) return 'RAW';
-  return v.toUpperCase();
-};
-const normGrade = (g) => {
-  const v = (g || '').trim();
-  if (!v || /^(ungraded|null)$/i.test(v)) return '';
-  return v;
-};
 
 app.post('/api/catalog/search', async (req, res) => {
   try {
@@ -1138,6 +1174,9 @@ async function settleEndedAuctions(r, { force = false } = {}) {
       });
       await pool.query("UPDATE listings SET status = 'sold' WHERE id = $1", [a.id]);
       await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [a.id]).catch(() => {});
+      // Snapshot the winner's saved shipping address (if any) — they can
+      // confirm/replace it in the Complete Payment flow.
+      await snapshotOrderAddress(pool, order.id, a.winner_id).catch(() => {});
       await notify(pool, a.winner_id, 'auction_won', `You won: ${a.player} — ${priceStr}`, 'Complete payment within 24h to secure your card — open Orders to pay now.', { listingId: a.id, cardId: a.card_id, orderId: order.id, action: 'complete_payment' });
       const wonTpl = emailTpl.auctionWon({ player: a.player, price: priceStr });
       await emailUser(pool, a.winner_id, wonTpl.subject, wonTpl.html);
@@ -1862,6 +1901,9 @@ app.post('/api/listings/:id/buy', requireAuth, limitMoney, async (req, res) => {
         amount: Number(l.price), fee: Math.round(Number(l.price) * 0.1),
         method, paymentDueAt: paymentDue(BUY_PAYMENT_WINDOW_MS),
       });
+      // Snapshot the buyer's saved shipping address (if any) onto the order —
+      // the payment modal confirms/collects before the card can be paid for.
+      if (pool) await snapshotOrderAddress(pool, order.id, req.userId).catch(() => {});
       if (!clientSecret) {
         // No Stripe key (dev/stub) — finalize immediately so local flows still work.
         await finalizePaidOrder(r, stripe, order);
@@ -1932,6 +1974,9 @@ app.post('/api/orders/:id/payment/complete', requireAuth, async (req, res) => {
     if (order.status !== 'pending_payment') {
       return res.json({ ok: true, status: order.status });
     }
+    // Belt-and-suspenders: if no shipping address was attached during checkout
+    // (older client), snapshot the buyer's default saved address now.
+    if (!order.shipping_address && r.pool) await snapshotOrderAddress(r.pool, order.id, req.userId).catch(() => {});
     // Trust Stripe, not the client: only finalize if the PI actually succeeded
     // (or is authorized/requires_capture under manual capture).
     const escrow = order.escrow_id ? await r.escrow.get(order.escrow_id) : null;
@@ -2089,6 +2134,8 @@ app.post('/api/offers/:id/accept', requireAuth, limitMoney, async (req, res) => 
       method: offer.vault_item_id ? 'vault' : 'direct',
       paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
     });
+    // Snapshot the buyer's saved shipping address (if any) — confirmed at payment.
+    await snapshotOrderAddress(pool, order.id, offer.buyer_id).catch(() => {});
 
     const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
     const amt = `$${(Number(offer.amount) / 100).toLocaleString()}`;
@@ -2142,6 +2189,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     const base = `
       SELECT o.id, o.listing_id, o.card_id, o.buyer_id, o.seller_id, o.amount, o.platform_fee,
              o.fulfillment_method, o.status, o.created_at, o.updated_at, o.inspection_ends_at, o.payment_due_at,
+             o.shipping_address,
              c.player, c.card_set, c.grader, c.grade, c.year, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle,
              s.carrier, s.tracking_number, s.shipped_at, s.delivered_at AS ship_delivered_at
@@ -2170,6 +2218,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
       carrier: o.carrier || null, trackingNumber: o.tracking_number || null,
       shippedAt: o.shipped_at || null, deliveredAt: o.ship_delivered_at || null,
+      shippingAddress: o.shipping_address || null,
     });
     res.json({ purchases: bought.rows.map(shape), sales: sold.rows.map(shape) });
   } catch (e) {
@@ -2646,27 +2695,36 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
     if (!pool) return res.json({ user: null, cards: [] });
     // Find user by handle
     const { rows: [user] } = await pool.query(
-      'SELECT id, handle, created_at FROM users WHERE LOWER(handle) = LOWER($1)', [req.params.handle]
+      'SELECT id, handle, bio, avatar_url, featured_badges, created_at FROM users WHERE LOWER(handle) = LOWER($1)', [req.params.handle]
     );
     if (!user) return res.status(404).json({ error: 'User not found' });
-    // Get follower/following counts
-    const { rows: [fc] } = await pool.query(
-      'SELECT (SELECT COUNT(*) FROM follows WHERE following_id = $1) as follower_count, (SELECT COUNT(*) FROM follows WHERE follower_id = $1) as following_count',
-      [user.id]
-    );
-    // Get their portfolio cards
-    const { rows: cards } = await pool.query(`
-      SELECT p.id as portfolio_id, p.card_id, p.verification_status, c.player, c.sport, c.card_set, c.grader, c.grade,
-             c.catalog_price, c.ebay_thumb, c.image_url, c.variant, c.year
-      FROM portfolios p
-      JOIN cards c ON c.id = p.card_id
-      WHERE p.user_id = $1
-      ORDER BY c.catalog_price DESC NULLS LAST
-    `, [user.id]);
+    // Follower counts + portfolio + earned badges + showcase picks — one round-trip batch
+    const [fcRes, cardsRes, badgesRes, showcaseRes] = await Promise.all([
+      pool.query(
+        'SELECT (SELECT COUNT(*) FROM follows WHERE following_id = $1) as follower_count, (SELECT COUNT(*) FROM follows WHERE follower_id = $1) as following_count',
+        [user.id]),
+      pool.query(`
+        SELECT p.id as portfolio_id, p.card_id, p.verification_status, c.player, c.sport, c.card_set, c.grader, c.grade,
+               c.catalog_price, c.ebay_thumb, c.image_url, c.variant, c.year
+        FROM portfolios p
+        JOIN cards c ON c.id = p.card_id
+        WHERE p.user_id = $1
+        ORDER BY (p.verification_status = 'verified') DESC, c.catalog_price DESC NULLS LAST
+      `, [user.id]),
+      pool.query(
+        `SELECT b.key, b.name, b.emoji, b.tier, b.description, ub.earned_at
+         FROM user_badges ub JOIN badges b ON ub.badge_key = b.key
+         WHERE ub.user_id = $1 ORDER BY ub.earned_at`, [user.id]),
+      pool.query(
+        `SELECT card_id FROM user_showcase WHERE user_id = $1 AND type = 'physical' ORDER BY position, added_at LIMIT 5`,
+        [user.id]),
+    ]);
+    const fc = fcRes.rows[0];
+    const cards = cardsRes.rows;
     const totalValue = cards.reduce((s, c) => s + (Number(c.catalog_price) || 0), 0);
     const verifiedValue = cards.reduce((s, c) => s + (c.verification_status === 'verified' ? (Number(c.catalog_price) || 0) : 0), 0);
     res.json({
-      user: { ...user, ...fc, avatar_url: null },
+      user: { id: user.id, handle: user.handle, created_at: user.created_at, ...fc, avatar_url: user.avatar_url || null, bio: user.bio || '' },
       cards: cards.map(c => ({
         id: c.card_id, portfolioId: c.portfolio_id, player: c.player, sport: c.sport,
         set: c.card_set, grader: c.grader || 'RAW', grade: c.grade || '',
@@ -2674,6 +2732,11 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
         variant: c.variant || '', year: c.year || '',
         verified: c.verification_status === 'verified',
       })),
+      // Showcase: the user's picks (≤5). UI falls back to top-5 by
+      // verified-first-then-value when empty (cards[] is already sorted so).
+      showcaseCardIds: showcaseRes.rows.map(x => x.card_id),
+      badges: badgesRes.rows,
+      featuredBadges: (user.featured_badges || []).slice(0, 3),
       totalValue,
       verifiedValue,
     });
@@ -3514,11 +3577,164 @@ app.get('/api/user/profile', requireAuth, async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({});
-    const { rows: [user] } = await pool.query('SELECT id, handle, email, display_name_changed, created_at FROM users WHERE id = $1', [req.userId]);
+    const { rows: [user] } = await pool.query('SELECT id, handle, email, bio, avatar_url, display_name_changed, created_at FROM users WHERE id = $1', [req.userId]);
     res.json(user || {});
   } catch (e) {
     res.json({});
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SHIPPING ADDRESSES — saved per user; snapshotted onto orders at checkout
+// ══════════════════════════════════════════════════════════════════════════════
+
+const US_STATES = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC','PR','GU','VI','AS','MP','AA','AE','AP']);
+const ZIP_RE = /^\d{5}(-\d{4})?$/;
+
+// Validate + normalize an address payload. Returns { ok, error?, address? }.
+function validateAddress(body) {
+  const s = (v, max = 120) => String(v ?? '').trim().slice(0, max);
+  const a = {
+    name: s(body.name, 80),
+    street1: s(body.street1),
+    street2: s(body.street2) || null,
+    city: s(body.city, 80),
+    state: s(body.state, 20).toUpperCase(),
+    zip: s(body.zip, 12),
+    country: (s(body.country, 2).toUpperCase() || 'US'),
+    phone: s(body.phone, 24) || null,
+  };
+  if (!a.name) return { ok: false, error: 'Full name is required' };
+  if (!a.street1) return { ok: false, error: 'Street address is required' };
+  if (!a.city) return { ok: false, error: 'City is required' };
+  if (!a.state) return { ok: false, error: 'State is required' };
+  if (!a.zip) return { ok: false, error: 'ZIP code is required' };
+  if (a.country === 'US') {
+    if (!US_STATES.has(a.state)) return { ok: false, error: 'Enter a valid 2-letter US state (e.g. CA, NY, TX)' };
+    if (!ZIP_RE.test(a.zip)) return { ok: false, error: 'Enter a valid ZIP code (12345 or 12345-6789)' };
+  }
+  return { ok: true, address: a };
+}
+
+// Snapshot a user's default (or only) saved address onto an order — called at
+// checkout creation so later address edits never mutate historical orders.
+async function snapshotOrderAddress(pool, orderId, userId, addressId = null) {
+  if (!pool || !orderId || !userId) return null;
+  const { rows: [addr] } = addressId
+    ? await pool.query('SELECT * FROM user_addresses WHERE id = $1 AND user_id = $2', [addressId, userId])
+    : await pool.query('SELECT * FROM user_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1', [userId]);
+  if (!addr) return null;
+  const snap = {
+    name: addr.name, street1: addr.street1, street2: addr.street2 || null,
+    city: addr.city, state: addr.state, zip: addr.zip, country: addr.country || 'US',
+    phone: addr.phone || null, address_id: addr.id,
+  };
+  await pool.query('UPDATE orders SET shipping_address = $1 WHERE id = $2', [JSON.stringify(snap), orderId]);
+  return snap;
+}
+
+app.get('/api/user/addresses', requireAuth, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.json({ addresses: [] });
+    const { rows } = await pool.query(
+      'SELECT id, name, street1, street2, city, state, zip, country, phone, is_default, created_at FROM user_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC',
+      [req.userId]);
+    res.json({ addresses: rows });
+  } catch (e) { console.error('addresses list:', e.message); res.json({ addresses: [] }); }
+});
+
+app.post('/api/user/addresses', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const v = validateAddress(req.body || {});
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const a = v.address;
+    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) AS count FROM user_addresses WHERE user_id = $1', [req.userId]);
+    if (Number(count) >= 10) return res.status(400).json({ error: 'Address book is full (max 10)' });
+    const makeDefault = req.body?.is_default === true || Number(count) === 0;
+    if (makeDefault) await pool.query('UPDATE user_addresses SET is_default = false WHERE user_id = $1', [req.userId]);
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO user_addresses (user_id, name, street1, street2, city, state, zip, country, phone, is_default)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.userId, a.name, a.street1, a.street2, a.city, a.state, a.zip, a.country, a.phone, makeDefault]);
+    res.json({ ok: true, address: row });
+  } catch (e) { console.error('address create:', e.message); res.status(500).json({ error: 'Could not save address' }); }
+});
+
+app.put('/api/user/addresses/:id', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const v = validateAddress(req.body || {});
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const a = v.address;
+    if (req.body?.is_default === true) await pool.query('UPDATE user_addresses SET is_default = false WHERE user_id = $1', [req.userId]);
+    const { rows: [row] } = await pool.query(
+      `UPDATE user_addresses SET name=$1, street1=$2, street2=$3, city=$4, state=$5, zip=$6, country=$7, phone=$8,
+              is_default = CASE WHEN $9 THEN true ELSE is_default END
+       WHERE id = $10 AND user_id = $11 RETURNING *`,
+      [a.name, a.street1, a.street2, a.city, a.state, a.zip, a.country, a.phone, req.body?.is_default === true, req.params.id, req.userId]);
+    if (!row) return res.status(404).json({ error: 'Address not found' });
+    res.json({ ok: true, address: row });
+  } catch (e) { console.error('address update:', e.message); res.status(500).json({ error: 'Could not update address' }); }
+});
+
+app.delete('/api/user/addresses/:id', requireAuth, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const { rows: [gone] } = await pool.query('DELETE FROM user_addresses WHERE id = $1 AND user_id = $2 RETURNING is_default', [req.params.id, req.userId]);
+    if (!gone) return res.status(404).json({ error: 'Address not found' });
+    // Keep exactly one default when possible
+    if (gone.is_default) {
+      await pool.query(
+        `UPDATE user_addresses SET is_default = true
+         WHERE id = (SELECT id FROM user_addresses WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1)`,
+        [req.userId]);
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error('address delete:', e.message); res.status(500).json({ error: 'Could not delete address' }); }
+});
+
+// Attach/confirm a shipping address on an order (buyer, before/at payment).
+// Accepts { addressId } to use a saved address, or full address fields (which
+// are also saved to the buyer's address book for next time).
+app.post('/api/orders/:id/shipping-address', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Not your order' });
+    if (['settled', 'cancelled', 'refunded'].includes(order.status)) {
+      return res.status(409).json({ error: `Order is ${order.status} — address can no longer be changed` });
+    }
+    let snap;
+    if (req.body?.addressId) {
+      snap = await snapshotOrderAddress(pool, order.id, req.userId, req.body.addressId);
+      if (!snap) return res.status(404).json({ error: 'Saved address not found' });
+    } else {
+      const v = validateAddress(req.body || {});
+      if (!v.ok) return res.status(400).json({ error: v.error });
+      const a = v.address;
+      // Save to the address book too (first address becomes default)
+      const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) AS count FROM user_addresses WHERE user_id = $1', [req.userId]);
+      let addressId = null;
+      if (Number(count) < 10) {
+        const { rows: [row] } = await pool.query(
+          `INSERT INTO user_addresses (user_id, name, street1, street2, city, state, zip, country, phone, is_default)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+          [req.userId, a.name, a.street1, a.street2, a.city, a.state, a.zip, a.country, a.phone, Number(count) === 0]);
+        addressId = row.id;
+      }
+      snap = { ...a, address_id: addressId };
+      await pool.query('UPDATE orders SET shipping_address = $1 WHERE id = $2', [JSON.stringify(snap), order.id]);
+    }
+    res.json({ ok: true, shippingAddress: snap });
+  } catch (e) { console.error('order shipping-address:', e.message); res.status(500).json({ error: 'Could not save shipping address' }); }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -3646,7 +3862,7 @@ app.get('/api/profile/:handle', async (req, res) => {
        WHERE us.user_id = $1 ORDER BY us.type, us.position, us.added_at`, [user.id]
     );
     const digitalShowcase = showcase.filter(s => s.type === 'digital').slice(0, 3);
-    const physicalShowcase = showcase.filter(s => s.type === 'physical').slice(0, 3);
+    const physicalShowcase = showcase.filter(s => s.type === 'physical').slice(0, 5);
 
     // For owner: return ALL pulls and portfolio cards. For others: only showcase.
     let recentPulls = [];
@@ -3821,12 +4037,13 @@ app.post('/api/profile/showcase', requireAuth, async (req, res) => {
     const showcaseType = type === 'physical' ? 'physical' : 'digital';
     if (!cardId) return res.status(400).json({ error: 'cardId required' });
 
-    // Check max 3 per type
+    // Caps: 5 featured physical cards, 3 digital pulls
+    const cap = showcaseType === 'physical' ? 5 : 3;
     const { rows: existing } = await pool.query(
       'SELECT COUNT(*) as cnt FROM user_showcase WHERE user_id = $1 AND type = $2', [req.userId, showcaseType]
     );
-    if (parseInt(existing[0].cnt) >= 3) {
-      return res.status(400).json({ error: `Showcase is full (max 3 ${showcaseType} cards)` });
+    if (parseInt(existing[0].cnt) >= cap) {
+      return res.status(400).json({ error: `Showcase is full (max ${cap} ${showcaseType} cards)` });
     }
 
     // Verify user owns this card
@@ -3853,6 +4070,34 @@ app.post('/api/profile/showcase', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/profile/showcase/set — replace the featured-cards showcase (≤5, auth)
+// Body: { cardIds: [uuid, ...] } — order = display order. Ownership enforced.
+app.post('/api/profile/showcase/set', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const ids = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map(String).slice(0, 5) : null;
+    if (!ids) return res.status(400).json({ error: 'cardIds must be an array (max 5)' });
+    // Only cards actually in the user's portfolio
+    const { rows: owned } = await pool.query(
+      'SELECT DISTINCT card_id FROM portfolios WHERE user_id = $1 AND card_id = ANY($2::uuid[])', [req.userId, ids]);
+    const ownedSet = new Set(owned.map(o => o.card_id));
+    const valid = ids.filter(id => ownedSet.has(id));
+    await pool.query("DELETE FROM user_showcase WHERE user_id = $1 AND type = 'physical'", [req.userId]);
+    for (let i = 0; i < valid.length; i++) {
+      await pool.query(
+        `INSERT INTO user_showcase (user_id, card_id, position, type) VALUES ($1, $2, $3, 'physical')
+         ON CONFLICT (user_id, card_id) DO UPDATE SET type = 'physical', position = $3`,
+        [req.userId, valid[i], i]);
+    }
+    res.json({ ok: true, cardIds: valid });
+  } catch (e) {
+    console.error('showcase/set error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // DELETE /api/profile/showcase/:cardId — remove from showcase (auth)
 app.delete('/api/profile/showcase/:cardId', requireAuth, async (req, res) => {
   try {
@@ -3868,7 +4113,7 @@ app.delete('/api/profile/showcase/:cardId', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/profile/badges — save featured badge keys (up to 6)
+// POST /api/profile/badges — save featured badge keys (up to 3)
 app.post('/api/profile/badges', requireAuth, async (req, res) => {
   try {
     const r = await getRepo();
@@ -3876,7 +4121,7 @@ app.post('/api/profile/badges', requireAuth, async (req, res) => {
     if (!pool) return res.status(500).json({ error: 'No database' });
     const { badges } = req.body;
     if (!Array.isArray(badges)) return res.status(400).json({ error: 'badges must be an array' });
-    const keys = badges.slice(0, 6).map(String);
+    const keys = badges.slice(0, 3).map(String);
 
     // Verify user actually earned these badges
     if (keys.length > 0) {

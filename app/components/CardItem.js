@@ -111,7 +111,11 @@ export default function CardItem({ card: c, onClick }) {
           {confBadge}
           {isRC && <span className="rc-tag">RC</span>}
         </div>
-        {c.lo > 0 && c.hi > 0 && (
+        {/* Multi-tier family: show the grade-price range across tiers; single
+            tier keeps the FMV lo–hi band */}
+        {c.gradeCount > 1 && c.priceMin > 0 && c.priceMax > c.priceMin ? (
+          <div className="price-range mono" title="Price range across grades">{fmtRange(c.priceMin, c.priceMax)} across grades</div>
+        ) : c.lo > 0 && c.hi > 0 && (
           <div className="price-range mono">{fmtRange(c.lo, c.hi)}</div>
         )}
       </div>

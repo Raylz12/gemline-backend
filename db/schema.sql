@@ -298,3 +298,24 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 );
 CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolios (user_id);
 CREATE INDEX IF NOT EXISTS idx_portfolio_card ON portfolios (card_id);
+
+-- ─────────────────────── shipping addresses ───────────────────────
+-- Saved buyer/seller addresses. Orders snapshot the chosen address into
+-- orders.shipping_address (jsonb) at checkout so later edits never mutate
+-- historical orders.
+CREATE TABLE IF NOT EXISTS user_addresses (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       text NOT NULL,
+  street1    text NOT NULL,
+  street2    text,
+  city       text NOT NULL,
+  state      text NOT NULL,
+  zip        text NOT NULL,
+  country    text NOT NULL DEFAULT 'US',
+  phone      text,
+  is_default boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_addresses_user ON user_addresses(user_id);
+-- ALTER TABLE orders ADD COLUMN shipping_address jsonb;  (applied 2026-07-02)
