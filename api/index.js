@@ -954,9 +954,11 @@ app.post('/api/listings/:id/buy', requireAuth, async (req, res) => {
       method, vaultItemId: l.vault_item_id || null,
     });
     // Mark listing sold + sync portfolio flag if the seller had it linked
-    await r.listings.update({ ...l, status: 'completed' }).catch(() => {});
     if (r.pool) {
+      await r.pool.query("UPDATE listings SET status = 'completed' WHERE id = $1", [l.id]).catch(e => console.error('listing complete:', e.message));
       await r.pool.query("UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1", [l.id]).catch(() => {});
+    } else {
+      await r.listings.update({ id: l.id, status: 'completed' }).catch(() => {});
     }
     res.json({ order, instant: order.status === 'settled' });
   } catch (e) {
