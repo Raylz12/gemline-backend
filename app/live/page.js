@@ -368,7 +368,7 @@ export default function LivePage() {
             <span className="live-pulse-dot" />
             <span className="live-eyebrow-text">LIVE TRADING FLOOR</span>
             <span className="live-hero-divider" />
-            <span className="live-hero-stats">{liveAuctions.length} auction{liveAuctions.length !== 1 ? 's' : ''} · {wants.length} open bid{wants.length !== 1 ? 's' : ''}</span>
+            <span className="live-hero-stats">{liveAuctions.length} auction{liveAuctions.length !== 1 ? 's' : ''} {' '}{wants.length} open bid{wants.length !== 1 ? 's' : ''}</span>
           </div>
           <h1 className="live-hero-title">The Hobby,<br /><span className="live-hero-gold">In Real Time.</span></h1>
           <p className="live-hero-sub">Bid on live auctions. Post open bids. Boost your offers to stand out.</p>
@@ -499,8 +499,8 @@ export default function LivePage() {
                   <div className="live-auction-body">
                     <div className="live-auction-player">{a.player}</div>
                     <div className="live-auction-meta">
-                      {a.grader} {a.grade} · {a.card_set}
-                      {a.seller_handle && <span style={{ color: 'var(--dim)' }}> · @{a.seller_handle}</span>}
+                      {a.grader} {a.grade} {' '}{a.card_set}
+                      {a.seller_handle && <span style={{ color: 'var(--dim)' }}>{' '}@{a.seller_handle}</span>}
                     </div>
                     {/* FMV comparison + reserve status */}
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
@@ -527,7 +527,7 @@ export default function LivePage() {
                         <div className="live-auction-bid-amount">{fmt(a.current_price / 100)}</div>
                         <div className="live-auction-bid-count">
                           {a.bid_count || 0} bid{(a.bid_count || 0) !== 1 ? 's' : ''}
-                          {a.highest_bidder && a.bid_count > 0 && <span style={{ color: 'var(--dim)' }}> · @{a.highest_bidder}</span>}
+                          {a.highest_bidder && a.bid_count > 0 && <span style={{ color: 'var(--dim)' }}>{' '}@{a.highest_bidder}</span>}
                         </div>
                       </div>
                       <button
@@ -586,7 +586,7 @@ export default function LivePage() {
                     </div>
                     <div className="live-auction-body">
                       <div className="live-auction-player">{a.player}</div>
-                      <div className="live-auction-meta">{a.grader} {a.grade} · {a.card_set}</div>
+                      <div className="live-auction-meta">{a.grader} {a.grade} {' '}{a.card_set}</div>
                       <div className="live-auction-foot">
                         <div className="live-auction-bid-info">
                           <div className="live-auction-bid-label">STARTING AT</div>
@@ -638,7 +638,7 @@ export default function LivePage() {
                     {/* Info */}
                     <div className="live-want-info">
                       <div className="live-want-player">{w.player}</div>
-                      <div className="live-want-meta">{w.grader} {w.grade} · {w.card_set}</div>
+                      <div className="live-want-meta">{w.grader} {w.grade} {' '}{w.card_set}</div>
                       <div className="live-want-buyer">@{w.buyer_handle}</div>
                       {tier && <BoostBadge credits={w.boost_credits} />}
                     </div>
@@ -696,8 +696,8 @@ export default function LivePage() {
               <div>
                 <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{bidModal.player}</div>
                 <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                  {bidModal.grader} {bidModal.grade} · {bidModal.card_set}
-                  {bidModal.seller_handle && ` · @${bidModal.seller_handle}`}
+                  {bidModal.grader} {bidModal.grade} {' '}{bidModal.card_set}
+                  {bidModal.seller_handle && ` @${bidModal.seller_handle}`}
                 </div>
               </div>
             </div>
@@ -808,7 +808,7 @@ export default function LivePage() {
                       <CardThumb item={c} size={32} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.grader} {c.grade} · {c.card_set}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.grader} {c.grade} {' '}{c.card_set}</div>
                       </div>
                       {c.catalog_price && <span className="mono" style={{ fontSize: 12, color: 'var(--gold)' }}>{fmt(Number(c.catalog_price))}</span>}
                     </div>
@@ -824,7 +824,7 @@ export default function LivePage() {
                   <CardThumb item={wantCard} size={40} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{wantCard.player}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{wantCard.grader} {wantCard.grade} · {wantCard.card_set}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{wantCard.grader} {wantCard.grade} {' '}{wantCard.card_set}</div>
                   </div>
                   <button onClick={() => setWantCard(null)} style={{ color: 'var(--muted)', fontSize: 12 }}>Change</button>
                 </div>
@@ -927,7 +927,7 @@ export default function LivePage() {
               <CardThumb item={matchModal} size={52} />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{matchModal.player}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{matchModal.grader} {matchModal.grade} · {matchModal.card_set}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{matchModal.grader} {matchModal.grade} {' '}{matchModal.card_set}</div>
               </div>
             </div>
             <div className="live-modal-stats">
@@ -986,7 +986,7 @@ export default function LivePage() {
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.player}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.grader} {c.grade} · {c.card_set}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.grader} {c.grade} {' '}{c.card_set}</div>
                       </div>
                       {c.catalog_price && <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold)' }}>{fmt(Number(c.catalog_price))}</span>}
                     </div>
@@ -1005,7 +1005,7 @@ export default function LivePage() {
                   )}
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{auctionCard.player}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{auctionCard.grader} {auctionCard.grade} · {auctionCard.card_set}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{auctionCard.grader} {auctionCard.grade} {' '}{auctionCard.card_set}</div>
                     {auctionCard.catalog_price && <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', marginTop: 2 }}>FMV: {fmt(Number(auctionCard.catalog_price))}</div>}
                   </div>
                   <button onClick={() => setAuctionCard(null)} style={{ color: 'var(--muted)', fontSize: 12, padding: '4px 8px', borderRadius: 6, background: 'var(--panel-2)', border: '1px solid var(--line)', cursor: 'pointer' }}>Change</button>

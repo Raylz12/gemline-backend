@@ -146,6 +146,11 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .cardbody{padding:12px 13px 13px;flex:1;display:flex;flex-direction:column}
 .cardbody .pn{font-weight:600;font-size:13.5px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cardbody .meta{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;overflow:hidden;max-height:20px}
+.mchip{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.03em;padding:2px 6px;border-radius:4px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.mchip-grade{background:var(--gold-soft);border-color:rgba(22,199,132,.3);color:#0d9463}
+.mchip-grades{background:rgba(155,123,255,.12);border-color:rgba(155,123,255,.3);color:var(--violet,#9b7bff)}
+body.page-dark .mchip-grade,.cd-dark .mchip-grade{color:var(--gold)}
 .priceline{display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto;padding-top:8px}
 .priceline .ask{font-family:var(--mono);font-weight:600;font-size:18px;letter-spacing:-.01em}
 .priceline .ch{font-family:var(--mono);font-size:11px}
@@ -767,7 +772,7 @@ footer .wordmark span{color:var(--gold)}
 .list-row:hover { background: var(--panel-2); }
 .list-thumb { width: 40px; height: 52px; border-radius: 5px; overflow: hidden; flex-shrink: 0; background: var(--panel-2); }
 .list-player { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.list-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.list-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
 .list-price { font-weight: 600; font-size: 14px; }
 
 /* ---------- PAGINATION ---------- */
@@ -876,11 +881,11 @@ input, select, textarea { font-size: 16px !important; }
   .mobile-nav a {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     color: var(--dim); text-decoration: none;
-    font-size: 10px; font-weight: 500;
-    padding: 4px 8px; border-radius: 8px;
+    font-size: 9.5px; font-weight: 500;
+    padding: 4px 4px; border-radius: 8px;
     -webkit-tap-highlight-color: transparent;
     transition: color .15s;
-    min-width: 52px;
+    min-width: 46px; min-height: 44px; justify-content: center;
   }
   .mobile-nav a.on { color: var(--gold); }
   .mobile-nav a svg { width: 22px; height: 22px; }
@@ -1844,10 +1849,11 @@ header.header-hidden{transform:translateY(-100%)}
 .search-all{padding:10px 14px;text-align:center;font-size:12px;color:var(--gold);cursor:pointer;font-weight:600;border-top:1px solid var(--line)}
 .search-all:hover{background:var(--panel-2,#0f1220)}
 
-/* Ticker: auto-scroll + touch-swipeable on mobile */
+/* Ticker mobile: hide the LIVE TAPE tag for room. NOTE: never make
+   .ticker-track a scroll container (overflow-x:auto) — that collapses the
+   track to viewport width and the translateX(-50%) marquee moves ~0.3px/s
+   on iOS, i.e. it looks frozen. Touch pause/resume lives in Ticker.js. */
 @media(max-width:768px){
-  .ticker-track{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;cursor:grab}
-  .ticker-track::-webkit-scrollbar{display:none}
   .ticker .tag{display:none}
 }
 
@@ -3043,6 +3049,16 @@ main>*{animation:fade .3s ease}
 .cd-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
 .cd-head h2{font-family:var(--disp);font-weight:800;font-size:26px;letter-spacing:-.01em;line-height:1.05;color:#fff}
 .cd-meta{color:var(--muted);font-size:13px;margin-top:4px}
+.cd-chiprow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.cd-minichip{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:5px;background:rgba(255,255,255,.06);border:1px solid var(--line-2,rgba(255,255,255,.1));color:var(--muted)}
+/* ProGate — frosted teaser over gated panels (visitors); reusable for a Pro tier */
+.progate{position:relative;min-height:220px}
+.progate-blur{filter:blur(10px) saturate(.8);pointer-events:none;user-select:none;opacity:.55}
+.progate-cover{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:24px;background:linear-gradient(180deg,rgba(10,13,21,.25),rgba(10,13,21,.55));border-radius:12px}
+.progate-lock{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:rgba(22,199,132,.12);color:var(--gold,#16c784);border:1px solid rgba(22,199,132,.3)}
+.progate-title{font-family:var(--disp);font-weight:800;font-size:16px;color:var(--txt,#eef1f6)}
+.progate-sub{font-size:12px;color:var(--muted);max-width:300px;line-height:1.5}
+.progate-cta{margin-top:6px;padding:10px 22px;border-radius:9px;font-size:13px;font-weight:700;background:var(--gold,#16c784);color:#04140c;border:none;cursor:pointer;min-height:44px}
 .cd-head-icons{display:flex;gap:6px;flex:0 0 auto;margin-right:36px}
 .cd-icon{width:34px;height:34px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);display:grid;place-items:center;color:var(--muted);transition:.15s;cursor:pointer}
 .cd-icon:hover{color:var(--txt);border-color:var(--line-2)}
@@ -3244,6 +3260,7 @@ body.page-dark .skeleton{background:linear-gradient(90deg,#141926 25%,#1b2130 50
 .arb-card-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .arb-card-name{font-weight:700;font-size:13.5px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .arb-card-sub{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arb-sortbar{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:2px 2px 6px}
 .arb-card-edge{text-align:right;flex-shrink:0}
 .arb-card-edge .v{font-family:var(--mono);font-weight:700;font-size:15px}
 .arb-card-edge .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}

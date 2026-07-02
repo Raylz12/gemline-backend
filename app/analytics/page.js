@@ -62,7 +62,7 @@ function MoversTable({ cards, onSelect, loading }) {
             <Thumb card={c} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
-              <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{c.grader || 'RAW'} {c.grade} · {c.year || c.sport}</div>
+              <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1, display: 'flex', gap: 6 }}><span className="mchip mchip-grade">{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span><span>{c.year || c.sport}</span></div>
             </div>
           </div>
           <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: 'var(--txt)', alignSelf: 'center' }}>{fmt(c.market || c.catalog_price)}</div>
@@ -92,6 +92,7 @@ function ArbTable({ onSelect }) {
   const [minNet, setMinNet] = useState(10);
   const [minLiq, setMinLiq] = useState(0);
   const [arbSport, setArbSport] = useState('All');
+  const [arbSort, setArbSort] = useState('netEdge'); // netEdge | netPct | buy | liquidity
 
   const load = () => {
     setLoading(true);
@@ -122,11 +123,17 @@ function ArbTable({ onSelect }) {
   }, []);
 
   const sportOpts = ['All', ...Array.from(new Set(rows.map(r => r.sport).filter(Boolean))).sort()];
+  const ARB_SORTS = {
+    netEdge: (a, b) => b.netEdge - a.netEdge,
+    netPct: (a, b) => b.netPct - a.netPct,
+    buy: (a, b) => a.buy - b.buy,
+    liquidity: (a, b) => (b.sales30d || 0) - (a.sales30d || 0),
+  };
   const filtered = rows.filter(r =>
     r.netEdge >= minNet &&
     (r.sales30d || 0) >= minLiq &&
     (arbSport === 'All' || r.sport === arbSport)
-  );
+  ).sort(ARB_SORTS[arbSort] || ARB_SORTS.netEdge);
 
   const btn = (active) => ({ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: active ? 'var(--gold)' : 'var(--panel-2)', color: active ? '#000' : 'var(--muted)', border: '1px solid var(--line)' });
 
@@ -151,6 +158,16 @@ function ArbTable({ onSelect }) {
             style={{ padding: '5px 10px', borderRadius: 6, fontSize: 11, background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line)', cursor: 'pointer' }}>
             {sportOpts.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Sort:</span>
+            <select value={arbSort} onChange={e => setArbSort(e.target.value)}
+              style={{ padding: '5px 10px', borderRadius: 6, fontSize: 11, background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line)', cursor: 'pointer' }}>
+              <option value="netEdge">Net edge $</option>
+              <option value="netPct">Net edge %</option>
+              <option value="buy">Buy price (low first)</option>
+              <option value="liquidity">Liquidity (30d sales)</option>
+            </select>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {lastUpdated && <span style={{ fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
@@ -192,7 +209,7 @@ function ArbTable({ onSelect }) {
                       {r.player || r.card}
                       {r.momentum && <span title="Undervalued and trending up" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'var(--up-soft)', color: 'var(--up)', letterSpacing: '.04em' }}>🔥 MOMENTUM</span>}
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1 }}>{r.grader || 'RAW'} {r.grade} · {r.year || r.sport}</div>
+                    <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 1, display: 'flex', gap: 6 }}><span className="mchip mchip-grade">{`${r.grader || 'RAW'} ${r.grade || ''}`.trim()}</span><span>{r.year || r.sport}</span></div>
                   </div>
                 </div>
                 <div style={{ alignSelf: 'center', fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -227,7 +244,7 @@ function ArbTable({ onSelect }) {
                     <Thumb card={{ player: r.player, sport: r.sport, ebay_thumb: r.thumbnail }} size={30} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="arb-card-name">{r.player || r.card}</div>
-                      <div className="arb-card-sub">{r.grader || 'RAW'} {r.grade} · {r.year || r.sport}</div>
+                      <div className="arb-card-sub"><span className="mchip mchip-grade">{`${r.grader || 'RAW'} ${r.grade || ''}`.trim()}</span> {r.year || r.sport}</div>
                     </div>
                     <div className="arb-card-edge">
                       <div className="v" style={{ color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)}</div>
@@ -275,7 +292,7 @@ function HeatGrid({ cards, onSelect, loading }) {
             style={{ background: bg, border: `1px solid ${border}` }}>
             <div className="hm2-main">
               <div className="hm2-player">{c.player}</div>
-              <div className="hm2-meta">{c.grader || 'RAW'} {c.grade}{c.sales7d ? ` \u00b7 ${c.sales7d} sold 7d` : ''}</div>
+              <div className="hm2-meta">{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}{c.sales7d ? `\u2002${c.sales7d} sold 7d` : ''}</div>
             </div>
             <div className="hm2-foot">
               <span className="hm2-price">{fmt(c.market || c.catalog_price)}</span>
@@ -429,8 +446,9 @@ export default function AnalyticsPage() {
           </div>
         ))}
         {view === 'heatmap' && (
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--up)', display: 'inline-block' }} /> <strong>Green</strong> = price up in 7 days · <span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--down)', display: 'inline-block' }} /> <strong>Red</strong> = price down · Darker = bigger move · Click any card for details</div>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--up)', display: 'inline-block' }} /> <strong>Green</strong> = price up in 7 days <span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--down)', display: 'inline-block' }} /> <strong>Red</strong> = price down. Darker = bigger move. Click any card for details.</div>
+            <a href="/heatmap" style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>Open the full heatmap →</a>
           </div>
         )}
         {view === 'arbitrage' && (

@@ -16,6 +16,8 @@ const COLUMNS = [
     blurb: 'Track your value and spot the edge with live data.',
     links: [
       { href: '/analytics', label: 'Analytics' },
+      { href: '/heatmap', label: 'Heatmap' },
+      { href: '/arbitrage', label: 'Arbitrage' },
       { href: '/portfolio', label: 'Portfolio' },
     ],
   },

@@ -111,7 +111,7 @@ function HeroStack({ cards, onOpen }) {
           <div className="nft-info-bar">
             <div className="nft-info-left">
               <div className="nft-card-name">{card.player}</div>
-              <div className="nft-card-variant">{gradeLabel(card)} · {card.year || ''} {card.sport || ''}</div>
+              <div className="nft-card-variant">{gradeLabel(card)}{'\u2002'}{card.year || ''} {card.sport || ''}</div>
             </div>
             <div className="nft-info-right">
               <div className="nft-info-price">{fmtPrice(card.marketPrice)}</div>
@@ -286,7 +286,7 @@ export default function Landing() {
                 {movers.map((c, i) => <MoverTile key={c.cardId} c={c} onOpen={enter} delay={(i % 4) * 70} />)}
               </div>
               <div className="lp-pulse-more reveal">
-                <button onClick={() => enter('/analytics')}>See the full heatmap →</button>
+                <button onClick={() => enter('/heatmap')}>See the full heatmap →</button>
               </div>
             </>
           ) : (

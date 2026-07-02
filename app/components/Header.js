@@ -8,6 +8,7 @@ import AuthModal from './AuthModal';
 import SettingsModal from './SettingsModal';
 import CreditsModal from './CreditsModal';
 import CardDetail from './CardDetail';
+import { IconSettings, IconLogout, IconZap, IconTrophy, IconDollar, IconBell, IconGavel, IconCheck } from './Icons';
 
 
 function timeAgo(d) {
@@ -19,8 +20,8 @@ function timeAgo(d) {
 }
 
 const NOTIF_ICONS = {
-  outbid: '⚡', auction_won: '🏆', auction_sold: '💰', auction_ended: '🔔', auction_lost: '🔔',
-  offer_received: '📩', offer_accepted: '✅', offer_declined: '❌',
+  outbid: IconZap, auction_won: IconTrophy, auction_sold: IconDollar, auction_ended: IconBell, auction_lost: IconBell,
+  offer_received: IconGavel, offer_accepted: IconCheck, offer_declined: IconBell,
 };
 
 function NotificationBell() {
@@ -76,7 +77,9 @@ function NotificationBell() {
             <div className="notif-empty">Nothing yet — bids, offers, and wins land here.</div>
           ) : items.map(n => (
             <div key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`}>
-              <span className="notif-ico">{NOTIF_ICONS[n.type] || '🔔'}</span>
+              <span className="notif-ico" style={{ color: 'var(--gold)' }}>
+                {(() => { const Ic = NOTIF_ICONS[n.type] || IconBell; return <Ic size={15} />; })()}
+              </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="notif-title">{n.title}</div>
                 {n.body && <div className="notif-body">{n.body}</div>}
@@ -217,7 +220,7 @@ export default function Header() {
                     {c.thumbnail && <img src={c.thumbnail} alt="" className="search-thumb" />}
                     <div className="search-info">
                       <div className="search-name">{c.player}</div>
-                      <div className="search-meta">{c.grader} {c.grade} · {c.set}</div>
+                      <div className="search-meta"><span className="mchip mchip-grade" style={{ marginRight: 6 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{c.set}</div>
                     </div>
                     <div className="search-price">
                       {c.market > 0 ? `$${c.market.toLocaleString()}` : 'TBD'}
@@ -261,12 +264,12 @@ export default function Header() {
                     <Link href={`/profile/${user.handle || 'me'}`} className="avatar-dd-item">
                       My Profile
                     </Link>
-                    <button className="avatar-dd-item" onClick={() => { setAvatarOpen(false); setShowSettings(true); }}>
-                      ⚙️ Settings
+                    <button className="avatar-dd-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setAvatarOpen(false); setShowSettings(true); }}>
+                      <IconSettings size={14} /> Settings
                     </button>
                     <div style={{ height: 1, background: 'var(--line)', margin: '4px 0' }} />
-                    <button className="avatar-dd-item" style={{ color: '#ef4444' }} onClick={() => { logout(); setAvatarOpen(false); }}>
-                      🚪 Sign Out
+                    <button className="avatar-dd-item" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { logout(); setAvatarOpen(false); }}>
+                      <IconLogout size={14} /> Sign Out
                     </button>
                   </div>
                 )}

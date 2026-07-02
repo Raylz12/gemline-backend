@@ -257,7 +257,7 @@ export default function SellContent() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{c.player}</div>
                         <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                          {c.grader} {c.grade} · {c.card_set} {c.variant ? `· ${c.variant}` : ''}
+                          <span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{c.card_set}{c.variant ? ` ${c.variant}` : ''}
                         </div>
                       </div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)' }}>
@@ -289,7 +289,7 @@ export default function SellContent() {
                 </div>
                 <div>
                   <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16 }}>{selectedCard.player}</h3>
-                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>{selectedCard.grader} {selectedCard.grade} · {selectedCard.card_set}</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 12 }}><span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${selectedCard.grader || 'RAW'} ${selectedCard.grade || ''}`.trim()}</span>{selectedCard.card_set}</div>
                 </div>
               </div>
 
@@ -441,7 +441,7 @@ export default function SellContent() {
                 <div>
                   <h4 style={{ fontFamily: 'var(--disp)', fontSize: 18 }}>{selectedCard.player}</h4>
                   <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>
-                    {selectedCard.grader} {selectedCard.grade} · {selectedCard.card_set}
+                    <span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${selectedCard.grader || 'RAW'} ${selectedCard.grade || ''}`.trim()}</span>{selectedCard.card_set}
                   </div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 22, color: 'var(--gold)', fontWeight: 700 }}>
                     ${Number(price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -522,7 +522,7 @@ export default function SellContent() {
                 <div style={{ padding: '12px 14px' }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{l.player}</div>
                   <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>
-                    {l.grader} {l.grade} · {l.card_set}
+                    <span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${l.grader || 'RAW'} ${l.grade || ''}`.trim()}</span>{l.card_set}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 16, color: 'var(--gold)', fontWeight: 700 }}>

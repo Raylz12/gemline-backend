@@ -251,7 +251,7 @@ function VolumeBars({ cards }) {
 
 // ─── Spread matrix (main table) ───────────────────────────────────────────────
 function SpreadMatrix({ cards, onSelect }) {
-  const [sortCol, setSortCol] = useState('edge');
+  const [sortCol, setSortCol] = useState('netEdge');
   const [sortDir, setSortDir] = useState('desc');
   const [hover, setHover] = useState(null);
 
@@ -283,6 +283,17 @@ function SpreadMatrix({ cards, onSelect }) {
     <>
     {/* Mobile (<=768px): stacked play-cards instead of a clipped wide table */}
     <div className="arb-cards">
+      <div className="arb-sortbar">
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Sort</span>
+        <select value={sortCol} onChange={e => { const col = e.target.value; setSortCol(col); setSortDir(col === 'lo' ? 'asc' : 'desc'); }}
+          style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12, background: 'rgba(255,255,255,.05)', color: 'var(--txt,#eef1f6)', border: '1px solid rgba(255,255,255,.1)' }}>
+          <option value="netEdge">Net edge $</option>
+          <option value="netPct">Net edge %</option>
+          <option value="lo">Buy price (low first)</option>
+          <option value="sales30d">Liquidity (30d sales)</option>
+          <option value="gain7d">7D move</option>
+        </select>
+      </div>
       {sorted.slice(0, 60).map((c) => {
         const netColor = c.netEdge > 0 ? '#34D88A' : '#FF5C6C';
         const liqLabel = (c.sales7d || 0) >= 5 ? 'high liq' : (c.sales7d || 0) >= 3 ? 'med liq' : (c.sales30d || 0) > 0 ? 'low liq' : 'thin';
@@ -295,7 +306,7 @@ function SpreadMatrix({ cards, onSelect }) {
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="arb-card-name">{c.player}{c.rookie ? ' · RC' : ''}</div>
-                <div className="arb-card-sub">{c.grader} {c.grade} · {c.set?.slice(0, 26)}</div>
+                <div className="arb-card-sub"><span className="mchip mchip-grade">{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span> {c.set?.slice(0, 26)}</div>
               </div>
               <div className="arb-card-edge">
                 <div className="v" style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</div>
@@ -371,7 +382,7 @@ function SpreadMatrix({ cards, onSelect }) {
                     {c.momentum ? <span title="Undervalued and trending up" style={{ fontSize: 8, background: 'rgba(52,216,138,.15)', color: '#34D88A', borderRadius: 2, padding: '1px 4px', marginLeft: 4, fontWeight: 700 }}>🔥 MOM</span> : null}
                   </div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', marginTop: 1 }}>
-                    {c.grader} {c.grade} · {c.set?.slice(0, 22)}{c.set?.length > 22 ? '…' : ''}
+                    <span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{c.set?.slice(0, 22)}{c.set?.length > 22 ? '…' : ''}
                   </div>
                 </div>
               </div>

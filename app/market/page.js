@@ -32,7 +32,11 @@ function ListRow({ card: c, onClick }) {
           <span className="list-player">{c.player}</span>
           {isRC && <span className="rc-tag">RC</span>}
         </div>
-        <div className="list-meta">{c.set}{c.variant ? ` · ${c.variant}` : ''}{c.num ? ` · #${c.num}` : ''}</div>
+        <div className="list-meta">
+          <span>{c.set}</span>
+          {c.variant && c.variant !== 'Base' && <span className="mchip mchip-var">{c.variant}</span>}
+          {c.num && <span className="mchip">#{String(c.num).replace(/^#/, '')}</span>}
+        </div>
       </div>
       <div className="list-sport">
         <span className="sport-badge" style={{ '--sport-color': c.theme[0] }}>{c.sport}</span>
@@ -58,7 +62,7 @@ function ListRow({ card: c, onClick }) {
 }
 
 export default function MarketplacePage() {
-  const { cards, searchQuery, totalCards, sportCounts, brandCounts, loadMore, loading, currentPage, totalPages, filterSport, setFilterSport, filterBrand, setFilterBrand, setSortBy } = useCardStore();
+  const { cards, searchQuery, totalCards, sportCounts, brandCounts, loadMore, refreshFeed, loading, currentPage, totalPages, filterSport, setFilterSport, filterBrand, setFilterBrand, setSortBy } = useCardStore();
   const DEFAULT_FILTERS = {
     sport: 'All', grade: 'All', type: 'All', cardType: 'all',
     priceRange: 'all', era: 'all', edge: 'all', sort: 'trending', q: '', brand: '',
@@ -71,6 +75,10 @@ export default function MarketplacePage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => { setPage(1); }, [filters, searchQuery]);
+
+  // Always show fresh market data on every visit — no stale in-memory feed
+  // between navigations (server CDN cache still applies and is fine).
+  useEffect(() => { refreshFeed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch('/api/listings?limit=200')

@@ -2,17 +2,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../components/AuthContext';
+import AuthModal from '../components/AuthModal';
 import { fmt } from '../lib/data';
 import useDarkPage from '../lib/useDarkPage';
 
-function UserCard({ user, currentUserId, onToggleFollow, followingSet }) {
+function UserCard({ user, currentUserId, onToggleFollow, followingSet, onRequireAuth }) {
   const isFollowing = followingSet.has(user.id);
   const isSelf = currentUserId === user.id;
   const initial = (user.handle || 'U')[0].toUpperCase();
 
   return (
     <div className="community-user-card">
-      <Link href={`/profile/${user.handle}`} className="community-user-info">
+      <Link href={`/user/${user.handle}`} className="community-user-info">
         <div className="community-avatar">{initial}</div>
         <div className="community-user-meta">
           <div className="community-handle">@{user.handle}</div>
@@ -26,10 +27,10 @@ function UserCard({ user, currentUserId, onToggleFollow, followingSet }) {
           )}
         </div>
       </Link>
-      {!isSelf && currentUserId && (
+      {!isSelf && (
         <button
           className={`community-follow-btn ${isFollowing ? 'following' : ''}`}
-          onClick={(e) => { e.preventDefault(); onToggleFollow(user.id, isFollowing); }}
+          onClick={(e) => { e.preventDefault(); if (!currentUserId) { onRequireAuth?.(); return; } onToggleFollow(user.id, isFollowing); }}
         >
           {isFollowing ? 'Following' : 'Follow'}
         </button>
@@ -247,7 +248,7 @@ const TYPE_META = {
 const SPORT_EMOJI = { basketball: '🏀', baseball: '⚾', football: '🏈', hockey: '🏒', soccer: '⚽', pokemon: '🃏', 'trading card': '🃏' };
 function sportEmoji(sport) { return SPORT_EMOJI[(sport||'').toLowerCase()] || '🃏'; }
 
-function FeedPost({ post, authFetch, token, onLiked }) {
+function FeedPost({ post, authFetch, token, onLiked, onRequireAuth }) {
   const [liked, setLiked] = useState(post.userLiked || false);
   const [likeCount, setLikeCount] = useState(post.likes || 0);
   const [liking, setLiking] = useState(false);
@@ -256,7 +257,8 @@ function FeedPost({ post, authFetch, token, onLiked }) {
   const initial = handle[0]?.toUpperCase() || 'U';
 
   const toggleLike = async () => {
-    if (!token || liking) return;
+    if (!token) { onRequireAuth?.(); return; } // visitors: sign-in prompt, not a dead button
+    if (liking) return;
     setLiking(true);
     try {
       const res = await authFetch(`/api/posts/${post.id}/like`, { method: 'POST' });
@@ -275,15 +277,15 @@ function FeedPost({ post, authFetch, token, onLiked }) {
       background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '16px 18px',
       marginBottom: 12, transition: '.15s',
     }}>
-      {/* Header */}
+      {/* Header — avatar and handle both navigate to the public profile */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div style={{
+        <Link href={`/user/${handle}`} aria-label={`@${handle} profile`} style={{
           width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
           background: post.user?.avatarUrl ? `url(${post.user.avatarUrl}) center/cover` : 'linear-gradient(135deg,#16c784, #0d9463)',
-          display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16, color: '#000',
-        }}>{post.user?.avatarUrl ? '' : initial}</div>
+          display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16, color: '#000', textDecoration: 'none',
+        }}>{post.user?.avatarUrl ? '' : initial}</Link>
         <div style={{ flex: 1 }}>
-          <Link href={`/profile/${handle}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)', textDecoration: 'none' }}>
+          <Link href={`/user/${handle}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)', textDecoration: 'none' }}>
             @{handle}
           </Link>
           <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>{timeAgo(post.createdAt)}</div>
@@ -314,9 +316,9 @@ function FeedPost({ post, authFetch, token, onLiked }) {
           }}>{post.card.thumbnail ? '' : sportEmoji(post.card.sport)}</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{post.card.player}</div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              {[post.card.grader, post.card.grade].filter(Boolean).join(' ')}
-              {post.card.value > 0 && <> · <span style={{ color: 'var(--gold)' }}>${post.card.value.toFixed(0)}</span></>}
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className="mchip mchip-grade">{[post.card.grader, post.card.grade].filter(Boolean).join(' ') || 'RAW'}</span>
+              {post.card.value > 0 && <span style={{ color: 'var(--gold)' }}>${post.card.value.toFixed(0)}</span>}
             </div>
           </div>
         </div>
@@ -326,22 +328,19 @@ function FeedPost({ post, authFetch, token, onLiked }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <button
           onClick={toggleLike}
-          disabled={!token}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
             fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)',
-            cursor: token ? 'pointer' : 'default', opacity: liking ? 0.6 : 1 }}>
-          <span style={{ fontSize: 14 }}>{liked ? '❤️' : '♡'}</span> {likeCount}
+            cursor: 'pointer', opacity: liking ? 0.6 : 1, minHeight: 32, padding: '4px 6px 4px 0' }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .9-4 2-1-1.1-2.3-2-4-2A5.5 5.5 0 0 0 3 8.5c0 2.3 1.5 4 3 5.5l6 6Z" />
+          </svg> {likeCount}
         </button>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5,
-          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>
-          {!token && <span style={{ fontSize: 10, opacity: 0.5 }}>Sign in to like</span>}
-        </span>
       </div>
     </div>
   );
 }
 
-function CommunityFeed({ user, authFetch, token }) {
+function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState('');
   const [postType, setPostType] = useState('general');
@@ -406,15 +405,16 @@ function CommunityFeed({ user, authFetch, token }) {
             <textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
-              onFocus={() => { if (user) setComposing(true); }}
-              placeholder={user ? 'Share a pull, trade, or find...' : 'Sign in to post to the community...'}
-              disabled={!user}
+              onFocus={(e) => { if (user) { setComposing(true); } else { e.target.blur(); onRequireAuth?.(); } }}
+              onClick={() => { if (!user) onRequireAuth?.(); }}
+              readOnly={!user}
+              placeholder={user ? 'Share a pull, trade, or find...' : 'Sign in to post — join the conversation...'}
               style={{
                 width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)',
                 borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13,
                 resize: 'none', minHeight: composing ? 80 : 40, outline: 'none',
                 fontFamily: 'inherit', lineHeight: 1.5, transition: 'min-height .2s',
-                opacity: user ? 1 : 0.5, cursor: user ? 'text' : 'not-allowed',
+                opacity: user ? 1 : 0.75, cursor: user ? 'text' : 'pointer',
               }}
             />
             {composing && user && (
@@ -478,7 +478,7 @@ function CommunityFeed({ user, authFetch, token }) {
       ) : (
         <>
           {posts.map(p => (
-            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} />
+            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} onRequireAuth={onRequireAuth} />
           ))}
           {hasMore && (
             <button onClick={() => loadFeed(page + 1)} disabled={loadingMore} style={{
@@ -505,6 +505,8 @@ export default function CommunityPage() {
   const [myFollowers, setMyFollowers] = useState([]);
   const [followingSet, setFollowingSet] = useState(new Set());
   const [tab, setTab] = useState('feed');
+  const [showAuth, setShowAuth] = useState(false);
+  const requireAuth = useCallback(() => setShowAuth(true), []);
 
   // Load suggested users
   useEffect(() => {
@@ -537,7 +539,7 @@ export default function CommunityPage() {
   }, [searchQuery]);
 
   const toggleFollow = useCallback(async (userId, isFollowing) => {
-    if (!token) return;
+    if (!token) { setShowAuth(true); return; }
     try {
       if (isFollowing) {
         await authFetch(`/api/users/${userId}/follow`, { method: 'DELETE' });
@@ -617,7 +619,7 @@ export default function CommunityPage() {
       {tab === 'feed' && !searchQuery && (
         <div className="community-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
           {/* Main feed */}
-          <CommunityFeed user={user} authFetch={authFetch} token={token} />
+          <CommunityFeed user={user} authFetch={authFetch} token={token} onRequireAuth={requireAuth} />
 
           {/* Sidebar */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 96 }}>
@@ -649,14 +651,14 @@ export default function CommunityPage() {
                 <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Who to Follow</div>
                 {suggested.slice(0, 4).map(u => (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#16c784, #0d9463)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13, color: '#000', flexShrink: 0 }}>
+                    <Link href={`/user/${u.handle}`} aria-label={`@${u.handle} profile`} style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#16c784, #0d9463)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13, color: '#000', flexShrink: 0, textDecoration: 'none' }}>
                       {(u.handle || 'U')[0].toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    </Link>
+                    <Link href={`/user/${u.handle}`} style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ fontWeight: 600, fontSize: 12 }}>@{u.handle}</div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{Number(u.card_count) || 0} cards</div>
-                    </div>
-                    <button onClick={() => toggleFollow(u.id, followingSet.has(u.id))} style={{
+                    </Link>
+                    <button onClick={() => (token ? toggleFollow(u.id, followingSet.has(u.id)) : requireAuth())} style={{
                       padding: '5px 12px', borderRadius: 16, fontSize: 11, fontWeight: 600, cursor: 'pointer',
                       background: followingSet.has(u.id) ? 'var(--panel-2)' : 'var(--gold)',
                       color: followingSet.has(u.id) ? 'var(--muted)' : '#000',
@@ -671,10 +673,9 @@ export default function CommunityPage() {
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>The Exchange</div>
               {[
-                ['Cards priced live', '750K+'],
-                ['Active listings', liveStats?.active_listings ?? '—'],
-                ['Trades this week', liveStats?.trades_this_week ?? '—'],
-                ['Collectors', liveStats?.total_users ?? '—'],
+                ['Cards priced live', liveStats?.totalCards ?? '—'],
+                ['Active listings', liveStats?.activeListings ?? '—'],
+                ['Collectors', liveStats?.users ?? '—'],
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
                   <span style={{ color: 'var(--muted)' }}>{k}</span>
@@ -689,7 +690,7 @@ export default function CommunityPage() {
       {tab !== 'feed' && (
         <div className="community-grid">
           {displayUsers.map(u => (
-            <UserCard key={u.id} user={u} currentUserId={user?.id} onToggleFollow={toggleFollow} followingSet={followingSet} />
+            <UserCard key={u.id} user={u} currentUserId={user?.id} onToggleFollow={toggleFollow} followingSet={followingSet} onRequireAuth={requireAuth} />
           ))}
           {!searchQuery && tab === 'discover' && suggested.length === 0 && (
             <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center', gridColumn: '1/-1' }}>
@@ -698,6 +699,8 @@ export default function CommunityPage() {
           )}
         </div>
       )}
+
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </>
   );
 }

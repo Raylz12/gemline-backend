@@ -7,7 +7,24 @@ export default function Ticker() {
   const [tickerCards, setTickerCards] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
   const [paused, setPaused] = useState(false);
+  const [duration, setDuration] = useState(300); // seconds per half-loop, set from real track width
   const pauseTimer = useRef(null);
+  const trackRef = useRef(null);
+
+  // Marquee speed must track content width — a fixed duration over a variable
+  // number of items either crawls or blurs. ~55px/s reads well on mobile.
+  useEffect(() => {
+    if (!tickerCards.length) return;
+    const el = trackRef.current;
+    if (!el) return;
+    const measure = () => {
+      const half = el.scrollWidth / 2;
+      if (half > 0) setDuration(Math.max(30, Math.round(half / 55)));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [tickerCards.length]);
 
   // Tape rides the trusted heatmap pool (top-volume cards, sane |gain| ≤ 150%)
   // — raw gain-sorted feed was a wall of clamped +500% thin-sale junk.
@@ -73,14 +90,12 @@ export default function Ticker() {
             <span className={`ch ${cls}`}>
               {arrow}{gain >= 0 ? '+' : ''}{Number(gain).toFixed(1)}%
             </span>
-            <span className="sep">·</span>
           </span>
         );
       })
     : Array.from({ length: 8 }, (_, i) => (
         <span className="tk" key={i}>
           <b style={{ color: 'rgba(255,255,255,0.3)' }}>Loading…</b>
-          <span className="sep">·</span>
         </span>
       ));
 
@@ -94,7 +109,8 @@ export default function Ticker() {
         <div className="tag">LIVE TAPE</div>
         <div
           className="ticker-track"
-          style={paused ? { animationPlayState: 'paused' } : {}}
+          ref={trackRef}
+          style={{ animationDuration: `${duration}s`, ...(paused ? { animationPlayState: 'paused' } : {}) }}
         >
           {tape}
           {/* Duplicate for seamless loop */}

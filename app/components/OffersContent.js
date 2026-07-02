@@ -110,11 +110,13 @@ export default function OffersContent() {
                 <OfferThumb o={o} />
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{o.player}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {o.grader} {o.grade} · {o.set}
+                  <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="mchip mchip-grade">{`${o.grader || 'RAW'} ${o.grade || ''}`.trim()}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.set}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>
-                    {view === 'received' ? `from @${o.buyerHandle}` : `to @${o.sellerHandle}`} · {new Date(o.createdAt).toLocaleDateString()}
+                    {view === 'received' ? `from @${o.buyerHandle}` : `to @${o.sellerHandle}`}
+                    <span style={{ margin: '0 6px', opacity: .5 }}>{new Date(o.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>

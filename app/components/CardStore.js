@@ -75,6 +75,7 @@ export function CardStoreProvider({ children }) {
   const [filterSport, setFilterSport] = useState('All');
   const initialized = useRef(false);
   const fetchTimeout = useRef(null);
+  const lastFetchAt = useRef(0);
 
   // Server-side fetch with pagination, search, sort, filter.
   // Uses refs for stable identity — avoids stale-closure issues in effects.
@@ -101,6 +102,7 @@ export function CardStoreProvider({ children }) {
     if (brand) params.set('brand', brand);
 
     setLoading(true);
+    lastFetchAt.current = Date.now();
     fetch(`/api/market/feed?${params}`)
       .then(r => r.json())
       .then(data => {
@@ -151,6 +153,13 @@ export function CardStoreProvider({ children }) {
     }
   };
 
+  // Market page calls this on mount so revisits never show a stale in-memory
+  // feed from the initial app load (CDN s-maxage still absorbs the traffic).
+  const refreshFeed = useRef(() => {
+    if (Date.now() - lastFetchAt.current < 15_000) return; // just fetched — skip
+    fetchFeed({ page: 1 });
+  }).current;
+
   const toggleWatch = (id) => {
     setWatch(prev => {
       const next = new Set(prev);
@@ -179,7 +188,7 @@ export function CardStoreProvider({ children }) {
       cards, allCards: cards, setCards, totalCards, sportCounts, brandCounts, wallet, setWallet, 
       trades, setTrades, watch, toggleWatch, updateCard, 
       searchQuery, setSearchQuery, sortBy, setSortBy, filterSport, setFilterSport,
-      filterBrand, setFilterBrand, loadMore, loading, currentPage, totalPages,
+      filterBrand, setFilterBrand, loadMore, refreshFeed, loading, currentPage, totalPages,
     }}>
       {children}
     </CardStoreContext.Provider>

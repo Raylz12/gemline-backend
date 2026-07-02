@@ -19,7 +19,7 @@ function TradeCard({ card }) {
       }} />
       <div className="ti">
         {card.player}
-        <small>{card.grader} {card.grade} · {fmt(card.market)}</small>
+        <small>{card.grader} {card.grade} {' '}{fmt(card.market)}</small>
       </div>
     </div>
   );

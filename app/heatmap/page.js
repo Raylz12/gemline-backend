@@ -3,25 +3,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
 import useDarkPage from '../lib/useDarkPage';
 
-const SPORT_TABS = ['All', 'Basketball', 'Baseball', 'Football', 'Pokemon', 'Other'];
+const PAGE = 100;
 const SORT_OPTIONS = [
-  { value: 'gainers', label: 'Biggest Gainers' },
-  { value: 'losers', label: 'Biggest Losers' },
-  { value: 'volume', label: 'Most Volume' },
-  { value: 'value', label: 'Highest Value' },
+  { value: 'movers', label: 'Biggest Moves' },
+  { value: 'gainers', label: 'Gainers' },
+  { value: 'losers', label: 'Losers' },
+  { value: 'volume', label: 'Sales Volume' },
+  { value: 'value', label: 'Price' },
 ];
-
-function pctColor(gain7d) {
-  if (gain7d === null || gain7d === undefined) return 'rgba(255,255,255,.05)';
-  const clamped = Math.max(-25, Math.min(25, gain7d));
-  if (clamped >= 0) {
-    const t = clamped / 25;
-    return `rgba(52,216,138,${0.12 + t * 0.55})`;
-  } else {
-    const t = (-clamped) / 25;
-    return `rgba(255,92,108,${0.12 + t * 0.55})`;
-  }
-}
 
 function fmt(n) {
   if (!n || isNaN(n)) return '—';
@@ -47,8 +36,9 @@ function HeatCard({ c, onClick }) {
       <div className="hm2-main">
         <div className="hm2-player">{c.player}</div>
         <div className="hm2-meta">
-          {[c.grader && `${c.grader} ${c.grade || ''}`.trim(), c.year].filter(Boolean).join(' · ')}
-          {c.sales7d > 0 ? ` · ${c.sales7d} sold 7d` : c.sales30d > 0 ? ` · ${c.sales30d} sold 30d` : ''}
+          {c.grader && <span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${c.grader} ${c.grade || ''}`.trim()}</span>}
+          {c.year}
+          {c.sales7d > 0 ? `\u2002${c.sales7d} sold 7d` : c.sales30d > 0 ? `\u2002${c.sales30d} sold 30d` : ''}
         </div>
       </div>
       <div className="hm2-foot">
@@ -63,91 +53,87 @@ function HeatCard({ c, onClick }) {
   );
 }
 
+const mapCard = (c) => ({
+  id: c.cardId,
+  player: c.player,
+  sport: c.sport,
+  set: c.set,
+  year: c.year,
+  grader: c.grader,
+  grade: c.grade,
+  variant: c.variant,
+  num: c.num,
+  market: Number(c.marketPrice) || 0,
+  lo: Number(c.lo) || 0,
+  hi: Number(c.hi) || 0,
+  gain7d: Number(c.gain_7d ?? c.gain7d) || 0,
+  sales7d: Number(c.sales_7d ?? c.sales7d) || 0,
+  sales30d: Number(c.sales_30d ?? c.sales30d) || 0,
+  confidence: c.confidence,
+  thumbnail: c.thumbnail || c.image_url,
+  rookie: c.rookie,
+  cardhedge_id: c.cardhedge_id,
+  ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase(),
+  theme: ['#2a2a2a', '#555'],
+});
+
 export default function HeatmapPage() {
   useDarkPage();
   const [cards, setCards] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [sports, setSports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [sport, setSport] = useState('All');
-  const [sort, setSort] = useState('gainers');
+  const [sort, setSort] = useState('movers');
   const [selectedCard, setSelectedCard] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const offsetRef = useRef(0);
   const intervalRef = useRef(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async ({ append = false, sportOverride, sortOverride } = {}) => {
+    const sp = sportOverride ?? sport;
+    const so = sortOverride ?? sort;
+    const offset = append ? offsetRef.current : 0;
     try {
-      const res = await fetch('/api/market/heatmap');
+      if (append) setLoadingMore(true);
+      const params = new URLSearchParams({ sort: so, limit: PAGE, offset });
+      if (sp && sp !== 'All') params.set('sport', sp);
+      const res = await fetch(`/api/market/heatmap?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      const mapped = (data.cards || []).map(c => ({
-        id: c.cardId,
-        player: c.player,
-        sport: c.sport,
-        set: c.set,
-        year: c.year,
-        grader: c.grader,
-        grade: c.grade,
-        variant: c.variant,
-        market: Number(c.marketPrice) || 0,
-        lo: Number(c.lo) || 0,
-        hi: Number(c.hi) || 0,
-        gain7d: Number(c.gain_7d || c.gain7d) || 0,
-        sales7d: Number(c.sales_7d || c.sales7d) || 0,
-        sales30d: Number(c.sales_30d || c.sales30d) || 0,
-        confidence: c.confidence,
-        thumbnail: c.thumbnail || c.image_url,
-        rookie: c.rookie,
-        cardhedge_id: c.cardhedge_id,
-        ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase(),
-        theme: ['#2a2a2a', '#555'],
-      }));
-      setCards(mapped);
+      const mapped = (data.cards || []).map(mapCard);
+      setCards(prev => (append ? [...prev, ...mapped] : mapped));
+      setTotal(Number(data.total) || mapped.length);
+      if (Array.isArray(data.sports) && data.sports.length) setSports(data.sports);
+      offsetRef.current = offset + mapped.length;
       setLastUpdated(new Date());
       setError(null);
     } catch (e) {
       setError('Failed to load heatmap data');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, []);
+  }, [sport, sort]);
 
+  // Initial + on filter change
   useEffect(() => {
+    setLoading(true);
     fetchData();
-    intervalRef.current = setInterval(fetchData, 60_000);
+  }, [sport, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh first page only (don't yank the rug after load-more)
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      if (offsetRef.current <= PAGE) fetchData();
+    }, 60_000);
     return () => clearInterval(intervalRef.current);
   }, [fetchData]);
 
-  // Filter + sort
-  const displayed = (() => {
-    let pool = cards.filter(c => c.market > 0);
-
-    if (sport !== 'All') {
-      if (sport === 'Other') {
-        const mainSports = ['Basketball', 'Baseball', 'Football', 'Pokemon'];
-        pool = pool.filter(c => !mainSports.includes(c.sport));
-      } else {
-        pool = pool.filter(c => (c.sport || '').toLowerCase() === sport.toLowerCase());
-      }
-    }
-
-    // Guard: remove absurd % changes before sorting
-    const safe = (c) => Math.abs(c.gain7d) <= 999;
-
-    switch (sort) {
-      case 'gainers':
-        return pool.filter(c => safe(c) && c.gain7d > 0).sort((a, b) => b.gain7d - a.gain7d).slice(0, 80);
-      case 'losers':
-        return pool.filter(c => safe(c) && c.gain7d < 0).sort((a, b) => a.gain7d - b.gain7d).slice(0, 80);
-      case 'volume':
-        return pool.sort((a, b) => (b.sales7d + b.sales30d) - (a.sales7d + a.sales30d)).slice(0, 80);
-      case 'value':
-        return pool.sort((a, b) => b.market - a.market).slice(0, 80);
-      default:
-        return pool.slice(0, 80);
-    }
-  })();
-
-  const openCard = (c) => setSelectedCard(c);
+  const sportTabs = ['All', ...sports];
+  const hasMore = cards.length < total;
 
   const secondsAgo = lastUpdated
     ? Math.round((Date.now() - lastUpdated.getTime()) / 1000)
@@ -175,9 +161,9 @@ export default function HeatmapPage() {
         </div>
       </div>
 
-      {/* Sport tabs */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-        {SPORT_TABS.map(s => (
+      {/* Sport tabs — real sports from the live pool */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        {sportTabs.map(s => (
           <button
             key={s}
             onClick={() => setSport(s)}
@@ -186,14 +172,14 @@ export default function HeatmapPage() {
               background: sport === s ? 'var(--gold)' : 'var(--panel-2)',
               color: sport === s ? '#000' : 'var(--muted)',
               border: `1px solid ${sport === s ? 'var(--gold)' : 'var(--line)'}`,
-              transition: 'all .12s',
+              transition: 'all .12s', minHeight: 32,
             }}
           >{s}</button>
         ))}
       </div>
 
       {/* Sort options */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
         {SORT_OPTIONS.map(opt => (
           <button
             key={opt.value}
@@ -207,10 +193,11 @@ export default function HeatmapPage() {
             }}
           >{opt.label}</button>
         ))}
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', marginLeft: 4 }}>7-day window</span>
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', flexWrap: 'wrap' }}>
         <span>Color intensity = price movement magnitude</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: 'rgba(255,92,108,.7)' }} /> Decline
@@ -221,35 +208,43 @@ export default function HeatmapPage() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 80, color: 'var(--muted)' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⬛⬛⬛</div>
-          Loading heatmap data...
+        <div className="hm2-grid">
+          {[...Array(24)].map((_, i) => <div key={i} style={{ height: 86, background: 'var(--panel-2)', borderRadius: 8, opacity: 0.5 }} />)}
         </div>
       ) : error ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--down)' }}>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>⚠️</div>
           {error}
           <div style={{ marginTop: 12 }}>
-            <button onClick={fetchData} style={{ padding: '8px 18px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
+            <button onClick={() => { setLoading(true); fetchData(); }} style={{ padding: '8px 18px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
               Try Again
             </button>
           </div>
         </div>
-      ) : displayed.length === 0 ? (
+      ) : cards.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>
-          No cards with price movement data in this view.
+          No cards with validated price movement in this view — try another sport or sort.
         </div>
       ) : (
-        <div className="hm2-grid">
-          {displayed.map(c => (
-            <HeatCard key={c.id} c={c} onClick={openCard} />
-          ))}
-        </div>
+        <>
+          <div className="hm2-grid">
+            {cards.map(c => (
+              <HeatCard key={c.id} c={c} onClick={setSelectedCard} />
+            ))}
+          </div>
+          {hasMore && (
+            <div style={{ textAlign: 'center', padding: '18px 0 4px' }}>
+              <button onClick={() => fetchData({ append: true })} disabled={loadingMore}
+                style={{ padding: '11px 28px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: loadingMore ? 'wait' : 'pointer', minHeight: 44 }}>
+                {loadingMore ? 'Loading…' : `Load more (${cards.length} of ${total})`}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
-      {displayed.length > 0 && !loading && (
-        <div style={{ marginTop: 16, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)' }}>
-          {displayed.length} cards · Auto-refreshes every 60s
+      {cards.length > 0 && !loading && (
+        <div style={{ marginTop: 14, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)' }}>
+          {cards.length} of {total} liquid movers · Auto-refreshes every 60s
         </div>
       )}
 

@@ -2,6 +2,16 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthContext';
+import { IconUser, IconLink, IconAlert, IconBell, IconShield, IconCheck, IconDollar } from './Icons';
+
+function SectionLabel({ icon: Icon, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--muted)', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 8 }}>
+      {Icon && <Icon size={13} />}
+      {children}
+    </div>
+  );
+}
 
 export default function SettingsModal({ onClose }) {
   const router = useRouter();
@@ -95,7 +105,6 @@ export default function SettingsModal({ onClose }) {
     onClose();
   };
 
-  const sectionLabel = { fontSize: 12, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 8 };
   const sectionWrap = { marginBottom: 24 };
   const memberSince = profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '';
 
@@ -114,7 +123,7 @@ export default function SettingsModal({ onClose }) {
 
           {/* PROFILE */}
           <div style={sectionWrap}>
-            <div style={sectionLabel}>PROFILE</div>
+            <SectionLabel icon={IconUser}>Profile</SectionLabel>
             <div className="panel" style={{ padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                 <div className="avatar" style={{ width: 48, height: 48, fontSize: 18 }}>
@@ -129,9 +138,9 @@ export default function SettingsModal({ onClose }) {
 
               {/* View Profile Button */}
               <div style={{ marginBottom: 12 }}>
-                <button className="btn-ghost" style={{ fontSize: 12, padding: '8px 14px', width: '100%' }}
+                <button className="btn-ghost" style={{ fontSize: 12, padding: '10px 14px', width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
                   onClick={() => { onClose(); router.push(`/profile/${profile?.handle || user?.handle}`); }}>
-                  👤 View My Profile
+                  <IconUser size={14} /> View My Profile
                 </button>
               </div>
 
@@ -159,7 +168,7 @@ export default function SettingsModal({ onClose }) {
                         Cancel
                       </button>
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--dim)' }}>⚠️ You can only change your display name once</div>
+                    <div style={{ fontSize: 10, color: 'var(--dim)', display: 'flex', alignItems: 'center', gap: 5 }}><IconAlert size={12} /> You can only change your display name once</div>
                   </div>
                 ) : (
                   <button onClick={() => { setEditingName(true); setNewName(profile?.handle || user?.handle || ''); }}
@@ -173,19 +182,19 @@ export default function SettingsModal({ onClose }) {
 
           {/* SELLER TOOLS */}
           <div style={sectionWrap}>
-            <div style={sectionLabel}>SELLER TOOLS</div>
+            <SectionLabel icon={IconDollar}>Seller Tools</SectionLabel>
             <div className="panel" style={{ padding: 16 }}>
               <div style={{ fontSize: 13, marginBottom: 12 }}>
                 Connect your Stripe account to sell cards and receive payouts.
               </div>
               {stripeStatus === 'connected' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--up-soft)', borderRadius: 8, color: 'var(--up)', fontWeight: 600, fontSize: 13 }}>
-                  <span style={{ fontSize: 18 }}>✓</span> Connected
+                  <IconCheck size={16} /> Connected
                 </div>
               ) : (
                 <>
-                  <button className="btn-primary" onClick={handleStripeConnect} disabled={connecting}>
-                    {connecting ? 'Connecting…' : '🔗 Connect with Stripe'}
+                  <button className="btn-primary" onClick={handleStripeConnect} disabled={connecting} style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                    {connecting ? 'Connecting…' : (<><IconLink size={14} /> Connect with Stripe</>)}
                   </button>
                   {stripeError && (
                     <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--down-soft)', borderRadius: 8, color: 'var(--down)', fontSize: 12, lineHeight: 1.5 }}>
@@ -199,7 +208,7 @@ export default function SettingsModal({ onClose }) {
 
           {/* NOTIFICATIONS */}
           <div style={sectionWrap}>
-            <div style={sectionLabel}>NOTIFICATIONS</div>
+            <SectionLabel icon={IconBell}>Notifications</SectionLabel>
             <div className="panel" style={{ padding: 16 }}>
               <ToggleRow label="Email alerts" desc="New listings, price drops" on={emailAlerts} toggle={() => setEmailAlerts(!emailAlerts)} />
               <ToggleRow label="Price alerts" desc="Cards on your watchlist" on={priceAlerts} toggle={() => setPriceAlerts(!priceAlerts)} />
@@ -209,7 +218,7 @@ export default function SettingsModal({ onClose }) {
 
           {/* ACCOUNT */}
           <div style={sectionWrap}>
-            <div style={sectionLabel}>ACCOUNT</div>
+            <SectionLabel icon={IconShield}>Account</SectionLabel>
             <div className="panel" style={{ padding: 16 }}>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button className="btn-ghost" style={{ fontSize: 12, padding: '8px 14px' }}
@@ -225,7 +234,7 @@ export default function SettingsModal({ onClose }) {
 
           {/* ABOUT */}
           <div style={sectionWrap}>
-            <div style={sectionLabel}>ABOUT</div>
+            <SectionLabel>About</SectionLabel>
             <div className="panel" style={{ padding: 16 }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.8 }}>
                 <div><strong style={{ color: 'var(--txt)' }}>GEMLINE</strong> v1.0.0</div>

@@ -1,11 +1,23 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fmt, fmtDisplay, fmtRange, gradeClass } from '../lib/data';
 import { useCardStore } from './CardStore';
 import { useAuth } from './AuthContext';
 import { toast } from '../lib/toast';
 import PaymentModal from './PaymentModal';
 import AuthModal from './AuthModal';
+import ProGate, { hasCapability } from './ProGate';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// CardHedge grade string — raw cards have grader='RAW' + empty grade; the API
+// wants 'Raw' for them (falling back to 'PSA 10' returned nothing for raws,
+// which is why history/comps looked empty while insight counts had sales).
+function gradeParam(grader, grade) {
+  const g = (grader || '').trim().toUpperCase();
+  if (!g || g === 'RAW' || !String(grade || '').trim()) return 'Raw';
+  return `${grader} ${grade}`;
+}
 
 function WhyCheap({ cardhedgeId, grade, market }) {
   const [open, setOpen] = useState(false);
@@ -295,7 +307,8 @@ function PriceChart({ prices, comps = [], lo, hi, currentPrice }) {
   );
 }
 
-// Map raw confidence values to human-readable labels
+// Map raw confidence values to human-readable labels. Some data paths carry
+// a bare float (e.g. "0.5252") — never render that raw next to real copy.
 const CONFIDENCE_LABELS = {
   catalog: 'Estimated',
   low: 'Low confidence',
@@ -304,8 +317,26 @@ const CONFIDENCE_LABELS = {
   very_high: 'Very high confidence',
 };
 function confidenceLabel(raw) {
-  if (!raw) return '';
-  return CONFIDENCE_LABELS[raw.toLowerCase()] || raw;
+  if (raw === null || raw === undefined || raw === '') return '';
+  const s = String(raw).toLowerCase();
+  if (CONFIDENCE_LABELS[s]) return CONFIDENCE_LABELS[s];
+  const n = Number(s);
+  if (!isNaN(n)) {
+    if (n >= 0.8) return 'Very high confidence';
+    if (n >= 0.65) return 'High confidence — recent sales';
+    if (n >= 0.35) return 'Moderate confidence';
+    return 'Low confidence';
+  }
+  return raw;
+}
+// Stable CSS-safe key for conf-badge styling ('conf-0.5252' is not a class)
+function confidenceKey(raw) {
+  if (raw === null || raw === undefined || raw === '') return '';
+  const s = String(raw).toLowerCase();
+  if (CONFIDENCE_LABELS[s]) return s;
+  const n = Number(s);
+  if (!isNaN(n)) return n >= 0.8 ? 'very_high' : n >= 0.65 ? 'high' : n >= 0.35 ? 'medium' : 'low';
+  return 'catalog';
 }
 
 function FMVBar({ lo, market, hi }) {
@@ -331,9 +362,57 @@ function FMVBar({ lo, market, hi }) {
   );
 }
 
-export default function CardDetail({ card: c, onClose }) {
+export default function CardDetail({ card: cardProp, onClose }) {
   const { watch, toggleWatch } = useCardStore();
-  const { token, authFetch } = useAuth();
+  const { user, token, authFetch } = useAuth();
+  const [hydrated, setHydrated] = useState(null);
+
+  // ── Self-hydration ──
+  // Entry points (ticker, movers, header search, profiles, posts) pass partial
+  // card objects — fetch the canonical record and fill in whatever's missing
+  // (thumbnail, grades ladder, sales counts, cardhedge_id, lo/hi…) so images
+  // and data render no matter where the card was opened from.
+  useEffect(() => {
+    setHydrated(null);
+    const id = cardProp?.id;
+    if (!id || !UUID_RE.test(String(id))) return;
+    let cancelled = false;
+    fetch(`/api/cards/${id}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled || !d?.card) return;
+        const h = d.card;
+        setHydrated({
+          player: h.player, sport: h.sport, set: h.set, variant: h.variant, num: h.num,
+          grader: h.grader, grade: h.grade, year: h.year,
+          market: Number(h.marketPrice) || 0,
+          lo: Number(h.lo) || 0, hi: Number(h.hi) || 0,
+          confidence: h.confidence, saleCount: h.saleCount,
+          sales7d: h.sales7d, sales30d: h.sales30d, gain7d: h.gain7d,
+          rookie: h.rookie, thumbnail: h.thumbnail,
+          cardhedge_id: h.cardhedge_id, grades: h.grades,
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [cardProp?.id]);
+
+  const c = useMemo(() => {
+    if (!cardProp) return cardProp;
+    const merged = { ...cardProp };
+    if (hydrated) {
+      for (const [k, v] of Object.entries(hydrated)) {
+        const cur = merged[k];
+        const missing = cur === undefined || cur === null || cur === '' ||
+          (Array.isArray(cur) && cur.length === 0) ||
+          (typeof cur === 'number' && cur === 0);
+        if (missing && v !== undefined && v !== null && v !== '') merged[k] = v;
+      }
+    }
+    if (!merged.ini) merged.ini = (merged.player || '').split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase();
+    if (!merged.theme) merged.theme = ['#1a1f2e', '#12151f'];
+    return merged;
+  }, [cardProp, hydrated]);
   const [payModal, setPayModal] = useState(null); // { orderId, clientSecret, amount, fee }
   const [addingToPortfolio, setAddingToPortfolio] = useState(false);
   const [listings, setListings] = useState([]);
@@ -412,7 +491,7 @@ export default function CardDetail({ card: c, onClose }) {
     if (!chId) return;
     let cancelled = false;
     setHistoryLoading(true);
-    const activeGrade = chartGrade || (c.grader && c.grade ? `${c.grader} ${c.grade}` : 'PSA 10');
+    const activeGrade = chartGrade || gradeParam(c.grader, c.grade);
     const getWindow = (days) =>
       fetch(`/api/cards/${chId}/history?grade=${encodeURIComponent(activeGrade)}&days=${days}`).then(r => r.json());
     (async () => {
@@ -431,9 +510,26 @@ export default function CardDetail({ card: c, onClose }) {
         }
       } catch {}
       if (cancelled) return;
-      setPriceHistory(d.prices || []);
+      // Unify chart with comps: if the smoothed price series is too sparse to
+      // draw but real recorded sales exist, chart the sales themselves — the
+      // chart and the Comps tab must never contradict each other.
+      let prices = d.prices || [];
+      const comps = (d.comps || []).filter(x => x.date && Number(x.price) > 0);
+      let stats = d.stats || null;
+      if (prices.length < 2 && comps.length >= 2) {
+        prices = comps
+          .map(x => ({ date: x.date, price: Number(x.price) }))
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        const vals = prices.map(p => p.price);
+        stats = {
+          open: vals[0], close: vals[vals.length - 1],
+          low: Math.min(...vals), high: Math.max(...vals),
+          pctChange: vals[0] > 0 ? (((vals[vals.length - 1] - vals[0]) / vals[0]) * 100).toFixed(1) : '0',
+        };
+      }
+      setPriceHistory(prices);
       setPriceComps(d.comps || []);
-      setPriceStats(d.stats || null);
+      setPriceStats(stats);
       setEffectiveDays(days);
       setWidened(widenedFrom);
       setHistoryLoading(false);
@@ -543,7 +639,7 @@ export default function CardDetail({ card: c, onClose }) {
   const sales7 = c.sales7d || 0;
   const liquidity = sales30 >= 25 ? 'HIGH' : sales30 >= 8 ? 'MEDIUM' : sales30 >= 2 ? 'LOW' : 'THIN';
   const liqColor = sales30 >= 25 ? 'var(--up)' : sales30 >= 8 ? 'var(--gold)' : sales30 >= 2 ? '#e8b339' : 'var(--dim)';
-  const confKey = (c.confidence || '').toLowerCase();
+  const confKey = confidenceKey(c.confidence);
   const confScore = { very_high: 95, high: 82, medium: 58, low: 32, catalog: 22 }[confKey] || 40;
   const salesScore = Math.min(100, sales30 * 4);
   const trendOk = c.gain7d !== undefined && Math.abs(c.gain7d) <= 999;
@@ -588,11 +684,11 @@ export default function CardDetail({ card: c, onClose }) {
                 <span className="cd-slab-ini">{c.ini}</span>
                 <span className="cd-slab-name">{c.player}</span>
               </div>
-              <span className={`grade cd-slab-grade ${gradeClass(c.grader)}`}>{c.grader} {c.grade}</span>
+              <span className={`grade cd-slab-grade ${gradeClass(c.grader)}`}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>
             </div>
 
             <div className="cd-rail-badges">
-              {c.confidence && <span className={`conf-badge conf-${c.confidence.toLowerCase()}`}>{confidenceLabel(c.confidence)}</span>}
+              {c.confidence && confidenceLabel(c.confidence) && <span className={`conf-badge conf-${confidenceKey(c.confidence)}`}>{confidenceLabel(c.confidence)}</span>}
               {c.saleCount > 0 && <span className="pill">{c.saleCount} recent sales</span>}
             </div>
 
@@ -601,7 +697,7 @@ export default function CardDetail({ card: c, onClose }) {
               {c.set && <div className="cd-fact"><span>Set</span><b>{c.set}</b></div>}
               {c.num && <div className="cd-fact"><span>Card #</span><b>{c.num}</b></div>}
               {c.variant && <div className="cd-fact"><span>Variant</span><b>{c.variant}</b></div>}
-              <div className="cd-fact"><span>Grade</span><b>{c.grader} {c.grade}</b></div>
+              <div className="cd-fact"><span>Grade</span><b>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</b></div>
               {isRC && <div className="cd-fact"><span>Rookie</span><b style={{ color: 'var(--gold)' }}>Yes — RC</b></div>}
             </div>
           </aside>
@@ -614,7 +710,13 @@ export default function CardDetail({ card: c, onClose }) {
                   <h2>{c.player}</h2>
                   {isRC && <span className="rc-tag" style={{ fontSize: 11, padding: '3px 7px' }}>RC</span>}
                 </div>
-                <div className="cd-meta">{c.set}{c.variant ? ` · ${c.variant}` : ''}{c.num ? ` · ${c.num}` : ''}</div>
+                {c.set && <div className="cd-meta">{c.set}</div>}
+                {((c.variant && c.variant !== 'Base') || c.num) && (
+                  <div className="cd-chiprow">
+                    {c.variant && c.variant !== 'Base' && <span className="cd-minichip">{c.variant}</span>}
+                    {c.num && <span className="cd-minichip">#{String(c.num).replace(/^#/, '')}</span>}
+                  </div>
+                )}
               </div>
               <div className="cd-head-icons">
                 <button className={`cd-icon ${isLiked ? 'on-like' : ''}`} onClick={handleLike} title={isLiked ? 'Unlike' : 'Like'}>
@@ -685,13 +787,14 @@ export default function CardDetail({ card: c, onClose }) {
                     </div>
                     {c.grades && c.grades.length > 1 && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                        <button onClick={() => setChartGrade(null)} className={`cd-chip sm ${!chartGrade ? 'gold' : ''}`}>{c.grader} {c.grade}</button>
+                        <button onClick={() => setChartGrade(null)} className={`cd-chip sm ${!chartGrade ? 'gold' : ''}`}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</button>
                         {c.grades
                           .filter(g => !(g.grader === c.grader && String(g.grade) === String(c.grade)))
                           .slice(0, 5)
                           .map((g, i) => {
-                            const gLabel = `${g.grader} ${g.grade}`;
-                            return <button key={i} onClick={() => setChartGrade(gLabel)} className={`cd-chip sm ${chartGrade === gLabel ? 'gold' : ''}`}>{gLabel}</button>;
+                            const gValue = gradeParam(g.grader, g.grade);
+                            const gLabel = `${g.grader || 'RAW'} ${g.grade || ''}`.trim();
+                            return <button key={i} onClick={() => setChartGrade(gValue)} className={`cd-chip sm ${chartGrade === gValue ? 'gold' : ''}`}>{gLabel}</button>;
                           })}
                       </div>
                     )}
@@ -732,8 +835,15 @@ export default function CardDetail({ card: c, onClose }) {
                         </div>
                       </div>
                     ) : (
-                      <div className="cd-empty" style={{ height: 64 }}>
-                        {chartDays < 365 ? 'No sales in the last year for this grade' : `No price history for this ${chartDays === 365 ? '1Y' : `${chartDays}D`} window`}
+                      <div className="cd-empty" style={{ height: 64, flexDirection: 'column', gap: 4 }}>
+                        <span>
+                          {priceComps.length === 1
+                            ? '1 recorded sale in the last year — details in the Comps tab'
+                            : 'No recorded sales in the last year for this grade'}
+                        </span>
+                        {priceComps.length === 1 && (
+                          <button className="cd-chip sm" onClick={() => setTab('comps')}>View the sale →</button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -756,7 +866,7 @@ export default function CardDetail({ card: c, onClose }) {
                           return (
                             <div key={`${g.grader}-${g.grade}-${i}`} className={`cd-ladder-row ${isCurrent ? 'cur' : ''}`}>
                               <span className="cd-ladder-grade">
-                                <span className={gradeClass(g.grader)} style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>{g.grader} {g.grade}</span>
+                                <span className={gradeClass(g.grader)} style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>{`${g.grader || 'RAW'} ${g.grade || ''}`.trim()}</span>
                                 {isCurrent && <span className="cd-cur-dot">●</span>}
                               </span>
                               <span className="cd-ladder-price mono">
@@ -774,8 +884,9 @@ export default function CardDetail({ card: c, onClose }) {
               </div>
             )}
 
-            {/* ── Tab: Market Insight ── */}
+            {/* ── Tab: Market Insight (gated for visitors — free once signed in) ── */}
             {tab === 'insight' && (
+              <ProGate allowed={hasCapability(user, 'market_insight')} onUnlock={() => setShowAuth(true)}>
               <div className="cd-tabbody">
                 <div className="cd-tiles">
                   <div className="cd-tile big">
@@ -811,17 +922,18 @@ export default function CardDetail({ card: c, onClose }) {
                       <div className="cd-tile-val mono">{spreadPct}%</div>
                     </div>
                   )}
-                  {c.saleCount > 0 && (
+                  {(priceComps.length > 0 || c.saleCount > 0) && (
                     <div className="cd-tile">
                       <div className="cd-tile-label">TOTAL COMPS</div>
-                      <div className="cd-tile-val mono">{c.saleCount}</div>
+                      {/* Same number the Comps tab shows — tabs must agree */}
+                      <div className="cd-tile-val mono">{priceComps.length || c.saleCount}</div>
                     </div>
                   )}
                 </div>
 
                 {c.cardhedge_id && c.market > 0 && (
                   <div className="cd-block">
-                    <WhyCheap cardhedgeId={c.cardhedge_id} grade={`${c.grader} ${c.grade}`} market={c.market} />
+                    <WhyCheap cardhedgeId={c.cardhedge_id} grade={gradeParam(c.grader, c.grade)} market={c.market} />
                   </div>
                 )}
 
@@ -843,6 +955,7 @@ export default function CardDetail({ card: c, onClose }) {
                   </div>
                 )}
               </div>
+              </ProGate>
             )}
 
             {/* ── Tab: Comps ── */}

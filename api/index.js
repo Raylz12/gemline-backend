@@ -44,7 +44,7 @@ app.use(express.static(join(__dirname, '..', 'public')));
 // ── Global per-IP soft cap (in-memory layer; cacheable public GETs exempt) ───
 // Cacheable GETs are absorbed by the Vercel CDN (s-maxage below) so they skip
 // the app-level cap; everything else gets 120 req/min per IP.
-const CACHEABLE_GET = /^\/api\/(market\/(feed|heatmap|arb)|sitemap\/|auctions\/live|stats\/live|prices|cards\/[^/]+\/history|listings\/for-card|badges|profile\/|users\/[^/]+\/portfolio|posts\/feed|stores)/;
+const CACHEABLE_GET = /^\/api\/(market\/(feed|heatmap|arb)|sitemap\/|auctions\/live|stats\/live|prices|cards\/[^/]+(\/history)?$|cards\/[^/]+\/history|listings\/for-card|badges|profile\/|users\/[^/]+\/portfolio|posts\/feed|stores)/;
 const globalIpCap = rateLimit({ max: 120, windowMs: 60_000, message: 'Too many requests — slow down' });
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api')) return next();
@@ -463,6 +463,62 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
   } catch (e) { console.error('history:', e.message); res.json({ prices: [], comps: [], stats: null }); }
 });
 
+// ── Card hydration: full feed-shaped card by catalog id ──────────────────────
+// CardDetail opens from many entry points (ticker, movers, search, profiles,
+// posts) that pass partial card objects — this endpoint lets the modal
+// self-hydrate (thumbnail, grades ladder, sales counts, cardhedge_id, lo/hi).
+const CARD_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+app.get('/api/cards/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!CARD_UUID_RE.test(id)) return res.status(404).json({ error: 'not found' });
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    let { rows: [card] } = await pool.query('SELECT * FROM mv_card_feed WHERE id = $1', [id]);
+    if (!card) {
+      // Not in the materialized feed (unpriced/new) — fall back to cards + sibling grade tiers
+      const { rows: [raw] } = await pool.query('SELECT * FROM cards WHERE id = $1', [id]);
+      if (!raw) return res.status(404).json({ error: 'not found' });
+      let grades = [];
+      if (raw.cardhedge_id) {
+        const { rows: sib } = await pool.query(
+          `SELECT grader, grade, catalog_price AS price, ch_price_lo AS lo, ch_price_hi AS hi,
+                  sales_7d AS sales7d, sales_30d AS sales30d, gain_7d AS gain7d
+           FROM cards WHERE cardhedge_id = $1 ORDER BY catalog_price DESC NULLS LAST LIMIT 12`,
+          [raw.cardhedge_id]);
+        grades = sib;
+      }
+      card = { ...raw, grade_count: grades.length || 1, grades };
+    }
+    const mp = Number(card.catalog_price) || 0;
+    res.json({ card: {
+      cardId: card.id, player: card.player, sport: card.sport, set: card.card_set,
+      grader: card.grader || 'RAW', grade: card.grade || '', year: card.year || '',
+      marketPrice: mp,
+      lo: Number(card.ch_price_lo) || (mp ? Math.round(mp * 0.85) : null),
+      hi: Number(card.ch_price_hi) || (mp ? Math.round(mp * 1.18) : null),
+      confidence: card.ch_confidence || 'catalog',
+      saleCount: Number(card.sales_30d) || 0,
+      sales7d: Number(card.sales_7d) || 0,
+      sales30d: Number(card.sales_30d) || 0,
+      gain7d: Number(card.gain_7d) || 0,
+      rookie: card.rookie || false,
+      thumbnail: card.ebay_thumb || card.image_url || null,
+      variant: card.variant || '', num: card.number || '',
+      cardhedge_id: card.cardhedge_id || null,
+      gradeCount: Number(card.grade_count) || 1,
+      grades: (card.grades || []).map(g => ({
+        grader: g.grader || 'RAW', grade: g.grade || '',
+        price: Number(g.price) || 0, lo: Number(g.lo) || 0, hi: Number(g.hi) || 0,
+        sales7d: Number(g.sales7d) || 0, sales30d: Number(g.sales30d) || 0,
+        gain7d: Number(g.gain7d) || 0,
+      })),
+    } });
+  } catch (e) { console.error('cards/:id:', e.message); res.status(500).json({ error: 'lookup failed' }); }
+});
+
 // ── Card Hedge proxy: top movers ──────────────────────────────────────────────
 app.get('/api/market/movers', async (req, res) => {
   try {
@@ -482,52 +538,68 @@ app.get('/api/market/movers', async (req, res) => {
 app.get('/api/market/heatmap', async (req, res) => {
   try {
     res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
-    if (app._heatmapCache && app._heatmapCache.expires > Date.now())
-      return res.json(app._heatmapCache.data);
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ cards: [], count: 0 });
-    const sport = req.query.sport;
-    const cols = `id AS "cardId", player, sport, card_set AS "set", grader, grade, year,
-             variant, number AS num, catalog_price AS "marketPrice",
-             ch_price_lo AS lo, ch_price_hi AS hi, ch_confidence AS confidence,
-             ebay_thumb AS thumbnail, image_url, rookie, cardhedge_id,
-             sales_7d, sales_30d, gain_7d`;
-    const sportClause = (sport && sport !== 'All') ? ` AND sport = $1` : '';
-    const params = (sport && sport !== 'All') ? [sport] : [];
-    
-    // Top 50 gainers + top 50 losers for a balanced heatmap.
-    // Trusted-pool approach (same idea as the landing movers): start from the
-    // top ~600 cards by 7-day sales volume — real liquidity — then rank by
-    // gain within that pool. Raw gain-sorted queries return a wall of clamped
-    // +468–500% thin-sale junk (5 sales at a new price tier ≠ a 5x move).
-    // Sanity: price >= $5, 5+ validated sales, |gain| capped at 150%.
-    const vol = `SELECT ${cols} FROM cards
-      WHERE catalog_price >= 5 AND COALESCE(sales_7d,0) >= 5
-        AND gain_7d IS NOT NULL AND gain_7d != 0 AND ABS(gain_7d) <= 150${sportClause}
-      ORDER BY COALESCE(sales_7d,0) DESC LIMIT 600`;
-    const gainersQ = `WITH vol AS (${vol}) SELECT * FROM vol WHERE gain_7d > 0 ORDER BY gain_7d DESC LIMIT 150`;
-    const losersQ = `WITH vol AS (${vol}) SELECT * FROM vol WHERE gain_7d < 0 ORDER BY gain_7d ASC LIMIT 150`;
-    
-    const [{ rows: gainersRaw }, { rows: losersRaw }] = await Promise.all([
-      pool.query(gainersQ, params),
-      pool.query(losersQ, params),
-    ]);
-    // Dedupe: same card appears once per grade tier — keep one entry per
-    // underlying card so the heatmap isn't wallpapered with duplicates.
-    const dedupe = (list) => {
+    const sport = (req.query.sport && req.query.sport !== 'All') ? String(req.query.sport).slice(0, 40) : null;
+    const sort = ['gainers', 'losers', 'volume', 'value', 'movers'].includes(req.query.sort) ? req.query.sort : 'movers';
+    const limit = Math.min(300, Math.max(1, parseInt(req.query.limit) || 100));
+    const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+    // Trusted pool (cached 5min per sport): top cards by 7-day sales volume —
+    // real liquidity — then rank within it. Raw gain-sorted queries return a
+    // wall of clamped +468–500% thin-sale junk (5 sales at a new price tier ≠
+    // a 5x move). Sanity: price >= $5, 5+ validated sales, |gain| <= 150%.
+    const poolKey = sport || 'All';
+    if (!app._heatmapPools) app._heatmapPools = {};
+    let cachedPool = app._heatmapPools[poolKey];
+    if (!cachedPool || cachedPool.expires < Date.now()) {
+      const cols = `id AS "cardId", player, sport, card_set AS "set", grader, grade, year,
+               variant, number AS num, catalog_price AS "marketPrice",
+               ch_price_lo AS lo, ch_price_hi AS hi, ch_confidence AS confidence,
+               ebay_thumb AS thumbnail, image_url, rookie, cardhedge_id,
+               sales_7d, sales_30d, gain_7d`;
+      const sportClause = sport ? ` AND sport = $1` : '';
+      const params = sport ? [sport] : [];
+      const { rows: raw } = await pool.query(
+        `SELECT ${cols} FROM cards
+         WHERE catalog_price >= 5 AND COALESCE(sales_7d,0) >= 5
+           AND gain_7d IS NOT NULL AND gain_7d != 0 AND ABS(gain_7d) <= 150${sportClause}
+         ORDER BY COALESCE(sales_7d,0) DESC LIMIT 1500`, params);
+      // Dedupe: same card appears once per grade tier — keep one entry per
+      // underlying card so the heatmap isn't wallpapered with duplicates.
       const seen = new Set();
-      return list.filter(c => {
+      const deduped = raw.filter(c => {
         const key = c.cardhedge_id || `${c.player}|${c.set}|${c.variant}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
-      }).slice(0, 50);
-    };
-    const rows = [...dedupe(gainersRaw), ...dedupe(losersRaw)];
-    const result = { cards: rows, count: rows.length };
-    app._heatmapCache = { data: result, expires: Date.now() + 5 * 60 * 1000 };
-    res.json(result);
+      });
+      cachedPool = { rows: deduped, expires: Date.now() + 5 * 60 * 1000 };
+      app._heatmapPools[poolKey] = cachedPool;
+    }
+
+    // Real sports present in the trusted pool (for filter tabs)
+    if (!app._heatmapSports || app._heatmapSports.expires < Date.now()) {
+      const { rows: sp } = await pool.query(
+        `SELECT sport, COUNT(*) AS cnt FROM cards
+         WHERE catalog_price >= 5 AND COALESCE(sales_7d,0) >= 5
+           AND gain_7d IS NOT NULL AND gain_7d != 0 AND ABS(gain_7d) <= 150
+           AND sport IS NOT NULL AND sport <> '' AND sport !~ '^[0-9]+x[0-9]+$'
+         GROUP BY sport ORDER BY cnt DESC LIMIT 12`);
+      app._heatmapSports = { data: sp.map(x => x.sport), expires: Date.now() + 30 * 60 * 1000 };
+    }
+
+    const g7 = c => Number(c.gain_7d) || 0;
+    let ranked = [...cachedPool.rows];
+    if (sort === 'gainers') ranked = ranked.filter(c => g7(c) > 0).sort((a, b) => g7(b) - g7(a));
+    else if (sort === 'losers') ranked = ranked.filter(c => g7(c) < 0).sort((a, b) => g7(a) - g7(b));
+    else if (sort === 'volume') ranked.sort((a, b) => (Number(b.sales_7d) || 0) - (Number(a.sales_7d) || 0));
+    else if (sort === 'value') ranked.sort((a, b) => (Number(b.marketPrice) || 0) - (Number(a.marketPrice) || 0));
+    else ranked.sort((a, b) => Math.abs(g7(b)) - Math.abs(g7(a))); // movers: biggest absolute move
+
+    const cards = ranked.slice(offset, offset + limit);
+    res.json({ cards, count: cards.length, total: ranked.length, sort, sport: poolKey, sports: app._heatmapSports.data });
   } catch(e) { console.error('Heatmap error:', e.message); res.json({ cards: [], count: 0 }); }
 });
 

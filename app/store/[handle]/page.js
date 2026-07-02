@@ -25,7 +25,7 @@ function ListingCard({ listing }) {
       </div>
       <div style={{ padding: '10px 12px' }}>
         <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.player}</div>
-        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{listing.grader} {listing.grade} · {listing.year}</div>
+        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{listing.grader} {listing.grade} {' '}{listing.year}</div>
         <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: 'var(--gold)', marginTop: 6 }}>{fmt(listing.ask_cents / 100)}</div>
       </div>
     </div>
