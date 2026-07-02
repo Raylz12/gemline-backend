@@ -10,6 +10,7 @@ import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
 import { rateLimit } from '../src/middleware/rateLimit.js';
 import * as ordersSvc from '../orders.js';
 import { transition } from '../machine.js';
+import { emailUser, templates as emailTpl } from '../lib/email.js';
 import { stripeClient, createPaymentIntent, createConnectAccount, createOnboardingLink, getAccountStatus, verifyWebhook } from '../src/adapters/stripe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -877,6 +878,8 @@ async function settleEndedAuctions(r, { force = false } = {}) {
       await pool.query("UPDATE listings SET status = 'sold' WHERE id = $1", [a.id]);
       await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [a.id]).catch(() => {});
       await notify(pool, a.winner_id, 'auction_won', `You won: ${a.player} — ${priceStr}`, 'Payment is held in escrow. The seller will ship your card.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
+      const wonTpl = emailTpl.auctionWon({ player: a.player, price: priceStr });
+      await emailUser(pool, a.winner_id, wonTpl.subject, wonTpl.html);
       await notify(pool, a.seller_id, 'auction_sold', `Sold: ${a.player} — ${priceStr}`, 'Ship the card to complete the sale and release your payout.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
       settled++;
     } catch (e) {
@@ -1185,6 +1188,8 @@ app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
         `New offer: ${card?.player || 'your listing'} — $${amount.toLocaleString()}`,
         `Listed at $${(Number(l.price) / 100).toLocaleString()}. Review it in your Offers inbox.`,
         { listingId: l.id, cardId: l.card_id, offerId: offer.id });
+      const offTpl = emailTpl.offerReceived({ player: card?.player || 'your listing', amount: `$${amount.toLocaleString()}`, listPrice: `$${(Number(l.price) / 100).toLocaleString()}` });
+      await emailUser(pool, l.seller_id, offTpl.subject, offTpl.html);
     } catch {}
 
     res.json({ success: true, offerId: offer.id });
@@ -1275,6 +1280,8 @@ app.post('/api/offers/:id/accept', requireAuth, async (req, res) => {
     const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
     const amt = `$${(Number(offer.amount) / 100).toLocaleString()}`;
     await notify(pool, offer.buyer_id, 'offer_accepted', `Offer accepted: ${card?.player || 'card'} — ${amt}`, 'Payment is held in escrow. The seller will ship your card.', { listingId: offer.listing_id, offerId: offer.id, orderId: order.id });
+    const accTpl = emailTpl.offerAccepted({ player: card?.player || 'card', amount: amt });
+    await emailUser(pool, offer.buyer_id, accTpl.subject, accTpl.html);
 
     res.json({ success: true, order });
   } catch (e) {
@@ -1375,6 +1382,8 @@ app.post('/api/orders/:id/ship', requireAuth, async (req, res) => {
       `Shipped: ${card?.player || 'your card'}`,
       `${carrier} ${tracking} — confirm receipt in Portfolio → Orders when it arrives.`,
       { orderId: order.id, cardId: order.card_id, carrier, trackingNumber: tracking });
+    const shipTpl = emailTpl.orderShipped({ player: card?.player || 'Your card', carrier, tracking });
+    await emailUser(pool, order.buyer_id, shipTpl.subject, shipTpl.html);
 
     res.json({ success: true, order: { id: order.id, status: order.status }, shipment: { carrier: shipment.carrier, trackingNumber: shipment.tracking_number } });
   } catch (e) {
@@ -3077,14 +3086,27 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
       console.log('[webhook] PI authorized:', pi.id, '$' + (pi.amount / 100));
       break;
     }
-    case 'payment_intent.payment_failed': {
+    case 'payment_intent.payment_failed':
+    case 'payment_intent.canceled': {
       const pi = event.data.object;
-      console.log('[webhook] PI failed:', pi.id);
+      console.log('[webhook] PI failed/canceled:', pi.id);
+      // orders has no payment_intent_id column — the PI lives on escrow_holds.
+      // Cancel the order only if it hasn't shipped, and void the hold.
       if (pool) {
-        await pool.query(
-          `UPDATE orders SET status = 'failed' WHERE payment_intent_id = $1`,
-          [pi.id]
-        ).catch(() => {});
+        try {
+          const { rows: [esc] } = await pool.query(
+            `SELECT id, order_id, status FROM escrow_holds WHERE stripe_payment_intent_id = $1`, [pi.id]);
+          if (esc?.order_id && esc.status === 'held') {
+            const { rows: [o] } = await pool.query(`SELECT id, status FROM orders WHERE id = $1`, [esc.order_id]);
+            if (o && ['created', 'escrow_held', 'awaiting_shipment'].includes(o.status)) {
+              await pool.query(`UPDATE orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [o.id]);
+              await pool.query(`UPDATE escrow_holds SET status = 'void', updated_at = NOW() WHERE id = $1`, [esc.id]);
+              await pool.query(
+                `INSERT INTO events (entity_type, entity_id, from_state, to_state, payload) VALUES ('order', $1, $2, 'cancelled', $3)`,
+                [o.id, o.status, JSON.stringify({ reason: event.type, pi: pi.id })]).catch(() => {});
+            }
+          }
+        } catch (e) { console.error('[webhook] PI failure handling:', e.message); }
       }
       break;
     }
