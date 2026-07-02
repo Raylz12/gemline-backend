@@ -77,6 +77,7 @@ export default function LivePage() {
   const [bidModal, setBidModal] = useState(null);
   const [bidAmount, setBidAmount] = useState('');
   const [submittingBid, setSubmittingBid] = useState(false);
+  const [bidHistory, setBidHistory] = useState([]);
 
   // Want modal (place a want/bid)
   const [wantModal, setWantModal] = useState(false);
@@ -135,10 +136,11 @@ export default function LivePage() {
       .finally(() => setLoading(false));
   }, [loadAuctions, loadWants, loadTopBids]);
 
-  // Refresh every 30s
+  // Auctions refresh fast (10s — live floor); wants/top bids every 30s
   useEffect(() => {
-    const id = setInterval(() => { loadAuctions(); loadWants(); loadTopBids(); }, 30000);
-    return () => clearInterval(id);
+    const fast = setInterval(loadAuctions, 10000);
+    const slow = setInterval(() => { loadWants(); loadTopBids(); }, 30000);
+    return () => { clearInterval(fast); clearInterval(slow); };
   }, [loadAuctions, loadWants, loadTopBids]);
 
   // Reload wants when sort changes
@@ -173,6 +175,16 @@ export default function LivePage() {
     const minBid = Math.max(currentPrice + 1, currentPrice * 1.05);
     setBidModal(auction);
     setBidAmount(String(Math.ceil(minBid)));
+    setBidHistory([]);
+    fetch(`/api/auctions/${auction.id}/bids`)
+      .then(r => r.json())
+      .then(d => setBidHistory(d.bids || []))
+      .catch(() => {});
+  };
+
+  const minBidFor = (a) => {
+    const cur = a.current_price / 100;
+    return cur + Math.max(1, Math.round(cur * 0.05));
   };
 
   const placeBid = async () => {
@@ -492,11 +504,33 @@ export default function LivePage() {
                       {a.grader} {a.grade} · {a.card_set}
                       {a.seller_handle && <span style={{ color: 'var(--dim)' }}> · @{a.seller_handle}</span>}
                     </div>
+                    {/* FMV comparison + reserve status */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                      {a.catalog_price > 0 && (() => {
+                        const cur = a.current_price / 100;
+                        const fmv = a.catalog_price;
+                        const pct = Math.round(((fmv - cur) / fmv) * 100);
+                        if (pct >= 5) return <span style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: 'var(--up-soft)', color: 'var(--up)' }}>{pct}% below FMV {fmt(fmv)}</span>;
+                        if (pct <= -5) return <span style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: 'var(--down-soft)', color: 'var(--down)' }}>{Math.abs(pct)}% over FMV {fmt(fmv)}</span>;
+                        return <span style={{ fontSize: 10, fontFamily: 'var(--mono)', padding: '2px 7px', borderRadius: 5, background: 'var(--panel-2)', color: 'var(--muted)' }}>Near FMV {fmt(fmv)}</span>;
+                      })()}
+                      {a.has_reserve && (
+                        <span style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 600, padding: '2px 7px', borderRadius: 5,
+                          background: a.reserve_met ? 'var(--up-soft)' : 'var(--panel-2)',
+                          color: a.reserve_met ? 'var(--up)' : 'var(--muted)',
+                          border: a.reserve_met ? 'none' : '1px dashed var(--line-2)' }}>
+                          {a.reserve_met ? '✓ Reserve met' : 'Reserve not met'}
+                        </span>
+                      )}
+                    </div>
                     <div className="live-auction-foot">
                       <div className="live-auction-bid-info">
                         <div className="live-auction-bid-label">CURRENT BID</div>
                         <div className="live-auction-bid-amount">{fmt(a.current_price / 100)}</div>
-                        <div className="live-auction-bid-count">{a.bid_count || 0} bid{(a.bid_count || 0) !== 1 ? 's' : ''}</div>
+                        <div className="live-auction-bid-count">
+                          {a.bid_count || 0} bid{(a.bid_count || 0) !== 1 ? 's' : ''}
+                          {a.highest_bidder && a.bid_count > 0 && <span style={{ color: 'var(--dim)' }}> · @{a.highest_bidder}</span>}
+                        </div>
                       </div>
                       <button
                         className="live-auction-bid-btn"
@@ -704,8 +738,47 @@ export default function LivePage() {
                 </div>
               </div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
-              Min bid: ${((bidModal.current_price / 100) + Math.max(1, (bidModal.current_price / 100) * 0.05)).toFixed(2)}
+            {/* FMV + reserve context */}
+            {(bidModal.catalog_price > 0 || bidModal.has_reserve) && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                {bidModal.catalog_price > 0 && (
+                  <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>
+                    FMV <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{fmt(bidModal.catalog_price)}</span>
+                  </span>
+                )}
+                {bidModal.has_reserve && (
+                  <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: bidModal.reserve_met ? 'var(--up)' : 'var(--muted)' }}>
+                    {bidModal.reserve_met ? '✓ Reserve met' : 'Reserve not met yet'}
+                  </span>
+                )}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+              Min bid: ${minBidFor(bidModal).toFixed(2)}
+            </div>
+            {/* Quick-bid chips */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {(() => {
+                const cur = bidModal.current_price / 100;
+                const min = minBidFor(bidModal);
+                const opts = [
+                  { label: `Min $${Math.ceil(min)}`, val: Math.ceil(min) },
+                  { label: `+10% $${Math.ceil(cur * 1.1 < min ? min : cur * 1.1)}`, val: Math.ceil(Math.max(cur * 1.1, min)) },
+                  { label: `+25% $${Math.ceil(cur * 1.25 < min ? min : cur * 1.25)}`, val: Math.ceil(Math.max(cur * 1.25, min)) },
+                ];
+                return opts.map(o => (
+                  <button key={o.label} onClick={() => setBidAmount(String(o.val))}
+                    style={{
+                      flex: 1, padding: '7px 4px', borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: 'var(--mono)',
+                      background: Number(bidAmount) === o.val ? 'var(--gold-soft)' : 'var(--panel-2)',
+                      color: Number(bidAmount) === o.val ? 'var(--gold)' : 'var(--muted)',
+                      border: `1px solid ${Number(bidAmount) === o.val ? 'var(--gold)' : 'var(--line)'}`,
+                      cursor: 'pointer',
+                    }}>
+                    {o.label}
+                  </button>
+                ));
+              })()}
             </div>
             <div className="live-modal-input-wrap">
               <span className="live-modal-input-prefix">$</span>
@@ -713,6 +786,18 @@ export default function LivePage() {
                 placeholder="0.00" min="1" step="0.01"
                 className="live-modal-input" autoFocus />
             </div>
+            {/* Bid history */}
+            {bidHistory.length > 0 && (
+              <div style={{ margin: '12px 0 2px', maxHeight: 130, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                {bidHistory.map((b, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderTop: i > 0 ? '1px solid var(--line)' : 'none', fontSize: 11 }}>
+                    <span style={{ color: 'var(--muted)' }}>@{b.bidder_handle}</span>
+                    <span style={{ color: 'var(--dim)', fontSize: 10 }}>{new Date(b.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                    <span className="mono" style={{ fontWeight: 700, color: i === 0 ? 'var(--gold)' : 'var(--txt)' }}>{fmt(Number(b.amount) / 100)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="live-modal-actions">
               <button onClick={() => setBidModal(null)} className="live-modal-cancel">Cancel</button>
               <button onClick={placeBid} disabled={submittingBid} className="live-modal-submit">

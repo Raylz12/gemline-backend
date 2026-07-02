@@ -742,10 +742,12 @@ app.get('/api/auctions/live', async (req, res) => {
         l.created_at AS start_time, l.status,
         CASE WHEN l.ends_at > NOW() THEN 'live' ELSE 'ended' END AS computed_status,
         c.player, c.sport, c.card_set, c.grader, c.grade, c.variant,
-        c.ebay_thumb, c.image_url,
+        c.ebay_thumb, c.image_url, c.catalog_price,
         u.handle AS seller_handle,
         (SELECT COUNT(*) FROM bids WHERE listing_id = l.id) AS bid_count,
-        (SELECT MAX(amount) FROM bids WHERE listing_id = l.id) AS highest_bid
+        (SELECT MAX(amount) FROM bids WHERE listing_id = l.id) AS highest_bid,
+        (SELECT u2.handle FROM bids b2 JOIN users u2 ON u2.id = b2.bidder_id
+         WHERE b2.listing_id = l.id ORDER BY b2.amount DESC, b2.created_at ASC LIMIT 1) AS highest_bidder
       FROM listings l
       JOIN cards c ON c.id = l.card_id
       JOIN users u ON u.id = l.seller_id
@@ -753,12 +755,19 @@ app.get('/api/auctions/live', async (req, res) => {
       ORDER BY l.ends_at ASC
       LIMIT 50
     `);
-    const auctions = rows.map(a => ({
-      ...a,
-      status: a.computed_status,
-      current_price: Number(a.highest_bid || a.current_price || 0),
-      bid_count: Number(a.bid_count || 0),
-    }));
+    const auctions = rows.map(a => {
+      const currentPrice = Number(a.highest_bid || a.current_price || 0);
+      const reserve = a.reserve_price != null ? Number(a.reserve_price) : null;
+      return {
+        ...a,
+        status: a.computed_status,
+        current_price: currentPrice,
+        bid_count: Number(a.bid_count || 0),
+        catalog_price: a.catalog_price != null ? Number(a.catalog_price) : null,
+        has_reserve: reserve != null && reserve > 0,
+        reserve_met: reserve != null && reserve > 0 ? currentPrice >= reserve : null,
+      };
+    });
     res.json({ auctions });
   } catch (e) {
     console.error('auctions/live error:', e.message);
@@ -799,66 +808,102 @@ app.post('/api/auctions/create', requireAuth, async (req, res) => {
 });
 
 app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
+  const r = await getRepo().catch(() => null);
+  const pool = r?.pool;
+  if (!pool) return res.status(500).json({ error: 'No database' });
+
+  const listingId = req.params.id;
+  const bidAmount = Number(req.body?.amount);
+  if (!bidAmount || bidAmount < 0.01) return res.status(400).json({ error: 'Bid amount too low' });
+
+  // Ensure bids table exists (idempotent, outside the hot transaction)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bids (
+      id SERIAL PRIMARY KEY,
+      listing_id TEXT NOT NULL,
+      bidder_id TEXT NOT NULL,
+      amount NUMERIC NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+
+  const client = await pool.connect();
   try {
-    const r = await getRepo();
-    const pool = r.pool;
-    if (!pool) return res.status(500).json({ error: 'No database' });
+    await client.query('BEGIN');
 
-    const listingId = req.params.id;
-    const { amount } = req.body;
-    const bidAmount = Number(amount);
-    if (!bidAmount || bidAmount < 0.01) return res.status(400).json({ error: 'Bid amount too low' });
-
-    const { rows: [listing] } = await pool.query(
-      `SELECT * FROM listings WHERE id = $1 AND kind = 'auction' AND status = 'active'`,
+    // Row lock prevents two concurrent bids both passing the min-bid check
+    const { rows: [listing] } = await client.query(
+      `SELECT * FROM listings WHERE id = $1 AND kind = 'auction' AND status = 'active' FOR UPDATE`,
       [listingId]
     );
-    if (!listing) return res.status(404).json({ error: 'Auction not found or ended' });
-    if (listing.seller_id === req.userId) return res.status(400).json({ error: 'Cannot bid on your own auction' });
-    if (listing.ends_at && new Date(listing.ends_at) < new Date()) return res.status(410).json({ error: 'Auction has ended' });
+    if (!listing) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Auction not found or ended' }); }
+    if (listing.seller_id === req.userId) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Cannot bid on your own auction' }); }
+    if (listing.ends_at && new Date(listing.ends_at) < new Date()) { await client.query('ROLLBACK'); return res.status(410).json({ error: 'Auction has ended' }); }
 
     const currentPrice = Number(listing.price) / 100;
     const minBid = currentPrice + Math.max(1, Math.round(currentPrice * 0.05));
     if (bidAmount < minBid) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: `Minimum bid is $${minBid.toFixed(2)}` });
     }
 
     const bidAmountCents = Math.round(bidAmount * 100);
 
-    // Auto-extend if in last 2 minutes
-    const timeLeft = new Date(listing.ends_at).getTime() - Date.now();
-    if (timeLeft < 120_000) {
-      await pool.query(
-        `UPDATE listings SET ends_at = NOW() + INTERVAL '2 minutes' WHERE id = $1`,
-        [listingId]
-      ).catch(() => {});
-    }
-
-    // Update current high bid
-    await pool.query(
-      `UPDATE listings SET price = $1 WHERE id = $2`,
+    // Anti-snipe: extend to at least 2 minutes remaining (never shortens)
+    const { rows: [updated] } = await client.query(
+      `UPDATE listings
+       SET price = $1,
+           ends_at = GREATEST(ends_at, NOW() + INTERVAL '2 minutes')
+       WHERE id = $2
+       RETURNING ends_at`,
       [bidAmountCents, listingId]
     );
 
-    // Record bid
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS bids (
-        id SERIAL PRIMARY KEY,
-        listing_id TEXT NOT NULL,
-        bidder_id TEXT NOT NULL,
-        amount NUMERIC NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `).catch(() => {});
-    await pool.query(
+    await client.query(
       `INSERT INTO bids (listing_id, bidder_id, amount) VALUES ($1, $2, $3)`,
       [listingId, req.userId, bidAmountCents]
     );
 
-    res.json({ success: true, amount: bidAmount });
+    await client.query('COMMIT');
+
+    const reserve = listing.reserve_price != null ? Number(listing.reserve_price) : null;
+    res.json({
+      success: true,
+      amount: bidAmount,
+      ends_at: updated?.ends_at || listing.ends_at,
+      reserve_met: reserve != null && reserve > 0 ? bidAmountCents >= reserve : null,
+    });
   } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('auctions/bid error:', e.message);
     res.status(500).json({ error: 'Bid failed' });
+  } finally {
+    client.release();
+  }
+});
+
+// Bid history for an auction — public, anonymized handles
+app.get('/api/auctions/:id/bids', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ bids: [] });
+    const { rows } = await pool.query(`
+      SELECT b.amount, b.created_at, u.handle AS bidder_handle
+      FROM bids b LEFT JOIN users u ON u.id = b.bidder_id
+      WHERE b.listing_id = $1
+      ORDER BY b.created_at DESC
+      LIMIT 15
+    `, [req.params.id]);
+    res.json({
+      bids: rows.map(b => ({
+        amount: Number(b.amount),
+        created_at: b.created_at,
+        bidder_handle: b.bidder_handle || 'bidder',
+      })),
+    });
+  } catch (e) {
+    res.json({ bids: [] });
   }
 });
 

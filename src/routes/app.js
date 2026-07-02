@@ -166,6 +166,11 @@ export function appRouter(repo, stripe) {
     return portfolio.remove(repo, { userId: req.userId, portfolioItemId: req.params.id });
   }));
 
+  r.put('/portfolio/:id', wrap(async (req) => {
+    const { purchasePrice, certNumber, notes } = req.body;
+    return portfolio.updateItem(repo, { userId: req.userId, portfolioItemId: req.params.id, purchasePrice, certNumber, notes });
+  }));
+
   // ── Buy ───────────────────────────────────────────────────────────────────
   r.post('/buy', wrap(async (req) => {
     const l = await repo.listings.get(req.body.listingId);

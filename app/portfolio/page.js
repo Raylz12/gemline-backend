@@ -12,7 +12,7 @@ import TradesContent from '../components/TradesContent';
 import SellContent from '../components/SellContent';
 
 export default function PortfolioPage() {
-  const { token, authFetch } = useAuth();
+  const { token, authFetch, user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState(null);
@@ -22,8 +22,17 @@ export default function PortfolioPage() {
   // Sort & filter
   const [sortBy, setSortBy] = useState('value_desc');
   const [showCount, setShowCount] = useState(20);
+  const [holdingSearch, setHoldingSearch] = useState('');
   const [pullSearch, setPullSearch] = useState('');
   const [pullSort, setPullSort] = useState('value_desc');
+
+  // Cost-basis editing
+  const [costItem, setCostItem] = useState(null);
+  const [costValue, setCostValue] = useState('');
+  const [costSaving, setCostSaving] = useState(false);
+
+  // Recently added (bulk-add UX)
+  const [addedIds, setAddedIds] = useState(new Set());
 
   // Modal states
   const [subTab, setSubTab] = useState('cards');
@@ -90,8 +99,8 @@ export default function PortfolioPage() {
     return () => clearTimeout(t);
   }, [searchQuery, doSearch]);
 
-  // Add card to portfolio
-  const addCard = useCallback(async (cardId) => {
+  // Add card to portfolio — keeps the search modal OPEN so you can bulk-add
+  const addCard = useCallback(async (cardId, { closeAfter = false } = {}) => {
     if (!token) { toast('Please log in first', true); return; }
     setAdding(cardId);
     try {
@@ -102,7 +111,8 @@ export default function PortfolioPage() {
       });
       if (res.ok) {
         toast('Card added to portfolio ✓');
-        setShowSearch(false);
+        setAddedIds(prev => new Set([...prev, cardId]));
+        if (closeAfter) { setShowSearch(false); }
         setShowCamera(false);
         fetchPortfolio();
       } else {
@@ -115,6 +125,41 @@ export default function PortfolioPage() {
       setAdding(null);
     }
   }, [token, authFetch, fetchPortfolio]);
+
+  // Save cost basis
+  const saveCost = useCallback(async () => {
+    if (!costItem) return;
+    const p = costValue === '' ? null : parseFloat(costValue);
+    if (p !== null && (isNaN(p) || p < 0)) { toast('Enter a valid amount', true); return; }
+    setCostSaving(true);
+    try {
+      const res = await authFetch(`/api/portfolio/${costItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchasePrice: p }),
+      });
+      if (res.ok) {
+        toast(p === null ? 'Cost cleared' : 'Cost basis saved ✓');
+        setCostItem(null);
+        setCostValue('');
+        fetchPortfolio();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast(d.error || 'Failed to save', true);
+      }
+    } catch { toast('Failed to save', true); }
+    finally { setCostSaving(false); }
+  }, [costItem, costValue, authFetch, fetchPortfolio]);
+
+  // Share public collection link
+  const shareCollection = useCallback(() => {
+    const handle = user?.handle;
+    if (!handle) { toast('Log in to share your collection', true); return; }
+    const url = `${window.location.origin}/user/${handle}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(() => toast('Collection link copied ✓')).catch(() => toast(url));
+    } else { toast(url); }
+  }, [user]);
 
   // Remove card from portfolio
   const removeCard = useCallback(async (item) => {
@@ -269,12 +314,18 @@ export default function PortfolioPage() {
       {subTab === 'cards' && <>
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 10, marginTop: 20, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button className="buy" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => setShowSearch(true)}>
+        <button className="buy" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => { setAddedIds(new Set()); setShowSearch(true); }}>
           + Search &amp; Add Card
         </button>
         <button className="offer" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => setShowCamera(true)}>
           Scan Card
         </button>
+        {user?.handle && items.length > 0 && (
+          <button className="offer" style={{ padding: '10px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }} onClick={shareCollection}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+            Share Collection
+          </button>
+        )}
       </div>
 
       {/* Summary stats */}
@@ -299,9 +350,15 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Sort toolbar */}
+      {/* Sort + search toolbar */}
       {items.length > 0 && (
         <div className="toolbar" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: 280 }}>
+            <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" value={holdingSearch} onChange={e => { setHoldingSearch(e.target.value); setShowCount(20); }}
+              placeholder="Search your cards..."
+              style={{ width: '100%', padding: '8px 12px 8px 30px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 13, outline: 'none' }} />
+          </div>
           <select className="sortsel" value={sortBy} onChange={e => { setSortBy(e.target.value); setShowCount(20); }}>
             <option value="value_desc">Value: High → Low</option>
             <option value="value_asc">Value: Low → High</option>
@@ -312,7 +369,7 @@ export default function PortfolioPage() {
             <option value="newest">Newest First</option>
           </select>
           <span className="count" style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
-            Showing {Math.min(showCount, items.length)} of {items.length}
+            {(() => { const q = holdingSearch.trim().toLowerCase(); const n = q ? items.filter(i => `${i.player} ${i.set} ${i.grader} ${i.grade} ${i.sport}`.toLowerCase().includes(q)).length : items.length; return `Showing ${Math.min(showCount, n)} of ${n}`; })()}
           </span>
         </div>
       )}
@@ -328,7 +385,11 @@ export default function PortfolioPage() {
         </div>
       ) : (
         <div className="holdings">
-          {[...items].sort((a, b) => {
+          {[...items].filter(i => {
+            const q = holdingSearch.trim().toLowerCase();
+            if (!q) return true;
+            return `${i.player} ${i.set} ${i.grader} ${i.grade} ${i.sport}`.toLowerCase().includes(q);
+          }).sort((a, b) => {
             switch(sortBy) {
               case 'value_desc': return (b.marketValue || 0) - (a.marketValue || 0);
               case 'value_asc': return (a.marketValue || 0) - (b.marketValue || 0);
@@ -355,11 +416,17 @@ export default function PortfolioPage() {
                 {item.marketValue ? fmt(item.marketValue) : '—'}
                 <small>market</small>
               </div>
-              {item.pnlPct !== null && (
-                <div className={`num ${item.pnl >= 0 ? 'up' : 'down'}`}>
+              {item.pnlPct !== null ? (
+                <div className={`num ${item.pnl >= 0 ? 'up' : 'down'}`} onClick={() => { setCostItem(item); setCostValue(item.purchasePrice ? String(item.purchasePrice) : ''); }} style={{ cursor: 'pointer' }} title="Edit cost basis">
                   {item.pnl >= 0 ? '+' : ''}{item.pnlPct}%
                   <small>{item.purchasePrice ? fmt(item.purchasePrice) : ''} cost</small>
                 </div>
+              ) : (
+                <button
+                  onClick={() => { setCostItem(item); setCostValue(''); }}
+                  title="Set what you paid to track P&L"
+                  style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--dim)', padding: '3px 8px', borderRadius: 5, border: '1px dashed var(--line-2)', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                >+ cost</button>
               )}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                 {item.isListed ? (
@@ -471,7 +538,8 @@ export default function PortfolioPage() {
             <button className="modal-close" onClick={() => setShowSearch(false)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
             </button>
-            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Search Catalog</h2>
+            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Search Catalog</h2>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like — the search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <input
                 type="text"
@@ -498,7 +566,7 @@ export default function PortfolioPage() {
                 }}
                   onMouseEnter={e => { if (adding !== card.id) e.currentTarget.style.background = 'var(--panel)'; }}
                   onMouseLeave={e => { if (adding !== card.id) e.currentTarget.style.background = 'transparent'; }}
-                  onClick={() => addCard(card.id)}
+                  onClick={() => { if (!addedIds.has(card.id)) addCard(card.id); }}
                 >
                   <div style={{
                     width: 36, height: 48, borderRadius: 6, flexShrink: 0,
@@ -520,6 +588,8 @@ export default function PortfolioPage() {
                   )}
                   {adding === card.id ? (
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>Adding...</span>
+                  ) : addedIds.has(card.id) ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--up)', fontFamily: 'var(--mono)' }}>✓ Added</span>
                   ) : (
                     <span style={{ fontSize: 18, color: 'var(--up)' }}>+</span>
                   )}
@@ -608,6 +678,38 @@ export default function PortfolioPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Cost Basis Modal */}
+      {costItem && (
+        <div className="overlay on" onClick={e => e.target === e.currentTarget && setCostItem(null)}>
+          <div className="modal" style={{ maxWidth: 380 }}>
+            <button className="modal-close" onClick={() => setCostItem(null)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </button>
+            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>What did you pay?</h2>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+              {costItem.player} · {[costItem.grader, costItem.grade].filter(Boolean).join(' ')}
+              {costItem.marketValue > 0 && <span> · Market <span style={{ color: 'var(--gold)', fontFamily: 'var(--mono)' }}>{fmt(costItem.marketValue)}</span></span>}
+            </div>
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)', fontFamily: 'var(--mono)' }}>$</span>
+              <input type="number" value={costValue} onChange={e => setCostValue(e.target.value)}
+                placeholder="0.00" min="0" step="0.01" autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') saveCost(); }}
+                style={{ width: '100%', padding: '10px 14px 10px 28px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 16, fontFamily: 'var(--mono)', outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              {costItem.purchasePrice != null && (
+                <button onClick={() => { setCostValue(''); }} style={{ padding: '10px 14px', fontSize: 12, borderRadius: 8, background: 'none', border: '1px solid var(--line)', color: 'var(--dim)', cursor: 'pointer', marginRight: 'auto' }}>Clear</button>
+              )}
+              <button onClick={() => setCostItem(null)} style={{ padding: '10px 18px', fontSize: 13, borderRadius: 8, background: 'none', border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveCost} disabled={costSaving} className="btn-primary" style={{ padding: '10px 22px', fontSize: 13, opacity: costSaving ? 0.6 : 1 }}>
+                {costSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

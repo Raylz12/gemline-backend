@@ -160,6 +160,23 @@ export async function delistCard(repo, { userId, portfolioItemId }) {
   return { ok: true };
 }
 
+export async function updateItem(repo, { userId, portfolioItemId, purchasePrice, certNumber, notes }) {
+  const item = await repo.portfolios.get(portfolioItemId);
+  if (!item || item.user_id !== userId) {
+    const e = new Error('Portfolio item not found'); e.status = 404; throw e;
+  }
+  const patch = { ...item };
+  if (purchasePrice !== undefined) {
+    const p = purchasePrice === null || purchasePrice === '' ? null : Number(purchasePrice);
+    if (p !== null && (!isFinite(p) || p < 0)) { const e = new Error('Invalid purchase price'); e.status = 400; throw e; }
+    patch.purchase_price = p;
+  }
+  if (certNumber !== undefined) patch.cert_number = certNumber || null;
+  if (notes !== undefined) patch.notes = notes || null;
+  await repo.portfolios.update(patch);
+  return { ok: true, purchasePrice: patch.purchase_price, certNumber: patch.cert_number, notes: patch.notes };
+}
+
 export async function remove(repo, { userId, portfolioItemId }) {
   const item = await repo.portfolios.get(portfolioItemId);
   if (!item || item.user_id !== userId) {
