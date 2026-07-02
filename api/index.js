@@ -750,8 +750,8 @@ app.get('/api/market/arb', async (req, res) => {
              catalog_price, ch_price_lo, ch_price_hi, gain_7d, sales_7d, sales_30d,
              ebay_thumb, cardhedge_id, rookie`;
 
-    // Parallelize all 4 queries — cuts latency from ~400ms to ~100ms
-    const [uvRes, gainRes, lossRes, tradedRes] = await Promise.all([
+    // Parallelize all queries — cuts latency dramatically
+    const [uvRes, gainRes, lossRes, tradedRes, arbRes] = await Promise.all([
       // Undervalued: high volume + negative gain = buy-the-dip candidates
       pool.query(`SELECT ${arbCols} FROM cards
         WHERE catalog_price > 5 AND catalog_price <= 5000 AND sales_7d >= 3
@@ -769,10 +769,17 @@ app.get('/api/market/arb', async (req, res) => {
       pool.query(`SELECT ${arbCols} FROM cards
         WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
         ORDER BY sales_7d DESC, sales_30d DESC LIMIT 25`),
+      // Arb plays: real lo/hi spread, net-positive after 10% fee, ranked by net edge × liquidity
+      pool.query(`SELECT ${arbCols} FROM cards
+        WHERE ch_price_lo > 0 AND ch_price_hi > 0
+          AND ch_price_hi * 0.9 - ch_price_lo >= 5
+          AND catalog_price > 5 AND catalog_price <= 5000
+        ORDER BY (ch_price_hi * 0.9 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
+        LIMIT 120`),
     ]);
 
-    const [undervalued, gainers, losers, mostTraded] = [
-      uvRes.rows, gainRes.rows, lossRes.rows, tradedRes.rows,
+    const [undervalued, gainers, losers, mostTraded, arbPlays] = [
+      uvRes.rows, gainRes.rows, lossRes.rows, tradedRes.rows, arbRes.rows,
     ];
 
     const mapCard = (c) => ({
@@ -793,6 +800,7 @@ app.get('/api/market/arb', async (req, res) => {
       gainers: gainers.map(mapCard),
       losers: losers.map(mapCard),
       mostTraded: mostTraded.map(mapCard),
+      arbPlays: arbPlays.map(mapCard),
     };
 
     app._arbCache = { data, expires: Date.now() + 5 * 60 * 1000 };

@@ -75,9 +75,9 @@ function MoversTable({ cards, onSelect, loading }) {
 
 // ── Arbitrage Table ───────────────────────────────────────────────────────────
 const MARKETPLACE_FEE = 0.10; // 10% marketplace fee applied on the sell side
-// Buy at current market (acquire), exit at Card Hedge high (FMV) net of fee.
+// Buy at the low ask (best acquire price), exit at Card Hedge high (FMV) net of fee.
 function deriveEdge(r) {
-  const buy = Number(r.market) > 0 ? Number(r.market) : Number(r.lo) || 0;
+  const buy = Number(r.lo) > 0 ? Number(r.lo) : Number(r.market) || 0;
   const fmv = Number(r.hi) || 0;
   const netEdge = fmv > 0 && buy > 0 ? fmv * (1 - MARKETPLACE_FEE) - buy : 0;
   const netPct = buy > 0 ? (netEdge / buy) * 100 : 0;
@@ -97,12 +97,12 @@ function ArbTable({ onSelect }) {
     fetch('/api/market/arb')
       .then(r => r.json())
       .then(d => {
-        const all = [...(d.undervalued || []), ...(d.gainers || []), ...(d.losers || []), ...(d.mostTraded || [])];
+        const all = [...(d.arbPlays || []), ...(d.undervalued || []), ...(d.gainers || []), ...(d.losers || []), ...(d.mostTraded || [])];
         const seen = new Set();
         const merged = all.filter(c => {
           if (!c.id || seen.has(c.id)) return false;
           seen.add(c.id);
-          return (c.hi || 0) > 0 && ((c.market || 0) > 0 || (c.lo || 0) > 0);
+          return (c.hi || 0) > 0 && (c.lo || 0) > 0;
         }).map(c => {
           const e = deriveEdge(c);
           return { ...c, ...e, momentum: e.netEdge > 0 && (c.gain7d || 0) > 0 };
