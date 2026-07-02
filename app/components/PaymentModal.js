@@ -129,6 +129,10 @@ function AddressStep({ orderId, authFetch, onConfirmed }) {
     onConfirmed(snap);
   };
 
+  // PaymentModal is hardcoded dark — pin the theme vars locally so AddressBlock/
+  // AddressForm (which use var(--txt) etc.) don't inherit light-page values.
+  const darkVars = { '--txt': '#e8eaed', '--muted': '#9ca3af', '--dim': '#6b7280', '--ink': '#0f1420', '--line-2': '#263042', '--panel-2': '#141a28', '--down': '#ff5c6c', '--gold': '#16c784', '--mono': 'ui-monospace, monospace' };
+
   if (addresses === null) {
     return <div style={{ color: '#9ca3af', fontSize: 13 }}>Loading shipping details…</div>;
   }
@@ -137,7 +141,7 @@ function AddressStep({ orderId, authFetch, onConfirmed }) {
 
   if (!preferred || editing) {
     return (
-      <div>
+      <div style={darkVars}>
         <div style={{ color: '#9ca3af', fontSize: 12.5, marginBottom: 12 }}>
           Where should the seller ship this card?
         </div>
@@ -153,7 +157,7 @@ function AddressStep({ orderId, authFetch, onConfirmed }) {
   }
 
   return (
-    <div>
+    <div style={darkVars}>
       <div style={{ color: '#9ca3af', fontSize: 12.5, marginBottom: 10 }}>Ship to your saved address?</div>
       <div style={{ background: '#0f1420', border: '1px solid #263042', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
         <AddressBlock address={preferred} />
