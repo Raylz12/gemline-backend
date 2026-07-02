@@ -379,10 +379,6 @@ export default function LivePage() {
             </button>
           </div>
         </div>
-        <div className="live-hero-orbs" aria-hidden="true">
-          <div className="live-orb live-orb-1" />
-          <div className="live-orb live-orb-2" />
-        </div>
       </div>
 
       {/* ── Search bar ─────────────────────────────────────────────────── */}

@@ -1914,41 +1914,24 @@ header.header-hidden{transform:translateY(-100%)}
 /* ── Hero ─── */
 .live-hero {
   position: relative;
-  padding: 44px 0 40px;
-  margin-bottom: 32px;
+  padding: 34px 28px 30px;
+  margin-bottom: 28px;
   overflow: hidden;
+  /* Deep-navy intelligence panel — matches CardDetail (.cd-dark), no casino gradients/orbs */
+  background: #0d1119;
+  border: 1px solid #222839;
+  border-radius: 14px;
 }
 .live-hero-bg {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 0% 50%, rgba(232,179,57,.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 80% at 100% 20%, rgba(91,141,239,.05) 0%, transparent 55%),
-    linear-gradient(180deg, rgba(17,22,35,.6) 0%, transparent 100%);
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--r);
+  /* Flat navy, single hairline base — no radial glows, no competing accents */
+  background: linear-gradient(180deg, #11151f 0%, #0d1119 100%);
+  border-radius: 14px;
   pointer-events: none;
 }
-.live-hero-orbs { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.live-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: .18;
-  animation: orbFloat 8s ease-in-out infinite;
-}
-.live-orb-1 {
-  width: 340px; height: 340px;
-  background: radial-gradient(circle, var(--gold), transparent 70%);
-  top: -120px; left: -80px;
-  animation-delay: 0s;
-}
-.live-orb-2 {
-  width: 280px; height: 280px;
-  background: radial-gradient(circle, var(--blue), transparent 70%);
-  top: -60px; right: -60px;
-  animation-delay: -4s;
-}
+/* Orbs removed (de-casino) — keep no-op rules harmless if referenced */
+.live-hero-orbs, .live-orb, .live-orb-1, .live-orb-2 { display: none !important; }
 @keyframes orbFloat {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-20px) scale(1.05); }
@@ -1980,7 +1963,9 @@ header.header-hidden{transform:translateY(-100%)}
 }
 .live-eyebrow-text { color: var(--down); font-weight: 700; }
 .live-hero-divider { width: 1px; height: 14px; background: var(--line-2); }
-.live-hero-stats { color: var(--dim); }
+.live-hero-stats { color: #8b93a6; }
+.live-hero { color: #eef1f6; }
+.live-hero .live-hero-sub { color: #8b93a6; }
 .live-hero-title {
   font-family: var(--disp);
   font-weight: 800;
@@ -1988,6 +1973,7 @@ header.header-hidden{transform:translateY(-100%)}
   letter-spacing: -.03em;
   line-height: 1.02;
   margin-bottom: 12px;
+  color: #eef1f6;
 }
 .live-hero-gold { color: var(--gold); }
 .live-hero-sub { color: var(--muted); font-size: 15px; max-width: 480px; }
