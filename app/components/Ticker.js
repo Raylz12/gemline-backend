@@ -9,16 +9,15 @@ export default function Ticker() {
   const [paused, setPaused] = useState(false);
   const pauseTimer = useRef(null);
 
-  // Fetch a small, cheap slice — only cards with movement for the tape
+  // Tape rides the trusted heatmap pool (top-volume cards, sane |gain| ≤ 150%)
+  // — raw gain-sorted feed was a wall of clamped +500% thin-sale junk.
   useEffect(() => {
-    fetch('/api/market/feed?limit=60&sort=gain&page=1')
+    fetch('/api/market/heatmap')
       .then(r => r.json())
       .then(data => {
-        const feed = (data.feed || []).filter(c => {
+        const feed = (data.cards || []).map(c => ({ ...c, gain7d: Number(c.gain_7d ?? c.gain7d) || 0, sales7d: Number(c.sales_7d ?? c.sales7d) || 0, sales30d: Number(c.sales_30d ?? c.sales30d) || 0 })).filter(c => {
           const price = Number(c.marketPrice) || 0;
-          const gain = Number(c.gain7d) || 0;
-          // Sanity: skip thin-sale garbage moves (±10,000%) that make the tape look broken
-          return price >= 5 && price <= 2000 && Math.abs(gain) <= 500 && gain !== 0;
+          return price >= 5 && price <= 2000 && c.gain7d !== 0;
         }).slice(0, 50);
         setTickerCards(feed.map(c => ({
           id: c.cardId,

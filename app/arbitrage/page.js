@@ -488,10 +488,12 @@ export default function ArbitragePage() {
     })
     .sort((a, b) => b.netEdge - a.netEdge), [cards]);
 
-  const gainers = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0).sort((a, b) => b.gain7d - a.gain7d).slice(0, 12), [cards]);
-  const losers  = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0).sort((a, b) => a.gain7d - b.gain7d).slice(0, 12), [cards]);
+  // Believability guard: only volume-validated, sane moves rank as gainers/losers
+  const saneMove = (c) => Math.abs(c.gain7d || 0) <= 150 && (c.sales7d || 0) >= 5;
+  const gainers = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0 && saneMove(c)).sort((a, b) => b.gain7d - a.gain7d).slice(0, 12), [cards]);
+  const losers  = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0 && saneMove(c)).sort((a, b) => a.gain7d - b.gain7d).slice(0, 12), [cards]);
   const byVolume = useMemo(() => [...cards].filter(c => c.sales30d > 0).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [cards]);
-  const heatCards = useMemo(() => [...cards].filter(c => c.gain7d !== 0 && c.market > 0).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 24), [cards]);
+  const heatCards = useMemo(() => [...cards].filter(c => c.gain7d !== 0 && c.market > 0 && saneMove(c)).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 24), [cards]);
   const tickerCards = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);
 
   const topGainer = gainers[0];

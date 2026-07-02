@@ -822,14 +822,19 @@ app.get('/api/market/arb', async (req, res) => {
         WHERE catalog_price > 5 AND catalog_price <= 5000 AND sales_7d >= 3
           AND COALESCE(gain_7d, 0) < 0
         ORDER BY (COALESCE(sales_7d,0) * ABS(COALESCE(gain_7d,0))) DESC LIMIT 50`),
-      // 7-day gainers (min 3 sales to validate the move)
-      pool.query(`SELECT ${arbCols} FROM cards
-        WHERE gain_7d > 5 AND sales_7d >= 3 AND catalog_price > 5 AND catalog_price <= 5000
-        ORDER BY gain_7d DESC LIMIT 25`),
-      // 7-day losers (min 3 sales to validate the drop)
-      pool.query(`SELECT ${arbCols} FROM cards
-        WHERE gain_7d < -5 AND sales_7d >= 3 AND catalog_price > 5 AND catalog_price <= 5000
-        ORDER BY gain_7d ASC LIMIT 25`),
+      // 7-day gainers — trusted pool (top volume, sane |gain| ≤ 150%): raw
+      // gain-sorted rows were a wall of clamped +468–500% thin-sale junk
+      pool.query(`WITH vol AS (SELECT ${arbCols} FROM cards
+        WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
+          AND gain_7d IS NOT NULL AND ABS(gain_7d) <= 150
+        ORDER BY sales_7d DESC LIMIT 600)
+        SELECT * FROM vol WHERE gain_7d > 5 ORDER BY gain_7d DESC LIMIT 25`),
+      // 7-day losers — same trusted pool
+      pool.query(`WITH vol AS (SELECT ${arbCols} FROM cards
+        WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
+          AND gain_7d IS NOT NULL AND ABS(gain_7d) <= 150
+        ORDER BY sales_7d DESC LIMIT 600)
+        SELECT * FROM vol WHERE gain_7d < -5 ORDER BY gain_7d ASC LIMIT 25`),
       // Most traded (real volume)
       pool.query(`SELECT ${arbCols} FROM cards
         WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
