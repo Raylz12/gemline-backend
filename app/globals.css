@@ -327,6 +327,23 @@ footer .wordmark span{color:var(--gold)}
 .foot .links a:hover{color:var(--txt)}
 .foot .dis{font-family:var(--mono);font-size:10.5px;color:var(--dim);max-width:520px;line-height:1.6}
 
+/* ---------- 3-column site footer ---------- */
+.site-footer{border-top:1px solid var(--line);margin-top:56px;background:var(--panel)}
+.site-footer .ft-inner{max-width:1320px;margin:0 auto;padding:44px 22px 30px;display:grid;grid-template-columns:1.3fr 2fr;gap:40px}
+.site-footer .ft-brand-row{display:flex;align-items:center;gap:10px}
+.site-footer .ft-brand-row .wordmark{color:var(--txt);font-family:var(--disp);font-weight:900;letter-spacing:-.02em;font-size:18px}
+.site-footer .ft-brand-row .wordmark span{color:var(--gold)}
+.site-footer .ft-dis{font-family:var(--mono);font-size:10.5px;color:var(--dim);max-width:340px;line-height:1.7;margin-top:14px}
+.site-footer .ft-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.site-footer .ft-col-title{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--txt);font-weight:700;margin-bottom:6px}
+.site-footer .ft-col-blurb{font-size:12px;color:var(--dim);line-height:1.55;margin-bottom:12px;max-width:200px}
+.site-footer .ft-col-links{display:flex;flex-direction:column;gap:8px}
+.site-footer .ft-col-links a{font-size:13px;color:var(--muted);transition:color .12s}
+.site-footer .ft-col-links a:hover{color:var(--gold)}
+.site-footer .ft-base{max-width:1320px;margin:0 auto;padding:16px 22px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+@media(max-width:860px){.site-footer .ft-inner{grid-template-columns:1fr;gap:28px;padding:32px 20px 22px}.site-footer .ft-cols{gap:22px}}
+@media(max-width:520px){.site-footer .ft-cols{grid-template-columns:1fr}}
+
 @media(max-width:1080px){.arb-top{grid-template-columns:1fr}.live-grid,.pf-grid{grid-template-columns:1fr}.board-head div:nth-child(n+4):nth-child(-n+6),.board-row .px:nth-child(n+4):nth-child(-n+6){display:none}.board-head,.board-row{grid-template-columns:2fr 1fr 1fr 1fr 84px}}
 @media(max-width:860px){.statbar{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}.rail{position:relative;top:0}.modal-grid{grid-template-columns:1fr}.modal-left{border-right:none;border-bottom:1px solid var(--line)}.tagline{display:none}}
 @media(max-width:680px){.navlinks,.search kbd{display:none}.menu{display:grid}.search{order:3;flex-basis:100%;max-width:none}.nav{flex-wrap:wrap}}
