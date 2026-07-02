@@ -38,7 +38,7 @@ export default function ClientLayout({ children }) {
             </p>
           </div>
           <div className="links">
-            <a href="/market">Market</a><a href="/sell">Sell</a><a href="/stores">Stores</a><a href="/analytics">Analytics</a><a href="/packs">Mystery Pulls</a><a href="/community">Community</a><a href="/live">Live</a>
+            <a href="/market">Market</a><a href="/sell">Sell</a><a href="/stores">Stores</a><a href="/analytics">Analytics</a><a href="/community">Community</a><a href="/live">Live</a>
           </div>
         </div>
       </footer>}

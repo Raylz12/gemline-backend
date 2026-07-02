@@ -17,15 +17,12 @@ export default function PortfolioPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState(null);
-  const [pulls, setPulls] = useState([]);
-  const [pullsLoading, setPullsLoading] = useState(false);
+
 
   // Sort & filter
   const [sortBy, setSortBy] = useState('value_desc');
   const [showCount, setShowCount] = useState(20);
   const [holdingSearch, setHoldingSearch] = useState('');
-  const [pullSearch, setPullSearch] = useState('');
-  const [pullSort, setPullSort] = useState('value_desc');
 
   // Cost-basis editing
   const [costItem, setCostItem] = useState(null);
@@ -65,16 +62,7 @@ export default function PortfolioPage() {
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
-  // Fetch pack pulls
-  useEffect(() => {
-    if (!token) return;
-    setPullsLoading(true);
-    authFetch('/api/packs/collection')
-      .then(r => r.ok ? r.json() : { pulls: [] })
-      .then(d => setPulls(d.pulls || []))
-      .catch(() => {})
-      .finally(() => setPullsLoading(false));
-  }, [token, authFetch]);
+
 
   // Search catalog
   const doSearch = useCallback(async (q) => {
@@ -603,87 +591,6 @@ export default function PortfolioPage() {
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* My Pulls Section */}
-      {pulls.length > 0 && (
-        <div style={{ marginTop: 40 }}>
-          <div className="eyebrow" style={{ marginBottom: 4 }}>Digital Collection</div>
-          <h3 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Cards from Packs ({pulls.length})</h3>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 300 }}>
-              <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--dim)' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" value={pullSearch} onChange={e => { setPullSearch(e.target.value); setShowCount(20); }}
-                placeholder="Search pulls..."
-                style={{ width: '100%', padding: '8px 12px 8px 30px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 12, outline: 'none' }} />
-            </div>
-            <select className="sortsel" value={pullSort} onChange={e => setPullSort(e.target.value)} style={{ fontSize: 12 }}>
-              <option value="value_desc">Value High→Low</option>
-              <option value="value_asc">Value Low→High</option>
-              <option value="name_asc">Player A→Z</option>
-              <option value="newest">Newest First</option>
-            </select>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
-            {(() => {
-              const q = pullSearch.toLowerCase();
-              let filtered = q ? pulls.filter(p => (p.player||'').toLowerCase().includes(q) || (p.card_set||'').toLowerCase().includes(q) || (p.sport||'').toLowerCase().includes(q)) : pulls;
-              filtered = [...filtered].sort((a,b) => {
-                const pa = Number(a.market||a.catalog_price||0), pb = Number(b.market||b.catalog_price||0);
-                switch(pullSort) {
-                  case 'value_asc': return pa - pb;
-                  case 'name_asc': return (a.player||'').localeCompare(b.player||'');
-                  case 'newest': return (b.pulled_at||'').localeCompare(a.pulled_at||'');
-                  default: return pb - pa;
-                }
-              });
-              return filtered.slice(0, showCount).map((pull, i) => {
-              const price = Number(pull.market || pull.catalog_price || 0);
-              const tierClass = price >= 5000 ? 'tier-mythic' : price >= 1500 ? 'tier-legendary' : price >= 500 ? 'tier-epic' : price >= 200 ? 'tier-rare' : price >= 50 ? 'tier-uncommon' : 'tier-common';
-              return (
-                <div key={pull.id || i}
-                  className={tierClass}
-                  onClick={() => setSelectedCard({
-                    id: pull.card_id, player: pull.player, sport: pull.sport,
-                    set: pull.card_set, grader: pull.grader, grade: pull.grade,
-                    variant: pull.variant, market: price,
-                    thumbnail: pull.thumbnail || pull.image_url,
-                    cardhedge_id: pull.cardhedge_id,
-                    ini: (pull.player || '').split(' ').map(w => w[0]).join('').slice(0,4).toUpperCase(),
-                    theme: ['#2a2a2a', '#555'],
-                  })}
-                  style={{
-                    cursor: 'pointer', background: 'var(--panel)', borderRadius: 12,
-                    border: '1px solid var(--line)',
-                    overflow: 'hidden', position: 'relative',
-                  }}>
-                  <div style={{
-                    height: 120,
-                    background: (pull.thumbnail || pull.image_url)
-                      ? `url(${pull.thumbnail || pull.image_url}) center/contain no-repeat var(--panel-2)`
-                      : 'linear-gradient(135deg, #2a2a2a, #555)',
-                  }} />
-                  <div style={{ padding: '8px 10px' }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pull.player}</div>
-                    <div style={{ color: 'var(--muted)', fontSize: 10 }}>{pull.grader} {pull.grade}</div>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: price >= 200 ? 'var(--gold)' : 'var(--txt)', marginTop: 2 }}>
-                      {price > 0 ? '$' + price.toLocaleString() : '—'}
-                    </div>
-                  </div>
-                </div>
-              );
-            });
-            })()}
-          </div>
-          {pulls.length > showCount && (
-            <div style={{ textAlign: 'center', margin: '12px 0' }}>
-              <button onClick={() => setShowCount(c => c + 20)}
-                style={{ padding: '8px 24px', borderRadius: 8, fontSize: 12, background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer' }}>
-                Show more ({pulls.length - showCount} remaining)
-              </button>
-            </div>
-          )}
         </div>
       )}
 

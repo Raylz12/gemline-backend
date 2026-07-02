@@ -162,7 +162,7 @@ const FEATURES = [
   { icon: '02', title: 'Arbitrage engine', desc: 'Price spreads, gainers, losers, volume movers — real-time data.', target: '/analytics' },
   { icon: '03', title: 'Live heatmap', desc: 'See the entire market at a glance. Green rising, red falling.', target: '/analytics' },
   { icon: '04', title: 'Peer trading', desc: 'Trade cards directly. Fair-value meter shows who\'s winning.', target: '/community' },
-  { icon: '05', title: 'Mystery Pulls', desc: 'Real cards from verified stores. Pull one blind — it ships to your door.', target: '/packs' },
+  { icon: '05', title: 'Live auctions', desc: 'Real-time bidding with anti-snipe protection and escrow-backed settlement.', target: '/live' },
   { icon: '06', title: 'AI Scout', desc: 'Ask anything — the AI searches the entire catalog for matches.', target: '/market' },
 ];
 

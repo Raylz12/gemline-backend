@@ -121,17 +121,15 @@ function ProfileCard({ user, token, authFetch }) {
 }
 
 const ALL_ACHIEVEMENTS = [
-  { key: 'first_pull', name: 'First Pull', desc: 'Open your first pack', icon: '', tier: 'bronze' },
   { key: 'collector_10', name: 'Collector', desc: 'Add 10 cards to your portfolio', icon: '', tier: 'bronze' },
   { key: 'first_trade', name: 'First Trade', desc: 'Complete your first trade', icon: '', tier: 'bronze' },
   { key: 'first_sale', name: 'Seller', desc: 'Sell your first card', icon: '', tier: 'bronze' },
-  { key: 'pack_addict', name: 'Pack Addict', desc: 'Open 25 packs', icon: '🎰', tier: 'silver' },
+  { key: 'first_bid', name: 'In the Game', desc: 'Place your first auction bid', icon: '⚡', tier: 'bronze' },
   { key: 'collector_50', name: 'Hoarder', desc: 'Own 50+ cards', icon: '🗄️', tier: 'silver' },
-  { key: 'big_hit', name: 'Big Hit', desc: 'Pull a card worth $200+', icon: '', tier: 'gold' },
+  { key: 'auction_winner', name: 'Gavel Down', desc: 'Win your first auction', icon: '🏆', tier: 'silver' },
+  { key: 'big_sale', name: 'Big Sale', desc: 'Sell a card for $200+', icon: '', tier: 'gold' },
   { key: 'collector_100', name: 'Vault Keeper', desc: 'Own 100+ cards in your vault', icon: '🏦', tier: 'gold' },
-  { key: 'pack_whale', name: 'Whale', desc: 'Spend 5,000+ credits on packs', icon: '🐋', tier: 'gold' },
   { key: 'early_adopter', name: 'Early Adopter', desc: 'Join during the first month', icon: '', tier: 'gold' },
-  { key: 'legendary_pull', name: 'Legendary', desc: 'Pull a mythic-tier card', icon: '', tier: 'diamond' },
   { key: 'og', name: 'OG', desc: 'One of the original GEMLINE members', icon: '', tier: 'diamond' },
 ];
 
