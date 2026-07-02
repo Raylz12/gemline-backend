@@ -291,6 +291,10 @@ export default function ProfilePage() {
           <div className="p-stat-val gold">{fmtP(stats.totalValue)}</div>
           <div className="p-stat-label">Collection Value</div>
         </div>
+        <div className="p-stat-card" title="Value of scan/cert-verified cards only">
+          <div className="p-stat-val gold">{fmtP(stats.verifiedValue)}</div>
+          <div className="p-stat-label">✓ Verified Value</div>
+        </div>
       </div>
 
       {/* ═══ PUBLIC SHOWCASE — 3 Digital + 3 Physical ═══ */}

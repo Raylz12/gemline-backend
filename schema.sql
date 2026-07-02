@@ -287,6 +287,24 @@ CREATE INDEX IF NOT EXISTS idx_trade_proposals_from ON trade_proposals (from_use
 CREATE INDEX IF NOT EXISTS idx_trade_proposals_to ON trade_proposals (to_user_id);
 CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios (user_id);
 CREATE INDEX IF NOT EXISTS idx_portfolios_card_id ON portfolios (card_id);
+
+-- Portfolio verification (anti-scam): tracking is frictionless, SELLING is
+-- gated on verification. 'unverified' (default) | 'pending' (cert awaiting
+-- review) | 'verified' (scan matched / cert confirmed / grandfathered).
+ALTER TABLE portfolios ADD COLUMN IF NOT EXISTS verification_status text NOT NULL DEFAULT 'unverified';
+ALTER TABLE portfolios ADD COLUMN IF NOT EXISTS verification_method text; -- 'scan' | 'cert' | 'grandfathered'
+ALTER TABLE portfolios ADD COLUMN IF NOT EXISTS verified_at timestamptz;
+
+-- Cross-instance rate limiting (fixed windows, atomic upsert). Rows expire
+-- opportunistically (deleted when older than 2 days).
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket       text NOT NULL,           -- 'login' | 'register_ip' | 'bids' | 'money' | 'writes' | 'ai_hr' | 'ai_day'
+  identifier   text NOT NULL,           -- ip, ip|email, or u:<userId>
+  window_start timestamptz NOT NULL,
+  count        integer NOT NULL DEFAULT 1,
+  last_hit     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (bucket, identifier, window_start)
+);
 CREATE INDEX IF NOT EXISTS idx_user_badges_user_id ON user_badges (user_id);
 CREATE INDEX IF NOT EXISTS idx_trades_proposer ON trades (proposer_id);
 CREATE INDEX IF NOT EXISTS idx_trades_counterparty ON trades (counterparty_id);

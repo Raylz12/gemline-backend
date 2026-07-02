@@ -278,8 +278,23 @@ CREATE TABLE IF NOT EXISTS portfolios (
   notes          text,
   is_listed      boolean NOT NULL DEFAULT false,
   listing_id     uuid,
+  -- Verification (anti-scam): selling requires 'verified' (scan/cert/grandfathered)
+  verification_status text NOT NULL DEFAULT 'unverified',  -- unverified | pending | verified
+  verification_method text,                                -- scan | cert | grandfathered
+  verified_at    timestamptz,
   acquired_at    timestamptz NOT NULL DEFAULT now(),
   created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- ─────────────────────── rate limits ───────────────────────
+-- Cross-instance fixed-window counters (atomic upsert); see src/middleware/rateLimit.js
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket       text NOT NULL,
+  identifier   text NOT NULL,
+  window_start timestamptz NOT NULL,
+  count        integer NOT NULL DEFAULT 1,
+  last_hit     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (bucket, identifier, window_start)
 );
 CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolios (user_id);
 CREATE INDEX IF NOT EXISTS idx_portfolio_card ON portfolios (card_id);

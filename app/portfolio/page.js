@@ -46,6 +46,10 @@ export default function PortfolioPage() {
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState(null); // cardId being added
   const [scanInfo, setScanInfo] = useState(null); // AI-extracted card info from camera scan (confirmation mode)
+  const [verifyItem, setVerifyItem] = useState(null); // item in the verify chooser (scan vs cert)
+  const [verifyScanItem, setVerifyScanItem] = useState(null); // item being verified by camera scan
+  const [certValue, setCertValue] = useState('');
+  const [certSaving, setCertSaving] = useState(false);
 
   // Fetch portfolio
   const fetchPortfolio = useCallback(async () => {
@@ -190,6 +194,29 @@ export default function PortfolioPage() {
       toast('Failed to remove card', true);
     }
   }, [token, authFetch, fetchPortfolio]);
+
+  // Save cert number for verification (pending review until PSA lookup exists)
+  const submitCert = useCallback(async () => {
+    if (!verifyItem || !certValue.trim()) return;
+    setCertSaving(true);
+    try {
+      const res = await authFetch(`/api/portfolio/${verifyItem.id}/verify-cert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ certNumber: certValue.trim() }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast(d.verified ? 'Card verified ✓' : (d.message || 'Cert saved — pending review'));
+        setVerifyItem(null);
+        setCertValue('');
+        fetchPortfolio();
+      } else {
+        toast(d.error || 'Failed to save cert', true);
+      }
+    } catch { toast('Failed to save cert', true); }
+    finally { setCertSaving(false); }
+  }, [verifyItem, certValue, authFetch, fetchPortfolio]);
 
   // List card for sale
   const listCardForSale = useCallback(async () => {
@@ -446,11 +473,25 @@ export default function PortfolioPage() {
                 >+ cost</button>
               )}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                {item.verificationStatus === 'verified' ? (
+                  <span title={`Verified via ${item.verificationMethod || 'scan'}`} style={{ fontSize: 10, color: 'var(--gold)', fontFamily: 'var(--mono)', padding: '2px 6px', background: 'var(--gold-soft)', borderRadius: 4, whiteSpace: 'nowrap' }}>✓ VERIFIED</span>
+                ) : item.verificationStatus === 'pending' ? (
+                  <span title="Cert submitted — pending review. Scan the card for instant verification." style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', padding: '2px 6px', border: '1px dashed var(--line-2)', borderRadius: 4, whiteSpace: 'nowrap' }}>CERT PENDING</span>
+                ) : (
+                  <button
+                    onClick={() => { setVerifyItem(item); setCertValue(item.certNumber || ''); }}
+                    title="Verify ownership — required before selling"
+                    style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '3px 8px', borderRadius: 5, border: '1px dashed var(--line-2)', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >VERIFY</button>
+                )}
                 {item.isListed ? (
                   <span style={{ fontSize: 10, color: 'var(--gold)', fontFamily: 'var(--mono)', padding: '2px 6px', background: 'var(--gold-soft)', borderRadius: 4 }}>LISTED</span>
                 ) : (
                   <button
-                    onClick={() => { setListingItem(item); setListingPrice(item.marketValue ? (item.marketValue).toFixed(2) : ''); }}
+                    onClick={() => {
+                      if (item.verificationStatus !== 'verified') { setVerifyItem(item); setCertValue(item.certNumber || ''); return; }
+                      setListingItem(item); setListingPrice(item.marketValue ? (item.marketValue).toFixed(2) : '');
+                    }}
                     title="List for sale"
                     style={{
                       padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6,
@@ -694,6 +735,57 @@ export default function PortfolioPage() {
       {/* Camera Scanner Modal */}
       {showCamera && (
         <CameraScanner onResult={handleScanResult} onClose={() => setShowCamera(false)} />
+      )}
+
+      {/* Verify chooser — selling requires verification; scan or cert */}
+      {verifyItem && (
+        <div className="overlay on" onClick={e => e.target === e.currentTarget && setVerifyItem(null)}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <button className="modal-close" onClick={() => setVerifyItem(null)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </button>
+            <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Verify this card</h2>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+              {verifyItem.player} · {[verifyItem.grader, verifyItem.grade].filter(Boolean).join(' ')}
+            </div>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 18 }}>
+              Buyers trust verified cards. Verify once and this card can be listed for sale —
+              scan the physical card with your camera, or enter its grading cert number.
+            </p>
+            <button
+              onClick={() => { setVerifyScanItem(verifyItem); setVerifyItem(null); }}
+              className="btn-primary"
+              style={{ width: '100%', padding: '12px 0', fontSize: 14, marginBottom: 14 }}
+            >📷 Scan the card — instant verification</button>
+            <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--dim)', margin: '4px 0 6px' }}>OR — GRADED SLAB CERT NUMBER</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={certValue}
+                onChange={e => setCertValue(e.target.value)}
+                placeholder="e.g. 162798272"
+                style={{ flex: 1, padding: '10px 14px', background: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--txt)', fontSize: 14, fontFamily: 'var(--mono)', outline: 'none' }}
+              />
+              <button
+                onClick={submitCert}
+                disabled={certSaving || !certValue.trim()}
+                style={{ padding: '10px 18px', fontSize: 13, borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer', opacity: certSaving || !certValue.trim() ? 0.5 : 1 }}
+              >{certSaving ? 'Saving…' : 'Submit'}</button>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8 }}>
+              Cert numbers are held for review — scanning verifies instantly.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Verification scan — AI must match the claimed card */}
+      {verifyScanItem && (
+        <CameraScanner
+          verifyItemId={verifyScanItem.id}
+          onResult={() => { setVerifyScanItem(null); toast('Card verified ✓ — it can now be listed'); fetchPortfolio(); }}
+          onClose={() => setVerifyScanItem(null)}
+        />
       )}
 
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}

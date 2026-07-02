@@ -906,6 +906,7 @@ export default function CardDetail({ card: c, onClose }) {
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                           @{l.seller_handle || 'Seller'}
+                          {l.verified && <span title="Seller verified this card by scan or cert" style={{ color: 'var(--gold)', fontFamily: 'var(--mono)', fontSize: 10, marginLeft: 6 }}>✓ VERIFIED</span>}
                           {hasPrice && <span> · Market {fmtDisplay(c.market)}</span>}
                         </div>
                       </div>

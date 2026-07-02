@@ -7,7 +7,7 @@ import { makeRepo, stripeStub, toCents, fromCents } from '../src/store/repo.js';
 import { settlementRouter } from '../src/routes/settlement.js';
 import { appRouter } from '../src/routes/app.js';
 import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
-import { rateLimit } from '../src/middleware/rateLimit.js';
+import { rateLimit, pgRateLimit, getIp } from '../src/middleware/rateLimit.js';
 import * as ordersSvc from '../orders.js';
 import { transition } from '../machine.js';
 import { emailUser, templates as emailTpl } from '../lib/email.js';
@@ -21,6 +21,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Minimal Permissions-Policy: camera stays enabled for the card scanner (self).
+  // CSP deliberately skipped for now — Stripe Elements + Next hydration need a
+  // carefully tested policy; a broken CSP kills payments. Revisit as report-only.
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), interest-cohort=()');
   next();
 });
 
@@ -33,8 +37,19 @@ app.use(cors({
 // Camera scans post a full-resolution photo — needs a bigger body limit (registered
 // BEFORE the global 128kb parser; express.json skips already-parsed bodies).
 app.use('/api/cards/analyze', express.json({ limit: '6mb' }));
-app.use(express.json({ limit: '128kb' }));   // prevent large payload attacks
+app.use(express.json({ limit: '100kb' }));   // prevent large payload attacks
 app.use(express.static(join(__dirname, '..', 'public')));
+
+// ── Global per-IP soft cap (in-memory layer; cacheable public GETs exempt) ───
+// Cacheable GETs are absorbed by the Vercel CDN (s-maxage below) so they skip
+// the app-level cap; everything else gets 120 req/min per IP.
+const CACHEABLE_GET = /^\/api\/(market\/(feed|heatmap|arb)|sitemap\/|auctions\/live|stats\/live|prices|cards\/[^/]+\/history|listings\/for-card|badges|profile\/|users\/[^/]+\/portfolio|posts\/feed|stores)/;
+const globalIpCap = rateLimit({ max: 120, windowMs: 60_000, message: 'Too many requests — slow down' });
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+  if (req.method === 'GET' && CACHEABLE_GET.test(req.path)) return next();
+  return globalIpCap(req, res, next);
+});
 
 // ── Lazy-init repo (shared across warm invocations) ───────────────────────────
 let repo;
@@ -42,6 +57,18 @@ async function getRepo() {
   if (!repo) repo = await makeRepo();
   return repo;
 }
+const getPool = async () => (await getRepo()).pool;
+
+// ── DB-backed rate limiters (hold across serverless instances) ───────────────
+const byUser = (req) => `u:${req.userId}`;
+const limitBids = pgRateLimit(getPool, { limits: [{ bucket: 'bids', max: 10, windowSec: 60 }], keyFn: byUser, message: 'Too many bids — slow down for a minute' });
+const limitMoney = pgRateLimit(getPool, { limits: [{ bucket: 'money', max: 6, windowSec: 60 }], keyFn: byUser, message: 'Too many purchase attempts — slow down for a minute' });
+const limitWrites = pgRateLimit(getPool, { limits: [{ bucket: 'writes', max: 10, windowSec: 60 }], keyFn: byUser, message: 'Posting too fast — slow down for a minute' });
+// AI vision costs real money per call: 5/hour + 20/day per user.
+const limitAI = pgRateLimit(getPool, { limits: [
+  { bucket: 'ai_hr', max: 5, windowSec: 3600 },
+  { bucket: 'ai_day', max: 20, windowSec: 86400 },
+], keyFn: byUser, message: 'Scan limit reached — try again later' });
 
 // ── Root redirect ─────────────────────────────────────────────────────────────
 app.get('/gemline.html', (_req, res) => res.redirect(301, '/'));
@@ -90,6 +117,7 @@ app.get('/api/sitemap/:c', async (req, res) => {
 // ── Live platform stats (cached 5 min) ──────────────────────────────────────
 app.get('/api/stats/live', async (req, res) => {
   try {
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (app._liveStatsCache?.expires > Date.now())
       return res.json(app._liveStatsCache.data);
     const r = await getRepo();
@@ -452,6 +480,7 @@ app.get('/api/market/movers', async (req, res) => {
 // Heatmap: top 100 cards with real price movement, cached 5min
 app.get('/api/market/heatmap', async (req, res) => {
   try {
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (app._heatmapCache && app._heatmapCache.expires > Date.now())
       return res.json(app._heatmapCache.data);
     const r = await getRepo();
@@ -504,6 +533,7 @@ app.get('/api/market/heatmap', async (req, res) => {
 // ── PUBLIC routes (no auth) ───────────────────────────────────────────────────
 app.get('/api/market/feed', async (req, res) => {
   try {
+    res.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ feed: [] });
@@ -737,19 +767,17 @@ app.post('/api/catalog/search', async (req, res) => {
 });
 
 // ── Public routes (no auth) ──────────────────────────────────────────────────
-// AI vision card identification from a camera photo. Returns extracted card fields;
-// the client then runs a catalog family search + user confirmation (never auto-adds).
-app.post('/api/cards/analyze', rateLimit({ max: 20, windowMs: 60_000 }), async (req, res) => {
-  try {
-    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-    if (!ANTHROPIC_KEY) return res.status(503).json({ error: 'Card scanning is not configured' });
-    const image = String(req.body?.image || '');
-    const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(image);
-    if (!m) return res.status(400).json({ error: 'Send { image: <dataURL> }' });
-    const [, mediaType, b64] = m;
-    if (b64.length > 5_500_000) return res.status(413).json({ error: 'Image too large — try again' });
+// AI vision card identification — shared core for /api/cards/analyze and
+// portfolio scan-verification. Throws { status, message } on failure.
+async function analyzeCardImage(image) {
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_KEY) throw Object.assign(new Error('Card scanning is not configured'), { status: 503 });
+  const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
+  if (!m) throw Object.assign(new Error('Send { image: <dataURL> }'), { status: 400 });
+  const [, mediaType, b64] = m;
+  if (b64.length > 5_500_000) throw Object.assign(new Error('Image too large — try again'), { status: 413 });
 
-    const prompt = `Identify the trading card in this photo. Respond with ONLY a JSON object, no other text:
+  const prompt = `Identify the trading card in this photo. Respond with ONLY a JSON object, no other text:
 {"player":"full player/character name","year":"e.g. 2023","set":"product/set name e.g. Panini Prizm","cardNumber":"card number without # if visible","sport":"Football|Basketball|Baseball|Hockey|Soccer|Pokemon|Other","grader":"PSA|BGS|SGC|CGC or null if raw/ungraded","grade":"numeric grade e.g. 10 or null","certNumber":"grading cert number if visible on the slab label, else null","variant":"parallel/insert name if any, else null","condition":"brief condition note for raw cards, else null","confidence":0.0-1.0}
 Use null for anything you cannot read. If the photo does not show a trading card, respond with {"error":"no_card"}.`;
 
@@ -768,42 +796,50 @@ Use null for anything you cannot read. If the photo does not show a trading card
         }],
       }),
     });
-    if (!aiRes.ok) {
-      const errTxt = await aiRes.text().catch(() => '');
-      console.error('analyze AI:', aiRes.status, errTxt.slice(0, 300));
-      return res.status(502).json({ error: 'Card analysis failed — please try again' });
-    }
-    const data = await aiRes.json();
-    const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-    const jsonMatch = txt.match(/\{[\s\S]*\}/);
-    let info = null;
-    try { info = jsonMatch ? JSON.parse(jsonMatch[0]) : null; } catch {}
-    if (!info || info.error || !info.player) {
-      return res.status(422).json({ error: 'Could not identify a card — try a clearer, well-lit photo' });
-    }
-    const clean = (v) => (v === null || v === undefined || v === 'null' || v === '' ? null : String(v).trim());
-    res.json({
-      player: clean(info.player),
-      year: clean(info.year),
-      set: clean(info.set),
-      cardNumber: clean(info.cardNumber),
-      sport: clean(info.sport) || 'Other',
-      grader: clean(info.grader),
-      grade: clean(info.grade),
-      certNumber: clean(info.certNumber),
-      variant: clean(info.variant),
-      condition: clean(info.condition),
-      confidence: Math.max(0, Math.min(1, Number(info.confidence) || 0)),
-    });
+  if (!aiRes.ok) {
+    const errTxt = await aiRes.text().catch(() => '');
+    console.error('analyze AI:', aiRes.status, errTxt.slice(0, 300));
+    throw Object.assign(new Error('Card analysis failed — please try again'), { status: 502 });
+  }
+  const data = await aiRes.json();
+  const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  const jsonMatch = txt.match(/\{[\s\S]*\}/);
+  let info = null;
+  try { info = jsonMatch ? JSON.parse(jsonMatch[0]) : null; } catch {}
+  if (!info || info.error || !info.player) {
+    throw Object.assign(new Error('Could not identify a card — try a clearer, well-lit photo'), { status: 422 });
+  }
+  const clean = (v) => (v === null || v === undefined || v === 'null' || v === '' ? null : String(v).trim());
+  return {
+    player: clean(info.player),
+    year: clean(info.year),
+    set: clean(info.set),
+    cardNumber: clean(info.cardNumber),
+    sport: clean(info.sport) || 'Other',
+    grader: clean(info.grader),
+    grade: clean(info.grade),
+    certNumber: clean(info.certNumber),
+    variant: clean(info.variant),
+    condition: clean(info.condition),
+    confidence: Math.max(0, Math.min(1, Number(info.confidence) || 0)),
+  };
+}
+
+// Camera scan → card fields. Auth required (each call costs real money) +
+// DB-backed 5/hour + 20/day per user on top of the per-instance 20/min cap.
+app.post('/api/cards/analyze', requireAuth, rateLimit({ max: 20, windowMs: 60_000 }), limitAI, async (req, res) => {
+  try {
+    res.json(await analyzeCardImage(req.body?.image));
   } catch (e) {
-    console.error('analyze:', e.message);
-    res.status(500).json({ error: 'Card analysis failed — please try again' });
+    if (!e.status || e.status >= 500) console.error('analyze:', e.message);
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
 // GET /api/market/arb — dedicated arbitrage data (cached 5min)
 app.get('/api/market/arb', async (req, res) => {
   try {
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     const forceRefresh = req.query.refresh === '1';
     if (!forceRefresh && app._arbCache && app._arbCache.expires > Date.now())
       return res.json(app._arbCache.data);
@@ -1054,6 +1090,8 @@ app.post('/api/auctions/settle', async (req, res) => {
 // ── Auctions — GET live auctions (public), POST create (auth), POST bid (auth) ───
 app.get('/api/auctions/live', async (req, res) => {
   try {
+    // Short CDN cache absorbs poll traffic (10s clients) without staling bids
+    res.set('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=20');
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ auctions: [] });
@@ -1113,6 +1151,12 @@ app.post('/api/auctions/create', requireAuth, async (req, res) => {
     const { rows: [card] } = await pool.query('SELECT id, player FROM cards WHERE id = $1', [cardId]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
+    // Anti-scam: auctioning requires a verified portfolio item for this card
+    const verifyErr = await requireVerifiedItem(pool, req.userId, cardId);
+    if (verifyErr) return res.status(403).json({ error: verifyErr, code: 'VERIFY_REQUIRED' });
+    const frictionErr = await newAccountListingGuard(pool, req.userId, Math.round(Number(startingBid) * 100));
+    if (frictionErr) return res.status(403).json({ error: frictionErr, code: 'NEW_ACCOUNT_LIMIT' });
+
     const durationMs = Math.max(1, Math.min(168, Number(durationHours) || 24)) * 3600 * 1000;
     const endsAt = new Date(Date.now() + durationMs).toISOString();
     const priceInCents = Math.round(Number(startingBid) * 100);
@@ -1131,7 +1175,7 @@ app.post('/api/auctions/create', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
+app.post('/api/auctions/:id/bid', requireAuth, limitBids, async (req, res) => {
   const r = await getRepo().catch(() => null);
   const pool = r?.pool;
   if (!pool) return res.status(500).json({ error: 'No database' });
@@ -1258,7 +1302,10 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.json({ listings: [] });
     const { rows } = await pool.query(`
-      SELECT l.id, l.price, l.kind, l.created_at, u.handle AS seller_handle
+      SELECT l.id, l.price, l.kind, l.created_at, u.handle AS seller_handle,
+             EXISTS (SELECT 1 FROM portfolios p
+                     WHERE p.user_id = l.seller_id AND p.card_id = l.card_id
+                       AND p.verification_status = 'verified') AS verified
       FROM listings l
       LEFT JOIN users u ON u.id = l.seller_id
       WHERE l.card_id = $1 AND l.status = 'active' AND l.kind = 'buy_now'
@@ -1272,12 +1319,145 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
         kind: l.kind,
         seller_handle: l.seller_handle || 'seller',
         open_to_offers: true,
+        verified: !!l.verified,
         created_at: l.created_at,
       })),
     });
   } catch (e) {
     console.error('listings/for-card error:', e.message);
     res.json({ listings: [] });
+  }
+});
+
+// ── Portfolio verification (anti-scam) ───────────────────────────────────
+// Tracking a card is frictionless; SELLING requires verification. Two paths:
+//  • scan  — photograph the physical card; AI vision must match the claimed card
+//  • cert  — graded slabs: store the cert number. Verified instantly only when a
+//            PSA_API_TOKEN is configured (publicapi lookup); otherwise 'pending'.
+const VERIFY_REQUIRED_MSG = 'Verify this card before listing — scan it or add its cert';
+
+const vTokens = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+function tokenOverlap(a, b) {
+  const ta = vTokens(a); const tb = new Set(vTokens(b));
+  if (!ta.length || !tb.size) return 0;
+  return ta.filter(t => tb.has(t)).length;
+}
+// Scan result vs claimed card: player must match; year/set must not contradict.
+function scanMatchesCard(scan, card) {
+  const playerHits = tokenOverlap(card.player, scan.player);
+  const playerTok = vTokens(card.player).length;
+  if (playerHits < Math.min(2, playerTok)) return { ok: false, reason: `Scan shows “${scan.player || 'unknown'}” — doesn’t match ${card.player}` };
+  const cardYear = String(card.year || card.card_set || '').match(/(19|20)\d{2}/)?.[0];
+  const scanYear = String(scan.year || '').match(/(19|20)\d{2}/)?.[0];
+  if (cardYear && scanYear && Math.abs(Number(cardYear) - Number(scanYear)) > 1) {
+    return { ok: false, reason: `Scan shows a ${scanYear} card — this item is ${cardYear}` };
+  }
+  if (card.card_set && scan.set && tokenOverlap(card.card_set, scan.set) === 0 && tokenOverlap(scan.set, card.card_set) === 0) {
+    return { ok: false, reason: `Scan shows “${scan.set}” — doesn’t match ${card.card_set}` };
+  }
+  return { ok: true };
+}
+
+// New-account marketplace friction: accounts <24h old are capped at 3 active
+// listings and $500 total list value.
+const NEW_ACCOUNT_HOURS = 24;
+const NEW_ACCOUNT_MAX_LISTINGS = 3;
+const NEW_ACCOUNT_MAX_VALUE_CENTS = 500 * 100;
+async function newAccountListingGuard(pool, userId, addCents) {
+  const { rows: [u] } = await pool.query('SELECT created_at FROM users WHERE id = $1', [userId]);
+  if (!u || Date.now() - new Date(u.created_at).getTime() > NEW_ACCOUNT_HOURS * 3600_000) return null;
+  const { rows: [agg] } = await pool.query(
+    `SELECT COUNT(*)::int AS n, COALESCE(SUM(price), 0)::bigint AS total
+     FROM listings WHERE seller_id = $1 AND status = 'active'`, [userId]);
+  if (agg.n >= NEW_ACCOUNT_MAX_LISTINGS)
+    return `New accounts can have up to ${NEW_ACCOUNT_MAX_LISTINGS} active listings in their first 24 hours`;
+  if (Number(agg.total) + (addCents || 0) > NEW_ACCOUNT_MAX_VALUE_CENTS)
+    return 'New accounts can list up to $500 total in their first 24 hours';
+  return null;
+}
+
+// Requires a VERIFIED portfolio item owned by userId for cardId. Returns an
+// error string or null.
+async function requireVerifiedItem(pool, userId, cardId) {
+  const { rows } = await pool.query(
+    `SELECT verification_status FROM portfolios WHERE user_id = $1 AND card_id = $2`,
+    [userId, cardId]);
+  if (!rows.length) return 'Add this card to your portfolio and verify it before listing — scan it or add its cert';
+  if (!rows.some(r => r.verification_status === 'verified')) return VERIFY_REQUIRED_MSG;
+  return null;
+}
+
+// POST /api/portfolio/:id/verify-scan — photograph the physical card; the AI
+// vision read must match the claimed card. Shares the AI budget buckets.
+app.post('/api/portfolio/:id/verify-scan', requireAuth, rateLimit({ max: 20, windowMs: 60_000 }), limitAI, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const { rows: [item] } = await pool.query(`
+      SELECT p.id, p.user_id, p.verification_status,
+             c.player, c.card_set, c.year, c.grader, c.grade, c.variant
+      FROM portfolios p JOIN cards c ON c.id = p.card_id
+      WHERE p.id = $1`, [req.params.id]);
+    if (!item || item.user_id !== req.userId) return res.status(404).json({ error: 'Portfolio item not found' });
+
+    const scan = await analyzeCardImage(req.body?.image);
+    const match = scanMatchesCard(scan, item);
+    if (!match.ok) return res.status(422).json({ verified: false, error: match.reason, scan });
+
+    await pool.query(
+      `UPDATE portfolios SET verification_status = 'verified', verification_method = 'scan', verified_at = NOW() WHERE id = $1`,
+      [item.id]);
+    res.json({ verified: true, method: 'scan', scan });
+  } catch (e) {
+    if (!e.status || e.status >= 500) console.error('verify-scan:', e.message);
+    res.status(e.status || 500).json({ verified: false, error: e.message });
+  }
+});
+
+// POST /api/portfolio/:id/verify-cert — graded slabs: store the cert number.
+// Instant verification only via PSA publicapi lookup (PSA_API_TOKEN); until
+// that token exists this stores the cert and marks the item 'pending' review.
+app.post('/api/portfolio/:id/verify-cert', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const cert = String(req.body?.certNumber || '').trim();
+    if (!/^[A-Za-z0-9-]{5,20}$/.test(cert)) return res.status(400).json({ error: 'Enter a valid cert number (5-20 letters/digits)' });
+    const { rows: [item] } = await pool.query(`
+      SELECT p.id, p.user_id, c.player, c.grader
+      FROM portfolios p JOIN cards c ON c.id = p.card_id
+      WHERE p.id = $1`, [req.params.id]);
+    if (!item || item.user_id !== req.userId) return res.status(404).json({ error: 'Portfolio item not found' });
+
+    // PSA public API lookup — fully gated on PSA_API_TOKEN (no-op until set)
+    if (process.env.PSA_API_TOKEN && String(item.grader || '').toUpperCase() === 'PSA') {
+      try {
+        const psaRes = await fetch(`https://api.psacard.com/publicapi/cert/GetByCertNumber/${encodeURIComponent(cert)}`, {
+          headers: { Authorization: `bearer ${process.env.PSA_API_TOKEN}` },
+        });
+        if (psaRes.ok) {
+          const psa = await psaRes.json();
+          const subject = psa?.PSACert?.Subject || psa?.PSACert?.subject || '';
+          if (subject && tokenOverlap(item.player, subject) >= 1) {
+            await pool.query(
+              `UPDATE portfolios SET cert_number = $1, verification_status = 'verified', verification_method = 'cert', verified_at = NOW() WHERE id = $2`,
+              [cert, item.id]);
+            return res.json({ verified: true, method: 'cert', psaSubject: subject });
+          }
+          if (subject) return res.status(422).json({ verified: false, error: `PSA cert ${cert} is “${subject}” — doesn’t match ${item.player}` });
+        }
+      } catch (e) { console.error('PSA lookup failed (falling back to pending):', e.message); }
+    }
+
+    await pool.query(
+      `UPDATE portfolios SET cert_number = $1, verification_status = 'pending', verification_method = 'cert' WHERE id = $2 AND verification_status <> 'verified'`,
+      [cert, item.id]);
+    res.json({ verified: false, status: 'pending', message: 'Cert saved — pending review. Scan the card for instant verification.' });
+  } catch (e) {
+    console.error('verify-cert:', e.message);
+    res.status(500).json({ error: 'Failed to save cert' });
   }
 });
 
@@ -1375,6 +1555,11 @@ app.post('/api/listings', requireAuth, async (req, res) => {
     const { rows: [card] } = await pool.query('SELECT id FROM cards WHERE id = $1', [cardId]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
     const cents = toCents(dollars);
+    // Anti-scam: selling requires a verified portfolio item for this card
+    const verifyErr = await requireVerifiedItem(pool, req.userId, cardId);
+    if (verifyErr) return res.status(403).json({ error: verifyErr, code: 'VERIFY_REQUIRED' });
+    const frictionErr = await newAccountListingGuard(pool, req.userId, cents);
+    if (frictionErr) return res.status(403).json({ error: frictionErr, code: 'NEW_ACCOUNT_LIMIT' });
     const photoUrls = Array.isArray(photos) ? photos.slice(0, 8) : [];
     const { rows: [listing] } = await pool.query(`
       INSERT INTO listings (card_id, seller_id, kind, price, currency, status,
@@ -1542,7 +1727,7 @@ app.post('/api/checkout/sweep', async (req, res) => {
 // client_secret — the buyer confirms in the Payment Element before anything
 // ships. The listing is locked ('sold') while payment is pending and unlocks
 // automatically if the buyer abandons.
-app.post('/api/listings/:id/buy', requireAuth, async (req, res) => {
+app.post('/api/listings/:id/buy', requireAuth, limitMoney, async (req, res) => {
   try {
     const r = await getRepo();
     const pool = r.pool;
@@ -1681,7 +1866,7 @@ app.post('/api/orders/:id/payment/cancel', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
+app.post('/api/listings/:id/offer', requireAuth, limitMoney, async (req, res) => {
   try {
     const r = await getRepo();
     const pool = r.pool;
@@ -1769,7 +1954,7 @@ app.get('/api/offers', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/offers/:id/accept', requireAuth, async (req, res) => {
+app.post('/api/offers/:id/accept', requireAuth, limitMoney, async (req, res) => {
   const r = await getRepo().catch(() => null);
   const pool = r?.pool;
   if (!pool) return res.status(500).json({ error: 'No database' });
@@ -2370,7 +2555,7 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
     );
     // Get their portfolio cards
     const { rows: cards } = await pool.query(`
-      SELECT p.id as portfolio_id, p.card_id, c.player, c.sport, c.card_set, c.grader, c.grade,
+      SELECT p.id as portfolio_id, p.card_id, p.verification_status, c.player, c.sport, c.card_set, c.grader, c.grade,
              c.catalog_price, c.ebay_thumb, c.image_url, c.variant, c.year
       FROM portfolios p
       JOIN cards c ON c.id = p.card_id
@@ -2378,6 +2563,7 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
       ORDER BY c.catalog_price DESC NULLS LAST
     `, [user.id]);
     const totalValue = cards.reduce((s, c) => s + (Number(c.catalog_price) || 0), 0);
+    const verifiedValue = cards.reduce((s, c) => s + (c.verification_status === 'verified' ? (Number(c.catalog_price) || 0) : 0), 0);
     res.json({
       user: { ...user, ...fc, avatar_url: null },
       cards: cards.map(c => ({
@@ -2385,14 +2571,16 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
         set: c.card_set, grader: c.grader || 'RAW', grade: c.grade || '',
         price: Number(c.catalog_price) || 0, thumbnail: c.ebay_thumb || c.image_url || null,
         variant: c.variant || '', year: c.year || '',
+        verified: c.verification_status === 'verified',
       })),
       totalValue,
+      verifiedValue,
     });
   } catch (e) { console.error('user portfolio:', e.message); res.json({ user: null, cards: [] }); }
 });
 
 // Propose a trade (auth required)
-app.post('/api/trades/propose', requireAuth, async (req, res) => {
+app.post('/api/trades/propose', requireAuth, limitWrites, async (req, res) => {
   try {
     const r = await getRepo();
     const pool = r.pool;
@@ -2583,7 +2771,7 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
 });
 
 // POST /api/posts — create a post (auth required)
-app.post('/api/posts', requireAuth, async (req, res) => {
+app.post('/api/posts', requireAuth, limitWrites, async (req, res) => {
   try {
     const r = await getRepo();
     const pool = r.pool;
@@ -2757,7 +2945,8 @@ app.get('/api/stores', async (req, res) => {
     const params = [];
     if (sport) { params.push(sport); where += ` AND u.store_description ILIKE $${params.length}`; }
     if (location) { params.push(`%${location}%`); where += ` AND u.store_location ILIKE $${params.length}`; }
-    params.push(parseInt(limit), parseInt(offset));
+    // Clamp user-supplied pagination (raw values reached SQL LIMIT before)
+    params.push(Math.min(100, Math.max(1, parseInt(limit) || 20)), Math.max(0, parseInt(offset) || 0));
     const { rows } = await pool.query(`
       SELECT u.id, u.handle, u.store_name, u.store_description, u.store_location,
              u.store_website, u.avatar_url, u.rating,
@@ -2972,7 +3161,7 @@ app.post('/api/mystery/pools', requireAuth, async (req, res) => {
 });
 
 // ── Protected routes ──────────────────────────────────────────────────────────
-app.use('/api', rateLimit({ max: 120, windowMs: 60_000 }));
+// (global per-IP cap now lives at the top of the middleware chain, covering all /api)
 // NOTE: Do NOT add blanket requireAuth here — public routes (feed, heatmap, movers) must stay open
 
 // Use real Stripe if key is set, otherwise stub
@@ -3397,7 +3586,9 @@ app.get('/api/profile/:handle', async (req, res) => {
       pool.query('SELECT COUNT(*) as physical FROM portfolios WHERE user_id = $1', [user.id]),
       pool.query(`SELECT COUNT(*) as trades FROM trades WHERE (proposer_id = $1 OR counterparty_id = $1) AND status = 'completed'`, [user.id]),
       pool.query(`SELECT COALESCE(SUM(c.catalog_price), 0) as total FROM pack_pulls pp JOIN cards c ON pp.card_id = c.id WHERE pp.user_id = $1`, [user.id]),
-      pool.query(`SELECT COALESCE(SUM(c.catalog_price), 0) as total FROM portfolios p JOIN cards c ON p.card_id = c.id WHERE p.user_id = $1`, [user.id]),
+      pool.query(`SELECT COALESCE(SUM(c.catalog_price), 0) as total,
+                         COALESCE(SUM(c.catalog_price) FILTER (WHERE p.verification_status = 'verified'), 0) as verified_total
+                  FROM portfolios p JOIN cards c ON p.card_id = c.id WHERE p.user_id = $1`, [user.id]),
     ]);
     const pullCount = pullCountRes.status === 'fulfilled' ? pullCountRes.value.rows[0] : { digital: 0, packs: 0 };
     const portfolioCount = portfolioCountRes.status === 'fulfilled' ? portfolioCountRes.value.rows[0] : { physical: 0 };
@@ -3430,6 +3621,8 @@ app.get('/api/profile/:handle', async (req, res) => {
         // CARDS count — so the profile stats row can't contradict itself
         // (legacy digital pulls no longer inflate a 0-card collection).
         totalValue: parseFloat(physicalVal.total) || 0,
+        // Verified Value = only scan/cert-verified holdings (anti-scam signal)
+        verifiedValue: parseFloat(physicalVal.verified_total) || 0,
       },
     });
   } catch (e) {

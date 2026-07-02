@@ -9,6 +9,7 @@ export async function list(repo, userId) {
     const { rows } = await repo.pool.query(`
       SELECT p.id, p.card_id, p.purchase_price, p.cert_number, p.notes,
              p.is_listed, p.listing_id, p.acquired_at,
+             p.verification_status, p.verification_method, p.verified_at,
              c.player, c.sport, c.card_set, c.variant, c.number,
              c.grader, c.grade, c.image_url, c.ebay_thumb,
              c.catalog_price,
@@ -43,6 +44,9 @@ export async function list(repo, userId) {
         pnlPct,
         isListed: item.is_listed || false,
         listingId: item.listing_id || null,
+        verificationStatus: item.verification_status || 'unverified',
+        verificationMethod: item.verification_method || null,
+        verifiedAt: item.verified_at || null,
         acquiredAt: item.acquired_at,
       };
     });
@@ -131,6 +135,23 @@ export async function listCard(repo, { userId, portfolioItemId, price }) {
   }
   if (!price || price <= 0) {
     const e = new Error('Price must be greater than 0'); e.status = 400; throw e;
+  }
+  // Anti-scam: selling requires verification (scan the card or add its cert).
+  // Tracking stays frictionless — only the sell path is gated.
+  if (repo.pool && (item.verification_status || 'unverified') !== 'verified') {
+    const e = new Error('Verify this card before listing — scan it or add its cert');
+    e.status = 403; e.code = 'VERIFY_REQUIRED'; throw e;
+  }
+  // New-account friction: <24h old → max 3 active listings, $500 total value
+  if (repo.pool) {
+    const { rows: [u] } = await repo.pool.query('SELECT created_at FROM users WHERE id = $1', [userId]);
+    if (u && Date.now() - new Date(u.created_at).getTime() < 24 * 3600_000) {
+      const { rows: [agg] } = await repo.pool.query(
+        `SELECT COUNT(*)::int AS n, COALESCE(SUM(price), 0)::bigint AS total
+         FROM listings WHERE seller_id = $1 AND status = 'active'`, [userId]);
+      if (agg.n >= 3) { const e = new Error('New accounts can have up to 3 active listings in their first 24 hours'); e.status = 403; e.code = 'NEW_ACCOUNT_LIMIT'; throw e; }
+      if (Number(agg.total) + toCents(price) > 50000) { const e = new Error('New accounts can list up to $500 total in their first 24 hours'); e.status = 403; e.code = 'NEW_ACCOUNT_LIMIT'; throw e; }
+    }
   }
 
   const listing = await repo.listings.insert({

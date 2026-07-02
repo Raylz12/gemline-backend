@@ -112,7 +112,8 @@ export default async function CardPage({ params }) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {/* \u003c-escape prevents </script> breakout via user-influenced card fields */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
         <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 14, fontFamily: 'var(--mono)' }}>
           <Link href="/" style={{ color: 'var(--dim)' }}>GEMLINE</Link>

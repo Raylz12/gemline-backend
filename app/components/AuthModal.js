@@ -1,6 +1,45 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+
+// Cloudflare Turnstile bot protection — fully gated on the env var. When the
+// key is unset the widget never renders and no token is sent (server no-ops too).
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
+
+function useTurnstile(containerRef, enabled) {
+  const [tsToken, setTsToken] = useState('');
+  useEffect(() => {
+    if (!enabled || !TURNSTILE_SITE_KEY || !containerRef.current) return;
+    let widgetId = null;
+    let cancelled = false;
+    const render = () => {
+      if (cancelled || !window.turnstile || !containerRef.current) return;
+      widgetId = window.turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: 'auto',
+        callback: (token) => setTsToken(token),
+        'expired-callback': () => setTsToken(''),
+      });
+    };
+    if (window.turnstile) render();
+    else {
+      let s = document.querySelector('script[data-turnstile]');
+      if (!s) {
+        s = document.createElement('script');
+        s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+        s.async = true;
+        s.setAttribute('data-turnstile', '1');
+        document.head.appendChild(s);
+      }
+      s.addEventListener('load', render);
+    }
+    return () => {
+      cancelled = true;
+      try { if (widgetId !== null && window.turnstile) window.turnstile.remove(widgetId); } catch {}
+    };
+  }, [enabled, containerRef]);
+  return tsToken;
+}
 
 export default function AuthModal({ onClose }) {
   const { login, signup } = useAuth();
@@ -10,16 +49,20 @@ export default function AuthModal({ onClose }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const tsRef = useRef(null);
+  const tsToken = useTurnstile(tsRef, !!TURNSTILE_SITE_KEY);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (TURNSTILE_SITE_KEY && !tsToken) { setError('Please complete the verification challenge'); return; }
     setLoading(true);
     try {
+      const extra = TURNSTILE_SITE_KEY ? { turnstileToken: tsToken } : {};
       if (tab === 'login') {
-        await login(email, password);
+        await login(email, password, extra);
       } else {
-        await signup(handle, email, password);
+        await signup(handle, email, password, extra);
       }
       onClose();
     } catch (err) {
@@ -96,9 +139,15 @@ export default function AuthModal({ onClose }) {
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                minLength={tab === 'signup' ? 8 : undefined}
                 required
               />
+              {tab === 'signup' && (
+                <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>At least 8 characters</div>
+              )}
             </div>
+
+            {TURNSTILE_SITE_KEY && <div ref={tsRef} style={{ marginBottom: 12 }} />}
 
             {error && (
               <div style={{ color: 'var(--down)', fontSize: 13, marginBottom: 10 }}>{error}</div>

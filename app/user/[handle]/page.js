@@ -15,6 +15,7 @@ export default function UserPortfolioPage() {
   const [profileUser, setProfileUser] = useState(null);
   const [cards, setCards] = useState([]);
   const [totalValue, setTotalValue] = useState(0);
+  const [verifiedValue, setVerifiedValue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
@@ -37,6 +38,7 @@ export default function UserPortfolioPage() {
           setProfileUser(data.user);
           setCards(data.cards || []);
           setTotalValue(data.totalValue || 0);
+          setVerifiedValue(data.verifiedValue || 0);
         }
       })
       .catch(() => {})
@@ -103,6 +105,12 @@ export default function UserPortfolioPage() {
               <>
                 <span className="community-dot">·</span>
                 <span className="gold"><strong>{fmt(totalValue)}</strong> value</span>
+              </>
+            )}
+            {verifiedValue > 0 && (
+              <>
+                <span className="community-dot">·</span>
+                <span className="gold" title="Value of scan/cert-verified cards only"><strong>{fmt(verifiedValue)}</strong> ✓ verified</span>
               </>
             )}
           </div>

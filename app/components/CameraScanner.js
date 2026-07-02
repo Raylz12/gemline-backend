@@ -1,11 +1,14 @@
 'use client';
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-export default function CameraScanner({ onResult, onClose }) {
+// Default mode: identify a card (→ /api/cards/analyze, requires login).
+// verifyItemId set: verification scan (→ /api/portfolio/:id/verify-scan) — the
+// AI read must match the claimed card; success marks the item VERIFIED.
+export default function CameraScanner({ onResult, onClose, verifyItemId = null }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
-  const [state, setState] = useState('camera'); // camera | analyzing | result | error
+  const [state, setState] = useState('camera'); // camera | analyzing | result | verified | error
   const [cardInfo, setCardInfo] = useState(null);
   const [error, setError] = useState(null);
 
@@ -55,13 +58,23 @@ export default function CameraScanner({ onResult, onClose }) {
     setState('analyzing');
 
     try {
-      const res = await fetch('/api/cards/analyze', {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('gemline_token') : null;
+      const url = verifyItemId ? `/api/portfolio/${verifyItemId}/verify-scan` : '/api/cards/analyze';
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ image: base64 }),
       });
       const data = await res.json();
-      if (data.error && !data.player) {
+      if (verifyItemId) {
+        if (data.verified) {
+          setCardInfo(data.scan || null);
+          setState('verified');
+        } else {
+          setError(data.error || 'Verification failed — try a clearer photo');
+          setState('error');
+        }
+      } else if (data.error && !data.player) {
         setError(data.error);
         setState('error');
       } else {
@@ -69,10 +82,10 @@ export default function CameraScanner({ onResult, onClose }) {
         setState('result');
       }
     } catch (e) {
-      setError('Failed to analyze card. Please try again.');
+      setError(verifyItemId ? 'Verification failed. Please try again.' : 'Failed to analyze card. Please try again.');
       setState('error');
     }
-  }, []);
+  }, [verifyItemId]);
 
   const retake = useCallback(() => {
     setState('camera');
@@ -93,7 +106,7 @@ export default function CameraScanner({ onResult, onClose }) {
         </button>
 
         <h2 style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-          📷 Scan Card
+          {verifyItemId ? '✓ Verify Card' : '📷 Scan Card'}
         </h2>
 
         {state === 'camera' && (
@@ -114,7 +127,22 @@ export default function CameraScanner({ onResult, onClose }) {
         {state === 'analyzing' && (
           <div style={{ textAlign: 'center', padding: '48px 0' }}>
             <div className="scan-spinner" />
-            <p style={{ color: 'var(--muted)', marginTop: 16, fontSize: 14 }}>Analyzing card with AI...</p>
+            <p style={{ color: 'var(--muted)', marginTop: 16, fontSize: 14 }}>
+              {verifyItemId ? 'Verifying your card with AI...' : 'Analyzing card with AI...'}
+            </p>
+          </div>
+        )}
+
+        {state === 'verified' && (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div style={{ width: 56, height: 56, margin: '0 auto 14px', borderRadius: '50%', background: 'var(--gold-soft)', display: 'grid', placeItems: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="3"><path d="M20 6 9 17l-5-5" /></svg>
+            </div>
+            <div style={{ fontFamily: 'var(--disp)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Card Verified</div>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 18 }}>
+              {cardInfo?.player ? `Scan matched: ${cardInfo.player}` : 'The scan matched your card.'} It can now be listed for sale.
+            </p>
+            <button onClick={() => { stopStream(); onResult({ verified: true }); }} className="buy" style={{ padding: '11px 32px' }}>Done</button>
           </div>
         )}
 
