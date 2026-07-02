@@ -58,7 +58,7 @@ async function ensureTable(pool) {
 
 // Log a limit breach to the audit events table (first breach per window only,
 // so a hammering bot doesn't flood the log). Awaited by callers — serverless.
-async function logBreach(pool, bucket, identifier, count, path) {
+export async function logBreach(pool, bucket, identifier, count, path) {
   try {
     await pool.query(
       `INSERT INTO events (entity_type, entity_id, to_state, payload)

@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import bcrypt from 'bcryptjs';
-import { pgRateCheck, pgRateClear, getIp } from '../middleware/rateLimit.js';
+import { pgRateCheck, pgRateClear, logBreach, getIp } from '../middleware/rateLimit.js';
 
 const SECRET = process.env.JWT_SECRET || 'gemline_jwt_secret_v1_change_in_prod';
 const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days in seconds
@@ -123,7 +123,14 @@ async function verifyTurnstile(token, ip) {
 // ── DB-backed rate limits (cross-instance) ────────────────────────────────────
 async function checkLimit(repo, opts) {
   if (!repo.pool) return { blocked: false };
-  try { return await pgRateCheck(repo.pool, opts); }
+  try {
+    const r = await pgRateCheck(repo.pool, opts);
+    // Audit visibility: log the first breach of each window (not every retry)
+    if (r.blocked && r.count === opts.max + 1) {
+      await logBreach(repo.pool, opts.bucket, opts.identifier, r.count, `/api/auth/${opts.bucket}`);
+    }
+    return r;
+  }
   catch (e) { console.error('auth rate limit error (failing open):', e.message); return { blocked: false }; }
 }
 
