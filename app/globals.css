@@ -1856,10 +1856,6 @@ header.header-hidden{transform:translateY(-100%)}
   }
   /* Card detail: the sticky action bar is the bottom edge — no extra sheet padding */
   .overlay .modal.cd-dark{padding-bottom:0 !important}
-  .cd-actionbar{padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
-  /* iOS HIG: ≥44px tap targets for like / pin / add-to-portfolio icons */
-  .cd-icon{width:44px;height:44px;border-radius:11px}
-  .cd-head-icons{gap:8px}
   .overlay .modal-close{top:12px;right:12px;width:44px;height:44px;min-width:44px;min-height:44px;z-index:10;background:rgba(20,23,30,.9);border:1px solid var(--line)}
 }
 
@@ -3187,6 +3183,11 @@ main>*{animation:fade .3s ease}
   .cd-tab{padding:10px 10px;font-size:12px}
   .cd-act{padding:12px 10px;font-size:12px}
   .cd-act-label{display:none}
+  /* Sticky action bar clears the iPhone home indicator */
+  .cd-actionbar{padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+  /* iOS HIG: ≥44px tap targets for like / pin / add-to-portfolio icons */
+  .cd-icon{width:44px;height:44px;border-radius:11px}
+  .cd-head-icons{gap:8px;margin-right:0;flex-wrap:wrap;justify-content:flex-end}
   .cd-ladder-head,.cd-ladder-row{grid-template-columns:1fr 1fr .9fr .7fr;padding:9px 10px}
 }
 
