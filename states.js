@@ -3,7 +3,7 @@
 // directly — it goes through machine.transition(), which checks these maps.
 
 export const ORDER = {
-  CREATED: 'created', ESCROW_HELD: 'escrow_held', AWAITING_SHIPMENT: 'awaiting_shipment',
+  CREATED: 'created', PENDING_PAYMENT: 'pending_payment', ESCROW_HELD: 'escrow_held', AWAITING_SHIPMENT: 'awaiting_shipment',
   AT_AUTH_HUB: 'at_auth_hub', AUTHENTICATING: 'authenticating', AUTH_PASSED: 'auth_passed',
   AUTH_FAILED: 'auth_failed', SHIPPED: 'shipped', DELIVERED: 'delivered',
   INSPECTION: 'inspection', SETTLED: 'settled', DISPUTED: 'disputed',
@@ -12,7 +12,8 @@ export const ORDER = {
 
 // Allowed order transitions. Branches cover all three fulfillment methods.
 export const ORDER_TX = {
-  created:           ['escrow_held', 'cancelled'],
+  created:           ['pending_payment', 'escrow_held', 'cancelled'],
+  pending_payment:   ['escrow_held', 'awaiting_shipment', 'settled', 'cancelled'], // buyer confirmed PI (settled = vault instant) or abandoned
   escrow_held:       ['awaiting_shipment', 'settled', 'cancelled'], // settled = vault instant
   awaiting_shipment: ['shipped', 'at_auth_hub', 'cancelled'],
   at_auth_hub:       ['authenticating'],

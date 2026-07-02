@@ -12,7 +12,7 @@ CREATE TYPE listing_kind       AS ENUM ('buy_now','auction');
 CREATE TYPE listing_status     AS ENUM ('active','sold','cancelled');
 CREATE TYPE fulfillment_method AS ENUM ('direct','authenticated','vault');
 CREATE TYPE order_status       AS ENUM (
-  'created','escrow_held','awaiting_shipment','at_auth_hub','authenticating',
+  'created','pending_payment','escrow_held','awaiting_shipment','at_auth_hub','authenticating',
   'auth_passed','auth_failed','shipped','delivered','inspection','settled',
   'disputed','refunded','cancelled');
 CREATE TYPE escrow_status      AS ENUM ('held','released','refunded','partial','void');
@@ -121,6 +121,7 @@ CREATE TABLE orders (
   status             order_status NOT NULL DEFAULT 'created',
   escrow_id          uuid REFERENCES escrow_holds(id),
   inspection_ends_at timestamptz,               -- auto-settle deadline
+  payment_due_at     timestamptz,               -- pending_payment expiry (buyer must confirm PI by then)
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
 );
