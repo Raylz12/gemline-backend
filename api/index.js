@@ -621,43 +621,105 @@ app.get('/api/market/feed', async (req, res) => {
   } catch(e) { console.error('market/feed:', e.message); res.json({ feed: [] }); }
 });
 
+// Normalize legacy grader pollution at read time ('Raw', 'NULL', 'null', empty → RAW)
+const normGrader = (g) => {
+  const v = (g || '').trim();
+  if (!v || /^(raw|null)$/i.test(v)) return 'RAW';
+  return v.toUpperCase();
+};
+const normGrade = (g) => {
+  const v = (g || '').trim();
+  if (!v || /^(ungraded|null)$/i.test(v)) return '';
+  return v;
+};
+
 app.post('/api/catalog/search', async (req, res) => {
   try {
     const r = await getRepo();
     const pool = r.pool;
     const q = (req.body?.q || req.query.q || '').trim();
-    if (!pool || !q) return res.json({ results: [], canCreate: true });
+    if (!pool || !q) return res.json({ results: [], families: [], canCreate: true });
     if (q.length > 200) return res.status(400).json({ error: 'Query too long' });
 
-    // Try MV first (faster, pre-aggregated), fall back to cards table
-    let rows = [];
-    try {
-      const mvRes = await pool.query(
-        `SELECT id, player, grader, grade, card_set as "card_set", variant, sport,
-                catalog_price, ebay_thumb as "ebay_thumb", image_url,
-                similarity(player, $1) AS sim
-         FROM mv_card_feed
-         WHERE player % $1 OR card_set ILIKE $2
-         ORDER BY sim DESC, catalog_price DESC NULLS LAST
-         LIMIT 20`,
-        [q, `%${q}%`]
-      );
-      rows = mvRes.rows;
-    } catch {
-      // MV search failed — fall back to cards table
-      const fallback = await pool.query(
-        `SELECT id, player, grader, grade, card_set, variant, sport, catalog_price, ebay_thumb, image_url,
-                similarity(player, $1) AS sim
+    // Tokenized AND matching — every token must hit player/set/variant/year.
+    // Backed by expression trgm index idx_cards_search_trgm.
+    const tokens = q.split(/\s+/).filter(Boolean).slice(0, 8);
+    const SEARCH_EXPR = `(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,'') || ' ' || coalesce(year,''))`;
+    const params = [q];
+    const conds = tokens.map((t) => {
+      params.push(`%${t}%`);
+      return `${SEARCH_EXPR} ILIKE $${params.length}`;
+    });
+
+    const { rows: famRows } = await pool.query(
+      `WITH m AS (
+         SELECT id, player, card_set, year, variant, number, sport, grader, grade,
+                catalog_price, ebay_thumb, image_url, sales_30d,
+                similarity(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,''), $1) AS sim
          FROM cards
-         WHERE player % $1 OR card_set ILIKE $2 OR variant ILIKE $2
+         WHERE ${conds.join(' AND ')}
          ORDER BY sim DESC, catalog_price DESC NULLS LAST
-         LIMIT 20`,
-        [q, `%${q}%`]
-      );
-      rows = fallback.rows;
+         LIMIT 500
+       )
+       SELECT player, card_set, variant, number, sport,
+              max(coalesce(year,'')) AS year,
+              max(sim) AS sim,
+              max(catalog_price) AS top_price,
+              sum(coalesce(sales_30d,0)) AS liquidity,
+              (array_agg(ebay_thumb) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS ebay_thumb,
+              (array_agg(image_url) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url,
+              json_agg(json_build_object('id', id, 'grader', grader, 'grade', grade,
+                       'catalog_price', catalog_price, 'sales_30d', sales_30d)
+                       ORDER BY catalog_price DESC NULLS LAST) AS tiers
+       FROM m
+       GROUP BY player, card_set, variant, number, sport
+       ORDER BY max(sim) DESC, sum(coalesce(sales_30d,0)) DESC NULLS LAST, max(catalog_price) DESC NULLS LAST
+       LIMIT 15`,
+      params
+    );
+
+    const families = famRows.map((f) => {
+      // Dedupe tiers on normalized (grader, grade), preferring the priced row
+      const seen = new Map();
+      for (const t of (f.tiers || [])) {
+        const grader = normGrader(t.grader);
+        const grade = normGrade(t.grade);
+        const key = `${grader}|${grade}`;
+        const price = Number(t.catalog_price) || 0;
+        const prev = seen.get(key);
+        if (!prev || price > prev.price) {
+          seen.set(key, { id: t.id, grader, grade, price, sales30d: Number(t.sales_30d) || 0 });
+        }
+      }
+      const tiers = [...seen.values()].sort((a, b) => {
+        if (a.grader === 'RAW' && b.grader !== 'RAW') return -1;
+        if (b.grader === 'RAW' && a.grader !== 'RAW') return 1;
+        return b.price - a.price;
+      });
+      return {
+        player: f.player, card_set: f.card_set, variant: f.variant || '',
+        number: f.number || '', sport: f.sport || '', year: f.year || '',
+        topPrice: Number(f.top_price) || 0, liquidity: Number(f.liquidity) || 0,
+        ebay_thumb: f.ebay_thumb || null, image_url: f.image_url || null,
+        tiers,
+      };
+    });
+
+    // Backward-compatible flat list (live/sell consumers): one row per tier
+    const results = [];
+    for (const fam of families) {
+      for (const t of fam.tiers) {
+        if (results.length >= 40) break;
+        results.push({
+          id: t.id, player: fam.player, card_set: fam.card_set, variant: fam.variant,
+          sport: fam.sport, year: fam.year, grader: t.grader, grade: t.grade,
+          catalog_price: t.price || null, ebay_thumb: fam.ebay_thumb, image_url: fam.image_url,
+        });
+      }
     }
-    res.json({ results: rows, canCreate: true, total: rows.length });
-  } catch(e) { console.error('catalog/search:', e.message); res.json({ results: [], canCreate: true }); }
+
+    res.json({ results, families, canCreate: true, total: results.length });
+  } catch(e) { console.error('catalog/search:', e.message); res.json({ results: [], families: [], canCreate: true }); }
 });
 
 // ── Public routes (no auth) ──────────────────────────────────────────────────

@@ -41,7 +41,8 @@ export default function PortfolioPage() {
   const [listingPrice, setListingPrice] = useState('');
   const [listingSubmitting, setListingSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState([]); // card families
+  const [expandedFam, setExpandedFam] = useState(null); // family key with open tier picker
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState(null); // cardId being added
 
@@ -76,7 +77,19 @@ export default function PortfolioPage() {
         body: JSON.stringify({ q }),
       });
       const data = await res.json();
-      setSearchResults(data.results || []);
+      // Prefer grouped families (one row per card, grade tiers nested); fall back to flat results
+      if (Array.isArray(data.families) && data.families.length) {
+        setSearchResults(data.families);
+      } else if (Array.isArray(data.results) && data.results.length) {
+        setSearchResults(data.results.map(r => ({
+          player: r.player, card_set: r.card_set, variant: r.variant || '', sport: r.sport || '',
+          topPrice: Number(r.catalog_price) || 0, ebay_thumb: r.ebay_thumb, image_url: r.image_url,
+          tiers: [{ id: r.id, grader: r.grader || 'RAW', grade: r.grade || '', price: Number(r.catalog_price) || 0 }],
+        })));
+      } else {
+        setSearchResults([]);
+      }
+      setExpandedFam(null);
     } catch {
       setSearchResults([]);
     } finally {
@@ -558,43 +571,68 @@ export default function PortfolioPage() {
               <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>No cards found</div>
             )}
             <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-              {searchResults.map(card => (
-                <div key={card.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                  borderRadius: 8, cursor: 'pointer', transition: '.15s',
-                  background: adding === card.id ? 'var(--panel-2)' : 'transparent',
-                }}
-                  onMouseEnter={e => { if (adding !== card.id) e.currentTarget.style.background = 'var(--panel)'; }}
-                  onMouseLeave={e => { if (adding !== card.id) e.currentTarget.style.background = 'transparent'; }}
-                  onClick={() => { if (!addedIds.has(card.id)) addCard(card.id); }}
-                >
-                  <div style={{
-                    width: 36, height: 48, borderRadius: 6, flexShrink: 0,
-                    background: card.ebay_thumb || card.image_url
-                      ? `url(${card.ebay_thumb || card.image_url}) center/cover`
-                      : 'linear-gradient(135deg, var(--panel-2), var(--line))',
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{card.player}</div>
-                    <div style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)' }}>
-                      {card.card_set || card.set || ''} · {card.grader || 'RAW'} {card.grade || ''}
-                      {card.sport ? ` · ${card.sport}` : ''}
+              {searchResults.map((fam, idx) => {
+                const famKey = `${fam.player}|${fam.card_set}|${fam.variant}|${idx}`;
+                const open = expandedFam === famKey;
+                const tiers = fam.tiers || [];
+                const tierLabel = (t) => t.grader === 'RAW' && !t.grade ? 'Raw' : `${t.grader} ${t.grade}`.trim();
+                return (
+                  <div key={famKey} style={{ borderRadius: 8, marginBottom: 2, background: open ? 'var(--panel)' : 'transparent', transition: '.15s' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', cursor: 'pointer' }}
+                      onMouseEnter={e => { if (!open) e.currentTarget.parentElement.style.background = 'var(--panel)'; }}
+                      onMouseLeave={e => { if (!open) e.currentTarget.parentElement.style.background = 'transparent'; }}
+                      onClick={() => setExpandedFam(open ? null : famKey)}
+                    >
+                      <div style={{
+                        width: 36, height: 48, borderRadius: 6, flexShrink: 0,
+                        background: fam.ebay_thumb || fam.image_url
+                          ? `url(${fam.ebay_thumb || fam.image_url}) center/cover`
+                          : 'linear-gradient(135deg, var(--panel-2), var(--line))',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{fam.player}</div>
+                        <div style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {fam.card_set || ''}{fam.variant && fam.variant !== 'Base' ? ` · ${fam.variant}` : ''}
+                          {fam.sport ? ` · ${fam.sport}` : ''}
+                        </div>
+                      </div>
+                      {fam.topPrice > 0 && (
+                        <div className="mono" style={{ fontSize: 13, color: 'var(--gold)', flexShrink: 0 }}>
+                          {fmt(fam.topPrice)}
+                        </div>
+                      )}
+                      <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+                        {tiers.length} version{tiers.length !== 1 ? 's' : ''} {open ? '▴' : '▾'}
+                      </span>
                     </div>
+                    {open && (
+                      <div style={{ padding: '2px 12px 10px 60px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {tiers.map(t => (
+                          <div key={t.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
+                            borderRadius: 6, cursor: addedIds.has(t.id) ? 'default' : 'pointer',
+                            border: '1px solid var(--line)', background: 'var(--ink)', transition: '.15s',
+                          }}
+                            onMouseEnter={e => { if (!addedIds.has(t.id)) e.currentTarget.style.borderColor = 'var(--up)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; }}
+                            onClick={(e) => { e.stopPropagation(); if (!addedIds.has(t.id)) addCard(t.id); }}
+                          >
+                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'var(--mono)', flex: 1 }}>{tierLabel(t)}</span>
+                            {t.price > 0 && <span className="mono" style={{ fontSize: 12, color: 'var(--gold)' }}>{fmt(t.price)}</span>}
+                            {adding === t.id ? (
+                              <span style={{ fontSize: 11, color: 'var(--muted)' }}>Adding...</span>
+                            ) : addedIds.has(t.id) ? (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--up)', fontFamily: 'var(--mono)' }}>✓ Added</span>
+                            ) : (
+                              <span style={{ fontSize: 15, color: 'var(--up)', lineHeight: 1 }}>+</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {card.catalog_price && (
-                    <div className="mono" style={{ fontSize: 13, color: 'var(--gold)' }}>
-                      {fmt(Number(card.catalog_price))}
-                    </div>
-                  )}
-                  {adding === card.id ? (
-                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>Adding...</span>
-                  ) : addedIds.has(card.id) ? (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--up)', fontFamily: 'var(--mono)' }}>✓ Added</span>
-                  ) : (
-                    <span style={{ fontSize: 18, color: 'var(--up)' }}>+</span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
