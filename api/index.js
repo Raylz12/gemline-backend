@@ -1356,6 +1356,18 @@ function scanMatchesCard(scan, card) {
   if (card.card_set && scan.set && tokenOverlap(card.card_set, scan.set) === 0 && tokenOverlap(scan.set, card.card_set) === 0) {
     return { ok: false, reason: `Scan shows “${scan.set}” — doesn’t match ${card.card_set}` };
   }
+  // Grade fraud guard: a graded item must be scanned as the SLAB — a raw copy
+  // of the same card must not verify a PSA 10 claim (huge price difference).
+  const cardGrader = String(card.grader || '').toUpperCase();
+  const isSlab = cardGrader && cardGrader !== 'RAW';
+  if (isSlab) {
+    const scanGrader = String(scan.grader || '').toUpperCase();
+    if (!scanGrader) return { ok: false, reason: `This item is a ${cardGrader} ${card.grade || ''} slab — scan the graded slab, not a raw card`.trim() };
+    if (scanGrader !== cardGrader) return { ok: false, reason: `Scan shows a ${scanGrader} slab — this item is ${cardGrader} ${card.grade || ''}`.trim() };
+    if (card.grade && scan.grade && String(scan.grade).trim() !== String(card.grade).trim()) {
+      return { ok: false, reason: `Scan shows ${scanGrader} ${scan.grade} — this item is ${cardGrader} ${card.grade}` };
+    }
+  }
   return { ok: true };
 }
 
