@@ -5,6 +5,7 @@ import { useAuth } from '../components/AuthContext';
 import AuthModal from '../components/AuthModal';
 import { fmt } from '../lib/data';
 import useDarkPage from '../lib/useDarkPage';
+import ProGate, { hasCapability } from '../components/ProGate';
 
 function UserCard({ user, currentUserId, onToggleFollow, followingSet, onRequireAuth }) {
   const isFollowing = followingSet.has(user.id);
@@ -572,6 +573,15 @@ export default function CommunityPage() {
       <h1 className="page">Community</h1>
       <p className="sub">Pulls, trades, and collectors all in one place. Show off your hits and follow the collectors you rate.</p>
 
+      <ProGate
+        page
+        allowed={hasCapability(user, 'community')}
+        title="Create a free account to join the Community"
+        sub="The live feed, collector profiles, and follows — free with a GEMLINE account."
+        cta="Create a free account"
+        onUnlock={requireAuth}
+      >
+
       {/* Search bar */}
       <div style={{ marginTop: 20, marginBottom: 20 }}>
         <div style={{ position: 'relative', maxWidth: 440 }}>
@@ -699,6 +709,8 @@ export default function CommunityPage() {
           )}
         </div>
       )}
+
+      </ProGate>
 
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </>

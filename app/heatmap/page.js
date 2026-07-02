@@ -2,6 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
 import useDarkPage from '../lib/useDarkPage';
+import { useAuth } from '../components/AuthContext';
+import AuthModal from '../components/AuthModal';
+import ProGate, { hasCapability } from '../components/ProGate';
 
 const PAGE = 100;
 const SORT_OPTIONS = [
@@ -79,6 +82,8 @@ const mapCard = (c) => ({
 
 export default function HeatmapPage() {
   useDarkPage();
+  const { user } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
   const [cards, setCards] = useState([]);
   const [total, setTotal] = useState(0);
   const [sports, setSports] = useState([]);
@@ -160,6 +165,15 @@ export default function HeatmapPage() {
           </button>
         </div>
       </div>
+
+      <ProGate
+        page
+        allowed={hasCapability(user, 'analytics')}
+        title="Create a free account to unlock the Market Heatmap"
+        sub="Live price movers across the whole market — free with a GEMLINE account."
+        cta="Create a free account"
+        onUnlock={() => setShowAuth(true)}
+      >
 
       {/* Sport tabs — real sports from the live pool */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -248,7 +262,10 @@ export default function HeatmapPage() {
         </div>
       )}
 
+      </ProGate>
+
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </>
   );
 }

@@ -3,6 +3,9 @@ import { useState, useEffect, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
 import { IconTrendUp, IconTrendDown, IconGrid, IconZap, IconVolume } from '../components/Icons';
 import useDarkPage from '../lib/useDarkPage';
+import { useAuth } from '../components/AuthContext';
+import AuthModal from '../components/AuthModal';
+import ProGate, { hasCapability } from '../components/ProGate';
 
 const SPORT_TABS = ['All', 'Basketball', 'Baseball', 'Football', 'Pokemon', 'Hockey'];
 const SPORT_COLOR = { Basketball: '#f59e0b', Baseball: '#2563eb', Football: '#7c3aed', Pokemon: '#eab308', Hockey: '#0ea5e9', Soccer: '#16a34a' };
@@ -85,6 +88,13 @@ function deriveEdge(r) {
   return { buy, fmv, netEdge, netPct };
 }
 
+// Tokenized play matcher — every search word must hit player/set/variant/year/grade.
+export function matchesArbQuery(c, q) {
+  if (!q) return true;
+  const hay = `${c.player || ''} ${c.set || c.card_set || ''} ${c.variant || ''} ${c.year || ''} ${c.grader || ''} ${c.grade || ''} ${c.sport || ''}`.toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+}
+
 function ArbTable({ onSelect }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +103,30 @@ function ArbTable({ onSelect }) {
   const [minLiq, setMinLiq] = useState(0);
   const [arbSport, setArbSport] = useState('All');
   const [arbSort, setArbSort] = useState('netEdge'); // netEdge | netPct | buy | liquidity
+  const [query, setQuery] = useState('');
+
+  // Server-side search — the default arb payload is capped, so ?q= sweeps the
+  // full card universe and merges any new plays into the loaded pool.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const t = setTimeout(() => {
+      fetch(`/api/market/arb?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(d => {
+          const extra = (d.arbPlays || []).filter(c => (c.hi || 0) > 0 && (c.lo || 0) > 0)
+            .map(c => { const e = deriveEdge(c); return { ...c, ...e, momentum: e.netEdge > 0 && (c.gain7d || 0) > 0 }; });
+          if (!extra.length) return;
+          setRows(prev => {
+            const seen = new Set(prev.map(r => r.id));
+            const add = extra.filter(c => c.id && !seen.has(c.id));
+            return add.length ? [...prev, ...add].sort((a, b) => b.netEdge - a.netEdge) : prev;
+          });
+        })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const load = () => {
     setLoading(true);
@@ -129,10 +163,12 @@ function ArbTable({ onSelect }) {
     buy: (a, b) => a.buy - b.buy,
     liquidity: (a, b) => (b.sales30d || 0) - (a.sales30d || 0),
   };
+  const q = query.trim();
   const filtered = rows.filter(r =>
     r.netEdge >= minNet &&
     (r.sales30d || 0) >= minLiq &&
-    (arbSport === 'All' || r.sport === arbSport)
+    (arbSport === 'All' || r.sport === arbSport) &&
+    matchesArbQuery(r, q)
   ).sort(ARB_SORTS[arbSort] || ARB_SORTS.netEdge);
 
   const btn = (active) => ({ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: active ? 'var(--gold)' : 'var(--panel-2)', color: active ? '#000' : 'var(--muted)', border: '1px solid var(--line)' });
@@ -142,6 +178,17 @@ function ArbTable({ onSelect }) {
       {/* Filter bar: net edge / liquidity / sport */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="arb-search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input
+              type="search"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search player, set, variant…"
+              aria-label="Search arbitrage plays"
+            />
+            {query && <button className="arb-search-x" onClick={() => setQuery('')} aria-label="Clear search">×</button>}
+          </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min net edge:</span>
             {[0, 10, 25, 50].map(v => (
@@ -182,8 +229,8 @@ function ArbTable({ onSelect }) {
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={{ color: 'var(--dim)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}><IconZap size={32} /></div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No plays match these filters</div>
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>Lower the min net edge or liquidity filter.</p>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{q ? `No plays match “${q}”` : 'No plays match these filters'}</div>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>{q ? 'Try fewer words, or clear the liquidity/sport filters.' : 'Lower the min net edge or liquidity filter.'}</p>
         </div>
       ) : (
         <div>
@@ -308,6 +355,8 @@ function HeatGrid({ cards, onSelect, loading }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   useDarkPage();
+  const { user } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
   const [view, setView] = useState('movers'); // movers | heatmap | arbitrage
   const [sport, setSport] = useState('All');
   const [sort, setSort] = useState('gainers'); // gainers | losers | volume | value
@@ -357,6 +406,15 @@ export default function AnalyticsPage() {
       <div className="eyebrow">Analytics</div>
       <h1 className="page">Market Intelligence</h1>
       <p className="sub">Real-time price data across 287K+ cards. Find movers, spot spreads, and track the market.</p>
+
+      <ProGate
+        page
+        allowed={hasCapability(user, 'analytics')}
+        title="Create a free account to unlock Market Intelligence"
+        sub="Movers, heatmap, and the arbitrage screener — live across 287K+ cards, free with a GEMLINE account."
+        cta="Create a free account"
+        onUnlock={() => setShowAuth(true)}
+      >
 
       {/* View selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, marginTop: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -458,7 +516,10 @@ export default function AnalyticsPage() {
         )}
       </div>
 
+      </ProGate>
+
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </>
   );
 }

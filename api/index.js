@@ -953,7 +953,8 @@ app.get('/api/market/arb', async (req, res) => {
   try {
     res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     const forceRefresh = req.query.refresh === '1';
-    if (!forceRefresh && app._arbCache && app._arbCache.expires > Date.now())
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    if (!q && !forceRefresh && app._arbCache && app._arbCache.expires > Date.now())
       return res.json(app._arbCache.data);
     const r = await getRepo();
     const pool = r.pool;
@@ -962,6 +963,41 @@ app.get('/api/market/arb', async (req, res) => {
     const arbCols = `id, player, sport, card_set, grader, grade, year, variant,
              catalog_price, ch_price_lo, ch_price_hi, gain_7d, sales_7d, sales_30d,
              ebay_thumb, cardhedge_id, rookie`;
+
+    const mapCard = (c) => ({
+      id: c.id, player: c.player, sport: c.sport, set: c.card_set,
+      grader: normGrader(c.grader), grade: normGrade(c.grade), year: c.year, variant: c.variant,
+      market: Number(c.catalog_price) || 0,
+      lo: Number(c.ch_price_lo) || 0, hi: Number(c.ch_price_hi) || 0,
+      gain7d: Number(c.gain_7d) || 0, sales7d: Number(c.sales_7d) || 0,
+      sales30d: Number(c.sales_30d) || 0,
+      thumbnail: c.ebay_thumb, cardhedge_id: c.cardhedge_id, rookie: c.rookie,
+      edge: (Number(c.ch_price_lo) > 0 && Number(c.ch_price_hi) > 0)
+        ? +(((Number(c.ch_price_hi) - Number(c.ch_price_lo)) / Number(c.ch_price_lo)) * 100).toFixed(1) : 0,
+      spread: (Number(c.ch_price_hi) || 0) - (Number(c.ch_price_lo) || 0),
+    });
+
+    // Tokenized search mode — ?q= covers the FULL card universe (the default
+    // arbPlays bucket is capped at 120 rows), so /arbitrage + analytics arb
+    // search finds plays that never make the top-120 net-edge cut.
+    if (q) {
+      const tokens = q.split(/\s+/).filter(Boolean).slice(0, 6);
+      const conds = [];
+      const params = [];
+      for (const t of tokens) {
+        params.push(`%${t}%`);
+        const p = `$${params.length}`;
+        conds.push(`(player ILIKE ${p} OR card_set ILIKE ${p} OR variant ILIKE ${p} OR year ILIKE ${p} OR grader ILIKE ${p} OR grade ILIKE ${p} OR sport ILIKE ${p})`);
+      }
+      const { rows } = await pool.query(
+        `SELECT ${arbCols} FROM cards
+         WHERE ch_price_lo > 0 AND ch_price_hi > 0
+           AND catalog_price > 5 AND catalog_price <= 5000
+           AND ${conds.join(' AND ')}
+         ORDER BY (ch_price_hi * 0.9 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
+         LIMIT 120`, params);
+      return res.json({ q, arbPlays: rows.map(mapCard) });
+    }
 
     // Parallelize all queries — cuts latency dramatically
     const [uvRes, gainRes, lossRes, tradedRes, arbRes] = await Promise.all([
@@ -999,19 +1035,6 @@ app.get('/api/market/arb', async (req, res) => {
     const [undervalued, gainers, losers, mostTraded, arbPlays] = [
       uvRes.rows, gainRes.rows, lossRes.rows, tradedRes.rows, arbRes.rows,
     ];
-
-    const mapCard = (c) => ({
-      id: c.id, player: c.player, sport: c.sport, set: c.card_set,
-      grader: normGrader(c.grader), grade: normGrade(c.grade), year: c.year, variant: c.variant,
-      market: Number(c.catalog_price) || 0,
-      lo: Number(c.ch_price_lo) || 0, hi: Number(c.ch_price_hi) || 0,
-      gain7d: Number(c.gain_7d) || 0, sales7d: Number(c.sales_7d) || 0,
-      sales30d: Number(c.sales_30d) || 0,
-      thumbnail: c.ebay_thumb, cardhedge_id: c.cardhedge_id, rookie: c.rookie,
-      edge: (Number(c.ch_price_lo) > 0 && Number(c.ch_price_hi) > 0)
-        ? +(((Number(c.ch_price_hi) - Number(c.ch_price_lo)) / Number(c.ch_price_lo)) * 100).toFixed(1) : 0,
-      spread: (Number(c.ch_price_hi) || 0) - (Number(c.ch_price_lo) || 0),
-    });
 
     const data = {
       undervalued: undervalued.map(mapCard),

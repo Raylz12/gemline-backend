@@ -6,12 +6,21 @@
 // a one-line change (e.g. check user.plan === 'pro'). Today every signed-in
 // user has every capability free — visitors get a frosted teaser + sign-in CTA.
 // No billing exists yet; do NOT wire prices here.
+// Capability → required plan. Every capability is 'free' today (any account
+// unlocks it); flipping analytics/arbitrage/community to a paid Pro tier later
+// is a one-line config change here (set to 'pro').
+const CAPABILITY_PLAN = {
+  market_insight: 'free',
+  analytics: 'free',   // /analytics + /heatmap (movers/heatmap/arb tab)
+  arbitrage: 'free',   // /arbitrage terminal
+  community: 'free',   // /community directory + feed
+};
+
 export function hasCapability(user, capability) {
-  switch (capability) {
-    case 'market_insight':
-    default:
-      return !!user; // future: return user.plan === 'pro' for paid capabilities
-  }
+  const plan = CAPABILITY_PLAN[capability] || 'free';
+  if (!user) return false;               // visitors: frosted teaser + CTA
+  if (plan === 'free') return true;      // any account
+  return user.plan === plan;             // future paid tiers
 }
 
 export default function ProGate({
@@ -20,11 +29,12 @@ export default function ProGate({
   sub = 'Market score, liquidity, 7-day trend, and FMV spread — free with a GEMLINE account.',
   cta = 'Sign in — it’s free',
   onUnlock,
+  page = false, // full-page gate: cap the blurred teaser height, fade bottom
   children,
 }) {
   if (allowed) return children;
   return (
-    <div className="progate">
+    <div className={page ? 'progate progate-page' : 'progate'}>
       <div className="progate-blur" aria-hidden="true">{children}</div>
       <div className="progate-cover">
         <div className="progate-lock">

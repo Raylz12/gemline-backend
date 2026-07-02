@@ -2,7 +2,16 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../components/AuthContext';
 import CardDetail from '../components/CardDetail';
+import AuthModal from '../components/AuthModal';
+import ProGate, { hasCapability } from '../components/ProGate';
 import useDarkPage from '../lib/useDarkPage';
+
+// Tokenized play matcher — every search word must hit player/set/variant/year/grade.
+const matchesArbQuery = (c, q) => {
+  if (!q) return true;
+  const hay = `${c.player || ''} ${c.set || ''} ${c.variant || ''} ${c.year || ''} ${c.grader || ''} ${c.grade || ''} ${c.sport || ''}`.toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+};
 
 // Buy at the low ask, exit at Card Hedge high (FMV) net of the 10% marketplace
 // fee — the same net-edge model the analytics arb tab uses.
@@ -420,11 +429,13 @@ function SpreadMatrix({ cards, onSelect }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ArbitragePage() {
   useDarkPage();
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState('');
+  const [showAuth, setShowAuth] = useState(false);
+  const [query, setQuery] = useState('');
 
   // Clock
   useEffect(() => {
@@ -481,10 +492,50 @@ export default function ArbitragePage() {
     return () => clearInterval(arbIntervalRef.current);
   }, [fetchArbData]);
 
+  // Server-side search sweep — the default payload buckets are capped (~120
+  // arb plays), so ?q= searches the FULL card universe and merges new rows in.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const t = setTimeout(() => {
+      fetch(`/api/market/arb?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(d => {
+          const rows = (d.arbPlays || []).map(c => ({
+            id: c.id, player: c.player, sport: c.sport, set: c.set,
+            grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
+            market: Number(c.market) || 0,
+            lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
+            confidence: c.confidence, thumbnail: c.thumbnail,
+            rookie: c.rookie, sales7d: Number(c.sales7d) || 0,
+            sales30d: Number(c.sales30d) || 0,
+            gain7d: Math.abs(Number(c.gain7d)) <= 999 ? Number(c.gain7d) : 0,
+            cardhedge_id: c.cardhedge_id || null,
+            theme: ['#1a1d28', '#252838'],
+            ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+          }));
+          if (!rows.length) return;
+          setCards(prev => {
+            const seen = new Set(prev.map(c => c.id));
+            const add = rows.filter(c => c.id && !seen.has(c.id));
+            return add.length ? [...prev, ...add] : prev;
+          });
+        })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Search narrows every desk surface (panels, heatmap, matrix) to matching plays.
+  const visible = useMemo(() => {
+    const q = query.trim();
+    return q ? cards.filter(c => matchesArbQuery(c, q)) : cards;
+  }, [cards, query]);
+
   // Derived datasets — the play is: buy at the low ask, exit at Card Hedge high
   // (FMV) net of the 10% marketplace fee. Ranked by net edge $, momentum flag
   // for undervalued + trending up. Same treatment as the analytics arb tab.
-  const cardsWithEdge = useMemo(() => cards
+  const cardsWithEdge = useMemo(() => visible
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
     .map(c => {
       const buy = c.lo, fmv = c.hi;
@@ -497,7 +548,7 @@ export default function ArbitragePage() {
         momentum: netEdge > 0 && (c.gain7d || 0) > 0,
       };
     })
-    .sort((a, b) => b.netEdge - a.netEdge), [cards]);
+    .sort((a, b) => b.netEdge - a.netEdge), [visible]);
 
   // Believability guard: only volume-validated, sane moves rank as gainers/losers.
   // One row per underlying card — grade tiers of the same card move together and
@@ -512,15 +563,15 @@ export default function ArbitragePage() {
       return true;
     });
   };
-  const gainers = useMemo(() => dedupeFamily([...cards].filter(c => c.gain7d > 0 && c.market > 0 && saneMove(c)).sort((a, b) => b.gain7d - a.gain7d)).slice(0, 12), [cards]);
-  const losers  = useMemo(() => dedupeFamily([...cards].filter(c => c.gain7d < 0 && c.market > 0 && saneMove(c)).sort((a, b) => a.gain7d - b.gain7d)).slice(0, 12), [cards]);
-  const byVolume = useMemo(() => [...cards].filter(c => c.sales30d > 0).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [cards]);
-  const heatCards = useMemo(() => [...cards].filter(c => c.gain7d !== 0 && c.market > 0 && saneMove(c)).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 24), [cards]);
+  const gainers = useMemo(() => dedupeFamily([...visible].filter(c => c.gain7d > 0 && c.market > 0 && saneMove(c)).sort((a, b) => b.gain7d - a.gain7d)).slice(0, 12), [visible]);
+  const losers  = useMemo(() => dedupeFamily([...visible].filter(c => c.gain7d < 0 && c.market > 0 && saneMove(c)).sort((a, b) => a.gain7d - b.gain7d)).slice(0, 12), [visible]);
+  const byVolume = useMemo(() => [...visible].filter(c => c.sales30d > 0).sort((a, b) => b.sales30d - a.sales30d).slice(0, 14), [visible]);
+  const heatCards = useMemo(() => [...visible].filter(c => c.gain7d !== 0 && c.market > 0 && saneMove(c)).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 24), [visible]);
   const tickerCards = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);
 
   const topGainer = gainers[0];
   const topLoser  = losers[0];
-  const totalVolume = useMemo(() => cards.reduce((s, c) => s + (c.sales30d || 0), 0), [cards]);
+  const totalVolume = useMemo(() => visible.reduce((s, c) => s + (c.sales30d || 0), 0), [visible]);
   const netPlays = useMemo(() => cardsWithEdge.filter(c => c.netEdge > 0), [cardsWithEdge]);
   const avgNetEdge = useMemo(() => netPlays.length ? (netPlays.reduce((s, c) => s + c.netEdge, 0) / netPlays.length).toFixed(0) : '—', [netPlays]);
 
@@ -535,6 +586,14 @@ export default function ArbitragePage() {
 
   return (
     <div style={{ background: '#080b12', minHeight: '100vh', padding: 0 }}>
+      <ProGate
+        page
+        allowed={hasCapability(user, 'arbitrage')}
+        title="Create a free account to unlock the Arb Terminal"
+        sub="Net-edge plays after fees, momentum flags, and full-market search — free with a GEMLINE account."
+        cta="Create a free account"
+        onUnlock={() => setShowAuth(true)}
+      >
 
       {/* ── Top bar ── */}
       <div style={{
@@ -574,6 +633,26 @@ export default function ArbitragePage() {
 
       {/* ── Ticker strip ── */}
       <TickerStrip cards={tickerCards} />
+
+      {/* ── Play search ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 0', flexWrap: 'wrap' }}>
+        <div className="arb-search" style={{ flex: '1 1 260px', maxWidth: 420 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search player, set, variant…"
+            aria-label="Search arbitrage plays"
+          />
+          {query && <button className="arb-search-x" onClick={() => setQuery('')} aria-label="Clear search">×</button>}
+        </div>
+        {query.trim() && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', letterSpacing: '.06em' }}>
+            {visible.length.toLocaleString()} MATCH{visible.length === 1 ? '' : 'ES'} · FULL-MARKET SWEEP
+          </span>
+        )}
+      </div>
 
       {/* ── Stat row ── */}
       <div style={{ display: 'flex', gap: 1, padding: '8px', background: '#080b12', flexWrap: 'wrap' }}>
@@ -680,7 +759,10 @@ export default function ArbitragePage() {
         </Panel>
       </div>
 
+      </ProGate>
+
       {selected && <CardDetail card={selected} onClose={() => setSelected(null)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
 
       <style>{`
         @keyframes pulse {
