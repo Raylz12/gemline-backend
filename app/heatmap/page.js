@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
+import useDarkPage from '../lib/useDarkPage';
 
 const SPORT_TABS = ['All', 'Basketball', 'Baseball', 'Football', 'Pokemon', 'Other'];
 const SORT_OPTIONS = [
@@ -32,73 +33,38 @@ function HeatCard({ c, onClick }) {
   const gain = typeof c.gain7d === 'number' ? c.gain7d : 0;
   const absGain = Math.abs(gain);
   const showGain = absGain > 0 && absGain <= 999;
-  const arrow = gain >= 0 ? '▲' : '▼';
-  const gainColor = gain >= 0 ? 'var(--up)' : 'var(--down)';
-  const bg = pctColor(showGain ? gain : null);
+  const t = Math.min(absGain / 60, 1); // intensity scales with move magnitude
+  const alpha = 0.12 + t * 0.42;
+  const bg = !showGain ? 'var(--panel-2)'
+    : gain > 0 ? `rgba(22,199,132,${alpha})`
+    : `rgba(239,68,68,${alpha})`;
+  const border = !showGain ? 'var(--line)'
+    : gain > 0 ? `rgba(22,199,132,${0.25 + t * 0.4})`
+    : `rgba(239,68,68,${0.25 + t * 0.4})`;
 
   return (
-    <div
-      onClick={() => onClick(c)}
-      style={{
-        background: bg,
-        border: '1px solid rgba(255,255,255,.07)',
-        borderRadius: 10,
-        padding: '12px 14px',
-        cursor: 'pointer',
-        transition: 'transform .12s, border-color .12s',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        minHeight: 110,
-      }}
-      onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.18)'; }}
-      onMouseOut={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.borderColor = 'rgba(255,255,255,.07)'; }}
-    >
-      {/* Thumb */}
-      {c.thumbnail && (
-        <img
-          src={c.thumbnail}
-          alt=""
-          style={{ width: '100%', height: 52, objectFit: 'cover', borderRadius: 6, marginBottom: 2 }}
-          onError={e => e.target.style.display = 'none'}
-        />
-      )}
-
-      {/* Player */}
-      <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {c.player}
+    <div className="hm2-tile" onClick={() => onClick(c)} style={{ background: bg, border: `1px solid ${border}` }}>
+      <div className="hm2-main">
+        <div className="hm2-player">{c.player}</div>
+        <div className="hm2-meta">
+          {[c.grader && `${c.grader} ${c.grade || ''}`.trim(), c.year].filter(Boolean).join(' · ')}
+          {c.sales7d > 0 ? ` · ${c.sales7d} sold 7d` : c.sales30d > 0 ? ` · ${c.sales30d} sold 30d` : ''}
+        </div>
       </div>
-
-      {/* Set / year */}
-      <div style={{ fontSize: 10, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {[c.set, c.year].filter(Boolean).join(' · ')}
-      </div>
-
-      {/* Price row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
-          {fmt(c.market)}
-        </span>
+      <div className="hm2-foot">
+        <span className="hm2-price">{fmt(c.market)}</span>
         {showGain ? (
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: gainColor }}>
-            {arrow}{gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
+          <span className="hm2-pct" style={{ color: gain >= 0 ? '#3ee6a0' : '#ff8093' }}>
+            {gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
           </span>
-        ) : absGain > 999 ? (
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>N/A</span>
         ) : null}
       </div>
-
-      {/* Volume */}
-      {(c.sales7d > 0 || c.sales30d > 0) && (
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>
-          {c.sales7d > 0 ? `${c.sales7d} sold 7d` : `${c.sales30d} sold 30d`}
-        </div>
-      )}
     </div>
   );
 }
 
 export default function HeatmapPage() {
+  useDarkPage();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -274,11 +240,7 @@ export default function HeatmapPage() {
           No cards with price movement data in this view.
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-          gap: 8,
-        }}>
+        <div className="hm2-grid">
           {displayed.map(c => (
             <HeatCard key={c.id} c={c} onClick={openCard} />
           ))}

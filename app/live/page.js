@@ -4,9 +4,10 @@ import { useAuth } from '../components/AuthContext';
 import { useCardStore } from '../components/CardStore';
 import { fmt, SPORT_THEME, slabStyle } from '../lib/data';
 import { toast } from '../lib/toast';
+import useDarkPage from '../lib/useDarkPage';
 // PackRipContent removed — replaced by Mystery Pulls at /packs
 import PreviewGate, { SampleLivePreview } from '../components/PreviewGate';
-import { IconCards, IconGavel, IconTrophy } from '../components/Icons';
+import { IconGavel } from '../components/Icons';
 
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
@@ -60,6 +61,7 @@ function CardThumb({ item, size = 50 }) {
 
 /* ─── main page ───────────────────────────────────────────────────────── */
 export default function LivePage() {
+  useDarkPage(); // full dark intelligence theme — no half-dark hero on a light page
   const { token, userId } = useAuth();
   const { cards } = useCardStore();
 
@@ -541,48 +543,25 @@ export default function LivePage() {
             </div>
           ) : (
             /* ── Empty state (no live auctions) ─── */
-            <div className="live-empty-state">
-              {/* Mock auction card */}
-              <div className="live-empty-mock-card">
-                <div className="live-empty-mock-img">
-                  <div className="live-empty-mock-shimmer" />
-                  <div className="live-empty-mock-badge">
-                    <span className="live-auction-badge-dot" /> LIVE
-                  </div>
-                  <div className="live-empty-mock-countdown">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    Starting soon
-                  </div>
-                </div>
-                <div style={{ padding: '14px 16px' }}>
-                  <div className="live-empty-mock-line" style={{ width: '70%', marginBottom: 8 }} />
-                  <div className="live-empty-mock-line" style={{ width: '50%', marginBottom: 12, height: 10 }} />
-                  <div className="live-empty-mock-price">$—.——</div>
-                </div>
+            <div className="live-empty2">
+              <div className="live-empty2-icon"><IconGavel size={30} /></div>
+              <h2 className="live-empty2-title">No Live Auctions</h2>
+              <p className="live-empty2-sub">The floor is open — be the first to list and every collector here sees your card.</p>
+              <div className="live-empty2-steps">
+                {[
+                  ['1', 'List', 'a card from your collection'],
+                  ['2', 'Bid', 'buyers compete in real time'],
+                  ['3', 'Win', 'highest bid takes the card'],
+                ].map(([n, label, desc]) => (
+                  <div key={n} className="live-empty2-step"><span className="n">{n}</span><b>{label}</b> {desc}</div>
+                ))}
               </div>
-
-              {/* Text content */}
-              <div className="live-empty-text">
-                <h2 className="live-empty-title">No Live Auctions Right Now</h2>
-                <p className="live-empty-sub">Be the first to list a card and kick off the live floor.</p>
-
-                {/* How it works steps */}
-                <div className="live-empty-steps">
-                  {[
-                    { Ic: IconCards, step: '1', label: 'List', desc: 'Add a card from your collection' },
-                    { Ic: IconGavel, step: '2', label: 'Bid', desc: 'Buyers compete in real time' },
-                    { Ic: IconTrophy, step: '3', label: 'Win', desc: 'Highest bid takes the card' },
-                  ].map(({ Ic, step, label, desc }) => (
-                    <div key={step} className="live-empty-step">
-                      <div className="live-empty-step-icon" style={{ color: 'var(--gold)' }}><Ic size={22} /></div>
-                      <div className="live-empty-step-label">{label}</div>
-                      <div className="live-empty-step-desc">{desc}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <a href="/sell" className="live-empty-cta">
-                  List Your First Card →
+              <div className="live-empty2-ctas">
+                <button className="live-empty-cta" onClick={() => { if (!token) { toast('Please log in first', true); return; } setCreateAuctionModal(true); }}>
+                  Be the First to List →
+                </button>
+                <a href="/sell" className="live-empty-cta" style={{ background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line-2)' }}>
+                  Sell a Card
                 </a>
               </div>
             </div>

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import CardDetail from '../components/CardDetail';
 import { IconTrendUp, IconTrendDown, IconGrid, IconZap, IconVolume } from '../components/Icons';
+import useDarkPage from '../lib/useDarkPage';
 
 const SPORT_TABS = ['All', 'Basketball', 'Baseball', 'Football', 'Pokemon', 'Hockey'];
 const SPORT_COLOR = { Basketball: '#f59e0b', Baseball: '#2563eb', Football: '#7c3aed', Pokemon: '#eab308', Hockey: '#0ea5e9', Soccer: '#16a34a' };
@@ -169,6 +170,8 @@ function ArbTable({ onSelect }) {
         </div>
       ) : (
         <div>
+          {/* Desktop: wide table. Mobile (<=768px): stacked play-cards, no clipped columns. */}
+          <div className="arb-desktop">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(220px,300px) 96px 82px', gap: 8, padding: '6px 12px', fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--line)' }}>
             <div>Card</div><div>The Play (after {Math.round(MARKETPLACE_FEE * 100)}% fee)</div><div style={{ textAlign: 'right' }}>Net Edge</div><div style={{ textAlign: 'right' }}>Liquidity</div>
           </div>
@@ -211,6 +214,38 @@ function ArbTable({ onSelect }) {
               </div>
             );
           })}
+          </div>
+
+          {/* Mobile stacked cards */}
+          <div className="arb-cards">
+            {filtered.map((r, i) => {
+              const liqLabel = (r.sales7d || 0) >= 5 ? 'high liq' : (r.sales7d || 0) >= 3 ? 'med liq' : (r.sales30d || 0) > 0 ? 'low liq' : 'thin';
+              const netColor = r.netEdge > 0 ? '#3ee6a0' : '#ff8093';
+              return (
+                <div key={i} className="arb-card" onClick={() => onSelect && onSelect(r)}>
+                  <div className="arb-card-top">
+                    <Thumb card={{ player: r.player, sport: r.sport, ebay_thumb: r.thumbnail }} size={30} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="arb-card-name">{r.player || r.card}</div>
+                      <div className="arb-card-sub">{r.grader || 'RAW'} {r.grade} · {r.year || r.sport}</div>
+                    </div>
+                    <div className="arb-card-edge">
+                      <div className="v" style={{ color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)}</div>
+                      <div className="k">net edge</div>
+                    </div>
+                  </div>
+                  <div className="arb-card-play">
+                    Buy <b style={{ color: 'var(--txt)' }}>{fmt(r.buy)}</b> → FMV <b style={{ color: 'var(--txt)' }}>{fmt(r.fmv)}</b> → <b style={{ color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)} net</b>
+                  </div>
+                  <div className="arb-card-chips">
+                    <span className={`arb-chip ${(r.sales7d || 0) >= 5 ? 'up' : ''}`}>{liqLabel} {(r.sales7d || 0)}/{(r.sales30d || 0)}</span>
+                    <span className="arb-chip" style={{ color: netColor }}>{r.netPct >= 0 ? '+' : ''}{r.netPct.toFixed(0)}% after fee</span>
+                    {r.momentum && <span className="arb-chip hot">momentum</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -220,33 +255,32 @@ function ArbTable({ onSelect }) {
 // ── Heatmap Grid ──────────────────────────────────────────────────────────────
 function HeatGrid({ cards, onSelect, loading }) {
   if (loading) return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 4 }}>
-      {[...Array(40)].map((_, i) => <div key={i} style={{ height: 72, background: 'var(--panel-2)', borderRadius: 6, opacity: 0.5 }} />)}
+    <div className="hm2-grid">
+      {[...Array(24)].map((_, i) => <div key={i} style={{ height: 86, background: 'var(--panel-2)', borderRadius: 8, opacity: 0.5 }} />)}
     </div>
   );
   if (!cards.length) return (
     <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--dim)', fontSize: 13 }}>No heatmap data available</div>
   );
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 4 }}>
-      {cards.slice(0, 120).map((c, i) => {
+    <div className="hm2-grid">
+      {cards.slice(0, 60).map((c, i) => {
         const g = c.gain7d || 0;
-        const intensity = Math.min(Math.abs(g) / 50, 1);
-        const bg = g > 0
-          ? `rgba(52,216,138,${0.08 + intensity * 0.35})`
-          : g < 0
-          ? `rgba(255,92,108,${0.08 + intensity * 0.35})`
-          : 'var(--panel-2)';
-        const border = g > 0 ? `rgba(52,216,138,${0.2 + intensity * 0.4})` : g < 0 ? `rgba(255,92,108,${0.2 + intensity * 0.4})` : 'var(--line)';
+        const t = Math.min(Math.abs(g) / 60, 1); // intensity scaled by move magnitude
+        const alpha = 0.12 + t * 0.42;
+        const bg = g > 0 ? `rgba(22,199,132,${alpha})` : g < 0 ? `rgba(239,68,68,${alpha})` : 'var(--panel-2)';
+        const border = g > 0 ? `rgba(22,199,132,${0.25 + t * 0.4})` : g < 0 ? `rgba(239,68,68,${0.25 + t * 0.4})` : 'var(--line)';
         return (
-          <div key={c.id || i} onClick={() => onSelect(c)}
-            style={{ background: bg, border: `1px solid ${border}`, borderRadius: 7, padding: '7px 6px', cursor: 'pointer', transition: 'transform .1s', minHeight: 68 }}
-            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
-            onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-          >
-            <div style={{ fontSize: 9, fontWeight: 700, fontFamily: 'var(--mono)', color: g > 0 ? 'var(--up)' : g < 0 ? 'var(--down)' : 'var(--muted)', marginBottom: 3 }}>{pctStr(g)}</div>
-            <div style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.3, color: 'var(--txt)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.player}</div>
-            <div style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2, fontFamily: 'var(--mono)' }}>{fmt(c.market || c.catalog_price)}</div>
+          <div key={c.id || i} className="hm2-tile" onClick={() => onSelect(c)}
+            style={{ background: bg, border: `1px solid ${border}` }}>
+            <div className="hm2-main">
+              <div className="hm2-player">{c.player}</div>
+              <div className="hm2-meta">{c.grader || 'RAW'} {c.grade}{c.sales7d ? ` \u00b7 ${c.sales7d} sold 7d` : ''}</div>
+            </div>
+            <div className="hm2-foot">
+              <span className="hm2-price">{fmt(c.market || c.catalog_price)}</span>
+              <span className="hm2-pct" style={{ color: g >= 0 ? '#3ee6a0' : '#ff8093' }}>{pctStr(g)}</span>
+            </div>
           </div>
         );
       })}
@@ -256,6 +290,7 @@ function HeatGrid({ cards, onSelect, loading }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
+  useDarkPage();
   const [view, setView] = useState('movers'); // movers | heatmap | arbitrage
   const [sport, setSport] = useState('All');
   const [sort, setSort] = useState('gainers'); // gainers | losers | volume | value

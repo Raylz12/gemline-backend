@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../components/AuthContext';
 import CardDetail from '../components/CardDetail';
+import useDarkPage from '../lib/useDarkPage';
 
 // Buy at the low ask, exit at Card Hedge high (FMV) net of the 10% marketplace
 // fee — the same net-edge model the analytics arb tab uses.
@@ -279,6 +280,41 @@ function SpreadMatrix({ cards, onSelect }) {
   );
 
   return (
+    <>
+    {/* Mobile (<=768px): stacked play-cards instead of a clipped wide table */}
+    <div className="arb-cards">
+      {sorted.slice(0, 60).map((c) => {
+        const netColor = c.netEdge > 0 ? '#34D88A' : '#FF5C6C';
+        const liqLabel = (c.sales7d || 0) >= 5 ? 'high liq' : (c.sales7d || 0) >= 3 ? 'med liq' : (c.sales30d || 0) > 0 ? 'low liq' : 'thin';
+        return (
+          <div key={c.id} className="arb-card" onClick={() => onSelect(c)}>
+            <div className="arb-card-top">
+              {c.thumbnail && (
+                <div style={{ width: 30, height: 40, borderRadius: 3, flexShrink: 0, overflow: 'hidden',
+                  background: `url(${c.thumbnail}) center/contain no-repeat #111`, border: '1px solid rgba(255,255,255,.07)' }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="arb-card-name">{c.player}{c.rookie ? ' · RC' : ''}</div>
+                <div className="arb-card-sub">{c.grader} {c.grade} · {c.set?.slice(0, 26)}</div>
+              </div>
+              <div className="arb-card-edge">
+                <div className="v" style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</div>
+                <div className="k">net edge</div>
+              </div>
+            </div>
+            <div className="arb-card-play">
+              Buy <b style={{ color: '#34D88A' }}>{fmtP(c.lo)}</b> → FMV <b style={{ color: 'var(--txt,#eef1f6)' }}>{fmtP(c.hi)}</b> → <b style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))} net</b>
+            </div>
+            <div className="arb-card-chips">
+              <span className={`arb-chip ${(c.sales7d || 0) >= 5 ? 'up' : ''}`}>{liqLabel} {c.sales7d || 0}/{c.sales30d || 0}</span>
+              <span className="arb-chip" style={{ color: netColor }}>{(c.netPct >= 0 ? '+' : '') + c.netPct?.toFixed(0)}% after fee</span>
+              {c.momentum ? <span className="arb-chip hot">momentum</span> : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <div className="arb-desktop" style={{ display: undefined }}>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Table header */}
       <div style={{
@@ -365,11 +401,14 @@ function SpreadMatrix({ cards, onSelect }) {
         })}
       </div>
     </div>
+    </div>
+    </>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ArbitragePage() {
+  useDarkPage();
   const { token } = useAuth();
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -513,7 +552,7 @@ export default function ArbitragePage() {
       <TickerStrip cards={tickerCards} />
 
       {/* ── Stat row ── */}
-      <div style={{ display: 'flex', gap: 1, padding: '8px', background: '#080b12' }}>
+      <div style={{ display: 'flex', gap: 1, padding: '8px', background: '#080b12', flexWrap: 'wrap' }}>
         <StatBox label="30D TOTAL VOLUME" value={fmtNum(totalVolume)} sub="transactions" color="#5B8DEF" />
         <StatBox label="TOP GAINER · 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || ''} color="#34D88A" glow />
         <StatBox label="TOP LOSER · 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || ''} color="#FF5C6C" glow />
@@ -524,8 +563,8 @@ export default function ArbitragePage() {
       {/* ── Main 4-panel grid ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr 1fr',
-        gridTemplateRows: '260px',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gridAutoRows: '260px',
         gap: 1,
         padding: '0 8px',
         background: '#080b12',

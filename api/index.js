@@ -467,16 +467,17 @@ app.get('/api/market/heatmap', async (req, res) => {
     const params = (sport && sport !== 'All') ? [sport] : [];
     
     // Top 50 gainers + top 50 losers for a balanced heatmap.
-    // Sanity filters: require 2+ sales to validate a move, price >= $5,
-    // and clamp moves to a believable range (thin-sale cards produce
-    // +124,900% / -100% garbage that makes the whole page look broken).
-    const sane = `AND catalog_price >= 5 AND COALESCE(sales_7d,0) >= 2`;
-    const gainersQ = `SELECT ${cols} FROM cards
-      WHERE gain_7d > 0 AND gain_7d <= 500 ${sane}${sportClause}
-      ORDER BY gain_7d DESC, COALESCE(sales_7d,0) DESC LIMIT 150`;
-    const losersQ = `SELECT ${cols} FROM cards
-      WHERE gain_7d < 0 AND gain_7d >= -90 ${sane}${sportClause}
-      ORDER BY gain_7d ASC, COALESCE(sales_7d,0) DESC LIMIT 150`;
+    // Trusted-pool approach (same idea as the landing movers): start from the
+    // top ~600 cards by 7-day sales volume — real liquidity — then rank by
+    // gain within that pool. Raw gain-sorted queries return a wall of clamped
+    // +468–500% thin-sale junk (5 sales at a new price tier ≠ a 5x move).
+    // Sanity: price >= $5, 5+ validated sales, |gain| capped at 150%.
+    const vol = `SELECT ${cols} FROM cards
+      WHERE catalog_price >= 5 AND COALESCE(sales_7d,0) >= 5
+        AND gain_7d IS NOT NULL AND gain_7d != 0 AND ABS(gain_7d) <= 150${sportClause}
+      ORDER BY COALESCE(sales_7d,0) DESC LIMIT 600`;
+    const gainersQ = `WITH vol AS (${vol}) SELECT * FROM vol WHERE gain_7d > 0 ORDER BY gain_7d DESC LIMIT 150`;
+    const losersQ = `WITH vol AS (${vol}) SELECT * FROM vol WHERE gain_7d < 0 ORDER BY gain_7d ASC LIMIT 150`;
     
     const [{ rows: gainersRaw }, { rows: losersRaw }] = await Promise.all([
       pool.query(gainersQ, params),
@@ -1024,6 +1025,9 @@ async function settleEndedAuctions(r, { force = false } = {}) {
       const wonTpl = emailTpl.auctionWon({ player: a.player, price: priceStr });
       await emailUser(pool, a.winner_id, wonTpl.subject, wonTpl.html);
       await notify(pool, a.seller_id, 'auction_sold', `Sold: ${a.player} — ${priceStr}`, 'The winner has 24h to pay. You will be notified to ship once payment clears.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
+      // Badge sweep: Gavel Down for the winner, sale badges for the seller
+      await checkAndAwardBadges(pool, a.winner_id).catch(() => {});
+      await checkAndAwardBadges(pool, a.seller_id).catch(() => {});
       settled++;
     } catch (e) {
       console.error('settle auction', a.id, 'error:', e.message);
@@ -1186,6 +1190,9 @@ app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
     );
 
     await client.query('COMMIT');
+
+    // First-bid badge sweep (post-commit; awaited — serverless kills fire-and-forget)
+    await checkAndAwardBadges(pool, req.userId).catch(() => {});
 
     // Outbid notification (post-commit; awaited — serverless freezes kill fire-and-forget)
     if (prevTop?.bidder_id && prevTop.bidder_id !== req.userId) {
@@ -1798,6 +1805,9 @@ app.post('/api/offers/:id/accept', requireAuth, async (req, res) => {
     const accTpl = emailTpl.offerAccepted({ player: card?.player || 'card', amount: amt });
     await emailUser(pool, offer.buyer_id, accTpl.subject, accTpl.html);
 
+    // Badge sweep: Deal Maker for the seller (awaited — serverless kills fire-and-forget)
+    await checkAndAwardBadges(pool, req.userId).catch(() => {});
+
     res.json({ success: true, order });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -2190,6 +2200,9 @@ app.get('/api/user/badges', requireAuth, async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ badges: [] });
+    // Lazy award sweep — catches milestones reached through flows that don't
+    // call checkAndAwardBadges directly (portfolio adds, trades, etc.)
+    await checkAndAwardBadges(pool, req.userId);
     const { rows } = await pool.query(
       `SELECT ub.badge_key, b.name, b.tier, ub.earned_at 
        FROM user_badges ub JOIN badges b ON ub.badge_key = b.key 
@@ -3214,49 +3227,68 @@ app.get('/api/user/profile', requireAuth, async (req, res) => {
 // PROFILE & BADGES (public + auth)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Helper: award badges based on user activity
+// Helper: award badges based on user activity.
+// Mystery-pack badges were removed with the packs feature — awards now derive
+// from marketplace activity: portfolio, trades, sales, auctions, and offers.
 async function checkAndAwardBadges(pool, userId) {
   try {
-    // Count pack pulls
-    const { rows: [pullStats] } = await pool.query(
-      `SELECT COUNT(*) as total_pulls, COUNT(DISTINCT pack_type || pulled_at::date) as pack_count,
-              MAX(c.catalog_price) as max_price,
-              COUNT(DISTINCT pp.card_id) as unique_cards
-       FROM pack_pulls pp JOIN cards c ON pp.card_id = c.id WHERE pp.user_id = $1`, [userId]
-    );
+    const q = (sql, fallback) => pool.query(sql, [userId]).then(r => r.rows[0]).catch(() => fallback);
+    const [pf, tradeStats, saleStats, bidStats, winStats, offerStats] = await Promise.all([
+      q(`SELECT COUNT(*) AS cnt, COALESCE(SUM(c.catalog_price), 0) AS val
+         FROM portfolios p JOIN cards c ON c.id = p.card_id WHERE p.user_id = $1`, { cnt: 0, val: 0 }),
+      q(`SELECT COUNT(*) AS trades FROM trades WHERE (proposer_id = $1 OR counterparty_id = $1) AND status = 'completed'`, { trades: 0 }),
+      q(`SELECT COUNT(*) AS sales, COALESCE(MAX(price), 0) AS max_price FROM listings WHERE seller_id = $1 AND status = 'sold'`, { sales: 0, max_price: 0 }),
+      q(`SELECT COUNT(*) AS bids FROM bids WHERE bidder_id = $1`, { bids: 0 }),
+      q(`SELECT COUNT(*) AS wins FROM listings l
+         WHERE l.kind = 'auction' AND l.status = 'sold'
+           AND (SELECT b.bidder_id FROM bids b WHERE b.listing_id = l.id ORDER BY b.amount DESC, b.created_at ASC LIMIT 1) = $1`, { wins: 0 }),
+      q(`SELECT COUNT(*) AS accepted FROM listing_offers o JOIN listings l ON l.id = o.listing_id
+         WHERE l.seller_id = $1 AND o.status IN ('accepted', 'expired')`, { accepted: 0 }),
+    ]);
 
-    const totalPulls = parseInt(pullStats.total_pulls) || 0;
-    const uniqueCards = parseInt(pullStats.unique_cards) || 0;
-    const maxPrice = parseFloat(pullStats.max_price) || 0;
-
-    // Count distinct packs ripped (group pulls by batch)
-    const { rows: [packCount] } = await pool.query(
-      `SELECT COUNT(DISTINCT DATE_TRUNC('second', pulled_at)) as packs FROM pack_pulls WHERE user_id = $1`, [userId]
-    );
-    const packsRipped = parseInt(packCount.packs) || 0;
+    const cardCount = parseInt(pf.cnt) || 0;
+    const portfolioValue = parseFloat(pf.val) || 0;
+    const trades = parseInt(tradeStats.trades) || 0;
+    const sales = parseInt(saleStats.sales) || 0;
+    const maxSaleCents = Number(saleStats.max_price) || 0;
+    const bids = parseInt(bidStats.bids) || 0;
+    const wins = parseInt(winStats.wins) || 0;
+    const offersAccepted = parseInt(offerStats.accepted) || 0;
 
     const badgesToAward = [];
 
-    if (totalPulls >= 1) badgesToAward.push('first_pull');
-    if (uniqueCards >= 10) badgesToAward.push('collector_10');
-    if (uniqueCards >= 50) badgesToAward.push('collector_50');
-    if (uniqueCards >= 100) badgesToAward.push('collector_100');
-    if (maxPrice >= 1500) badgesToAward.push('big_hit');
-    if (maxPrice >= 5000) badgesToAward.push('legendary_pull');
-    if (packsRipped >= 25) badgesToAward.push('pack_addict');
-    if (packsRipped >= 100) badgesToAward.push('pack_whale');
+    // Collection size (portfolio cards)
+    if (cardCount >= 10) badgesToAward.push('collector_10');
+    if (cardCount >= 50) badgesToAward.push('collector_50');
+    if (cardCount >= 100) badgesToAward.push('collector_100');
+    if (cardCount >= 250) badgesToAward.push('collector_250');
+    if (cardCount >= 500) badgesToAward.push('collector_500');
+    if (cardCount >= 1000) badgesToAward.push('collector_1000');
 
-    // Check trades
-    const { rows: [tradeStats] } = await pool.query(
-      `SELECT COUNT(*) as trades FROM trades WHERE (proposer_id = $1 OR counterparty_id = $1) AND status = 'completed'`, [userId]
-    ).catch(() => ({ rows: [{ trades: 0 }] }));
-    if (parseInt(tradeStats.trades) >= 1) badgesToAward.push('first_trade');
+    // Portfolio value
+    if (portfolioValue >= 1000) badgesToAward.push('portfolio_1k');
+    if (portfolioValue >= 10000) badgesToAward.push('portfolio_10k');
+    if (portfolioValue >= 50000) badgesToAward.push('portfolio_50k');
+    if (portfolioValue >= 100000) badgesToAward.push('portfolio_100k');
 
-    // Check sales (listings sold)
-    const { rows: [saleStats] } = await pool.query(
-      `SELECT COUNT(*) as sales FROM listings WHERE seller_id = $1 AND status = 'sold'`, [userId]
-    ).catch(() => ({ rows: [{ sales: 0 }] }));
-    if (parseInt(saleStats.sales) >= 1) badgesToAward.push('first_sale');
+    // Trades
+    if (trades >= 1) badgesToAward.push('first_trade');
+    if (trades >= 5) badgesToAward.push('trader_5');
+    if (trades >= 25) badgesToAward.push('trader_25');
+    if (trades >= 100) badgesToAward.push('trader_100');
+    if (trades >= 500) badgesToAward.push('trader_500');
+
+    // Sales
+    if (sales >= 1) badgesToAward.push('first_sale');
+    if (sales >= 5) badgesToAward.push('seller_5');
+    if (sales >= 25) badgesToAward.push('seller_25');
+    if (sales >= 100) badgesToAward.push('seller_100');
+    if (maxSaleCents >= 20000) badgesToAward.push('big_sale'); // $200+ sale
+
+    // Auctions + offers
+    if (bids >= 1) badgesToAward.push('first_bid');        // In the Game
+    if (wins >= 1) badgesToAward.push('auction_winner');   // Gavel Down
+    if (offersAccepted >= 1) badgesToAward.push('deal_maker');
 
     // Check early adopter (user created before a cutoff or first 100)
     const { rows: [userInfo] } = await pool.query('SELECT created_at FROM users WHERE id = $1', [userId]);
@@ -3303,6 +3335,10 @@ app.get('/api/profile/:handle', async (req, res) => {
     // Check if viewer is the profile owner
     const viewerId = req.userId || null;
     const isOwner = viewerId === user.id;
+
+    // Owner viewing their own profile: run the award sweep first so newly
+    // reached milestones show up without a separate visit to /api/user/badges.
+    if (isOwner) await checkAndAwardBadges(pool, user.id);
 
     // Showcase cards (split by type, max 3 each for public)
     const { rows: showcase } = await pool.query(
@@ -3385,7 +3421,10 @@ app.get('/api/profile/:handle', async (req, res) => {
         packs: parseInt(pullCount.packs) || 0,
         digitalValue: parseFloat(digitalVal.total) || 0,
         physicalValue: parseFloat(physicalVal.total) || 0,
-        totalValue: (parseFloat(digitalVal.total) || 0) + (parseFloat(physicalVal.total) || 0),
+        // Collection value derives from the portfolio — the same source as the
+        // CARDS count — so the profile stats row can't contradict itself
+        // (legacy digital pulls no longer inflate a 0-card collection).
+        totalValue: parseFloat(physicalVal.total) || 0,
       },
     });
   } catch (e) {

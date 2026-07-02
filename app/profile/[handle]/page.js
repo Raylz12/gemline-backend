@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useAuth } from '../../components/AuthContext';
 import { SPORT_THEME } from '../../lib/data';
 import CardDetail from '../../components/CardDetail';
+import useDarkPage from '../../lib/useDarkPage';
 
 function fmtP(n) {
   if (!n || n <= 0) return '—';
@@ -58,6 +59,7 @@ function getHighestTier(badges) {
 }
 
 export default function ProfilePage() {
+  useDarkPage(); // dark brand — matches live/analytics/community
   const params = useParams();
   const handle = params.handle;
   const { user, authFetch, token } = useAuth();
@@ -458,8 +460,19 @@ export default function ProfilePage() {
           <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>
             {allBadges.length} of {allBadgesList.length} earned
           </p>
-          {['collection', 'packs', 'pulls', 'trading', 'sales', 'portfolio', 'special', null].map(cat => {
-            const catBadges = allBadgesList.filter(b => cat ? b.category === cat : !b.category);
+          {/* Categories derive from the badge catalog itself — a hardcoded list
+              silently hid categories (collector/community/ripper/trader), so every
+              earned badge fell in a hidden bucket and the grid rendered all-grey. */}
+          {(() => {
+            const PREFERRED = ['collection', 'portfolio', 'auctions', 'trading', 'sales', 'community', 'special'];
+            const cats = [...new Set(allBadgesList.map(b => b.category || 'general'))]
+              .sort((a, b) => {
+                const ai = PREFERRED.indexOf(a), bi = PREFERRED.indexOf(b);
+                return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+              });
+            return cats;
+          })().map(cat => {
+            const catBadges = allBadgesList.filter(b => (b.category || 'general') === cat);
             if (catBadges.length === 0) return null;
             const catLabel = cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : 'General';
             const earnedCount = catBadges.filter(b => allBadges.some(eb => eb.key === b.key)).length;

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../components/AuthContext';
 import { fmt } from '../lib/data';
+import useDarkPage from '../lib/useDarkPage';
 
 function UserCard({ user, currentUserId, onToggleFollow, followingSet }) {
   const isFollowing = followingSet.has(user.id);
@@ -391,7 +392,7 @@ function CommunityFeed({ user, authFetch, token }) {
   return (
     <div style={{ marginBottom: 28 }}>
       {/* Post Composer */}
-      <div style={{
+      <div className="cf-composer" style={{
         background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12,
         padding: '14px 16px', marginBottom: 14,
       }}>
@@ -455,15 +456,24 @@ function CommunityFeed({ user, authFetch, token }) {
           ))}
         </div>
       ) : posts.length === 0 ? (
-        <div style={{
-          textAlign: 'center', padding: '48px 0', color: 'var(--muted)',
-          border: '1px dashed var(--line)', borderRadius: 12,
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>No posts yet</div>
-          <div style={{ fontSize: 13, opacity: 0.7 }}>
-            {user ? 'Be the first to share a pull or trade!' : 'Sign in and be the first to post!'}
+        <div className="cf-empty">
+          <div className="cf-empty-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
           </div>
+          <div style={{ fontFamily: 'var(--disp)', fontWeight: 800, fontSize: 20, marginBottom: 6, color: 'var(--txt)' }}>The feed starts with you</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 300, margin: '0 auto 18px', lineHeight: 1.5 }}>
+            Be the first to post your latest pickup — a new slab, a trade win, or a card you&apos;re hunting.
+          </div>
+          <button
+            onClick={() => {
+              const ta = document.querySelector('.cf-composer textarea');
+              if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            }}
+            style={{ padding: '11px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: 'var(--gold)', color: '#04140c', border: 'none', cursor: 'pointer' }}>
+            Post your latest pickup
+          </button>
         </div>
       ) : (
         <>
@@ -485,6 +495,7 @@ function CommunityFeed({ user, authFetch, token }) {
 /* ─── /Community Feed ─── */
 
 export default function CommunityPage() {
+  useDarkPage(); // real social feed — dark panels, not a light marketing page
   const { user, token, authFetch } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
