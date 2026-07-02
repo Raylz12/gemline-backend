@@ -10,6 +10,7 @@ import SignupTeaser from '../components/SignupTeaser';
 import PreviewGate, { SamplePortfolio } from '../components/PreviewGate';
 import TradesContent from '../components/TradesContent';
 import SellContent from '../components/SellContent';
+import OffersContent from '../components/OffersContent';
 
 export default function PortfolioPage() {
   const { token, authFetch, user } = useAuth();
@@ -276,6 +277,9 @@ export default function PortfolioPage() {
       <button className={`live-tab ${subTab === 'sell' ? 'on' : ''}`} onClick={() => setSubTab('sell')}>
         Sell
       </button>
+      <button className={`live-tab ${subTab === 'offers' ? 'on' : ''}`} onClick={() => setSubTab('offers')}>
+        Offers
+      </button>
     </div>
   );
 
@@ -288,6 +292,7 @@ export default function PortfolioPage() {
         {subTabBar}
         {subTab === 'trades' && <TradesContent />}
         {subTab === 'sell' && <SellContent />}
+        {subTab === 'offers' && <OffersContent />}
         {subTab === 'cards' && (
           <PreviewGate
             icon="📂"
@@ -310,6 +315,7 @@ export default function PortfolioPage() {
 
       {subTab === 'trades' && <TradesContent />}
       {subTab === 'sell' && <SellContent />}
+      {subTab === 'offers' && <OffersContent />}
 
       {subTab === 'cards' && <>
       {/* Action buttons */}

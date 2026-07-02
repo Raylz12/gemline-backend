@@ -10,6 +10,86 @@ import CreditsModal from './CreditsModal';
 import CardDetail from './CardDetail';
 
 
+function timeAgo(d) {
+  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
+const NOTIF_ICONS = {
+  outbid: '⚡', auction_won: '🏆', auction_sold: '💰', auction_ended: '🔔', auction_lost: '🔔',
+  offer_received: '📩', offer_accepted: '✅', offer_declined: '❌',
+};
+
+function NotificationBell() {
+  const { token, authFetch } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const wrapRef = useRef(null);
+
+  const load = () => {
+    if (!token) return;
+    authFetch('/api/notifications')
+      .then(r => r.ok ? r.json() : { notifications: [], unread: 0 })
+      .then(d => { setItems(d.notifications || []); setUnread(d.unread || 0); })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && unread > 0) {
+      authFetch('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(() => setUnread(0))
+        .catch(() => {});
+    }
+  };
+
+  if (!token) return null;
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button className="notif-bell" onClick={toggle} title="Notifications" aria-label="Notifications">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        {unread > 0 && <span className="notif-count">{unread > 9 ? '9+' : unread}</span>}
+      </button>
+      {open && (
+        <div className="notif-dropdown">
+          <div className="notif-dd-head">Notifications</div>
+          {items.length === 0 ? (
+            <div className="notif-empty">Nothing yet — bids, offers, and wins land here.</div>
+          ) : items.map(n => (
+            <div key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`}>
+              <span className="notif-ico">{NOTIF_ICONS[n.type] || '🔔'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="notif-title">{n.title}</div>
+                {n.body && <div className="notif-body">{n.body}</div>}
+              </div>
+              <span className="notif-time">{timeAgo(n.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { href: '/market', label: 'Market', key: 'market', public: true },
   { href: '/live', label: 'Live', key: 'live', dot: true, public: true },
@@ -140,6 +220,7 @@ export default function Header() {
           </nav>
 
           <div className="nav-right">
+            <NotificationBell />
             {user && (
               <button id="walletPill" title="Buy credits" onClick={() => setShowCredits(true)}>
                 <span className="mono">{wallet.credits}</span>

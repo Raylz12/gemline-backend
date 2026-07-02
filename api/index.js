@@ -725,17 +725,152 @@ app.use('/api/catalog/search', async (req, res, next) => {
 
 // (Duplicate feed route removed — primary feed is defined above with pagination)
 
+// ── Notifications ──────────────────────────────────────────────────────────────
+let _notifTableReady = false;
+async function ensureNotifTable(pool) {
+  if (_notifTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT DEFAULT '',
+      data JSONB DEFAULT '{}',
+      read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications (user_id, read, created_at DESC)').catch(() => {});
+  _notifTableReady = true;
+}
+
+async function notify(pool, userId, type, title, body = '', data = {}) {
+  if (!pool || !userId) return;
+  try {
+    await ensureNotifTable(pool);
+    await pool.query(
+      'INSERT INTO notifications (user_id, type, title, body, data) VALUES ($1, $2, $3, $4, $5)',
+      [userId, type, title, body, JSON.stringify(data)]
+    );
+  } catch (e) { console.error('notify error:', e.message); }
+}
+
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ notifications: [], unread: 0 });
+    await ensureNotifTable(pool);
+    const { rows } = await pool.query(
+      'SELECT id, type, title, body, data, read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30',
+      [req.userId]
+    );
+    const { rows: [{ count }] } = await pool.query(
+      'SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND read = FALSE',
+      [req.userId]
+    );
+    res.json({ notifications: rows, unread: Number(count) });
+  } catch (e) {
+    res.json({ notifications: [], unread: 0 });
+  }
+});
+
+app.post('/api/notifications/read', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ ok: true });
+    await ensureNotifTable(pool);
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(n => Number.isInteger(Number(n))) : null;
+    if (ids && ids.length) {
+      await pool.query('UPDATE notifications SET read = TRUE WHERE user_id = $1 AND id = ANY($2)', [req.userId, ids.map(Number)]);
+    } else {
+      await pool.query('UPDATE notifications SET read = TRUE WHERE user_id = $1', [req.userId]);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: true }); }
+});
+
+// ── Auction settlement engine ──────────────────────────────────────────
+// Runs lazily (throttled) from /api/auctions/live and on demand via POST /api/auctions/settle.
+// Ended auction w/ winning bid ≥ reserve → escrow order for winner, listing 'sold'.
+// No bids or reserve not met → listing 'completed', parties notified.
+let _lastSettle = 0;
+async function settleEndedAuctions(r, { force = false } = {}) {
+  const pool = r.pool;
+  if (!pool) return { settled: 0, closed: 0 };
+  const now = Date.now();
+  if (!force && now - _lastSettle < 60_000) return { skipped: true };
+  _lastSettle = now;
+
+  const { rows: ended } = await pool.query(`
+    SELECT l.*, c.player,
+      (SELECT b.bidder_id FROM bids b WHERE b.listing_id = l.id ORDER BY b.amount DESC, b.created_at ASC LIMIT 1) AS winner_id,
+      (SELECT MAX(b.amount) FROM bids b WHERE b.listing_id = l.id) AS winning_bid
+    FROM listings l JOIN cards c ON c.id = l.card_id
+    WHERE l.kind = 'auction' AND l.status = 'active' AND l.ends_at < NOW()
+    LIMIT 20
+  `);
+
+  let settled = 0, closed = 0;
+  const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+  for (const a of ended) {
+    try {
+      const winningBid = a.winning_bid != null ? Number(a.winning_bid) : null;
+      const reserve = a.reserve_price != null ? Number(a.reserve_price) : null;
+      const priceStr = winningBid != null ? `$${(winningBid / 100).toLocaleString()}` : '';
+
+      if (!a.winner_id || winningBid == null) {
+        await pool.query("UPDATE listings SET status = 'completed' WHERE id = $1", [a.id]);
+        await notify(pool, a.seller_id, 'auction_ended', `Auction ended: ${a.player}`, 'Your auction ended with no bids. You can relist anytime.', { listingId: a.id, cardId: a.card_id });
+        closed++;
+        continue;
+      }
+      if (reserve != null && reserve > 0 && winningBid < reserve) {
+        await pool.query("UPDATE listings SET status = 'completed' WHERE id = $1", [a.id]);
+        await notify(pool, a.seller_id, 'auction_ended', `Auction ended: ${a.player}`, `Top bid ${priceStr} did not meet your reserve.`, { listingId: a.id, cardId: a.card_id });
+        await notify(pool, a.winner_id, 'auction_lost', `Auction ended: ${a.player}`, `Your top bid ${priceStr} did not meet the seller's reserve.`, { listingId: a.id, cardId: a.card_id });
+        closed++;
+        continue;
+      }
+
+      // Winner — create escrow order at the winning bid
+      const order = await ordersSvc.create(r, stripe, {
+        listingId: a.id, cardId: a.card_id, buyerId: a.winner_id, sellerId: a.seller_id,
+        amount: winningBid, fee: Math.round(winningBid * 0.1),
+        method: a.vault_item_id ? 'vault' : 'direct', vaultItemId: a.vault_item_id || null,
+      });
+      await pool.query("UPDATE listings SET status = 'sold' WHERE id = $1", [a.id]);
+      await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [a.id]).catch(() => {});
+      await notify(pool, a.winner_id, 'auction_won', `You won: ${a.player} — ${priceStr}`, 'Payment is held in escrow. The seller will ship your card.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
+      await notify(pool, a.seller_id, 'auction_sold', `Sold: ${a.player} — ${priceStr}`, 'Ship the card to complete the sale and release your payout.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
+      settled++;
+    } catch (e) {
+      console.error('settle auction', a.id, 'error:', e.message);
+    }
+  }
+  return { settled, closed };
+}
+
+app.post('/api/auctions/settle', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const result = await settleEndedAuctions(r, { force: true });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Auctions — GET live auctions (public), POST create (auth), POST bid (auth) ───
 app.get('/api/auctions/live', async (req, res) => {
   try {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ auctions: [] });
-    // Expire ended auctions lazily
-    await pool.query(`
-      UPDATE listings SET status = 'completed'
-      WHERE kind = 'auction' AND status = 'active' AND ends_at < NOW()
-    `).catch(() => {});
+    // Settle/close ended auctions lazily (throttled to 1/min)
+    await settleEndedAuctions(r).catch(() => {});
 
     const { rows } = await pool.query(`
       SELECT
@@ -860,12 +995,28 @@ app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
       [bidAmountCents, listingId]
     );
 
+    // Who was the previous high bidder? (for outbid notification)
+    const { rows: [prevTop] } = await client.query(
+      'SELECT bidder_id FROM bids WHERE listing_id = $1 ORDER BY amount DESC, created_at ASC LIMIT 1',
+      [listingId]
+    );
+
     await client.query(
       `INSERT INTO bids (listing_id, bidder_id, amount) VALUES ($1, $2, $3)`,
       [listingId, req.userId, bidAmountCents]
     );
 
     await client.query('COMMIT');
+
+    // Outbid notification (post-commit, fire-and-forget)
+    if (prevTop?.bidder_id && prevTop.bidder_id !== req.userId) {
+      pool.query('SELECT player FROM cards WHERE id = $1', [listing.card_id])
+        .then(({ rows: [card] }) => notify(pool, prevTop.bidder_id, 'outbid',
+          `You've been outbid: ${card?.player || 'your card'}`,
+          `New high bid is $${bidAmount.toLocaleString()}. Jump back in before it ends.`,
+          { listingId, cardId: listing.card_id }))
+        .catch(() => {});
+    }
 
     const reserve = listing.reserve_price != null ? Number(listing.reserve_price) : null;
     res.json({
@@ -992,10 +1143,133 @@ app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
       'INSERT INTO listing_offers (listing_id, buyer_id, amount) VALUES ($1, $2, $3) RETURNING id',
       [req.params.id, req.userId, Math.round(amount * 100)]
     );
+
+    // Notify the seller
+    pool.query('SELECT player FROM cards WHERE id = $1', [l.card_id])
+      .then(({ rows: [card] }) => notify(pool, l.seller_id, 'offer_received',
+        `New offer: ${card?.player || 'your listing'} — $${amount.toLocaleString()}`,
+        `Listed at $${(Number(l.price) / 100).toLocaleString()}. Review it in your Offers inbox.`,
+        { listingId: l.id, cardId: l.card_id, offerId: offer.id }))
+      .catch(() => {});
+
     res.json({ success: true, offerId: offer.id });
   } catch (e) {
     console.error('listings/offer error:', e.message);
     res.status(500).json({ error: 'Offer failed' });
+  }
+});
+
+// ── Offers inbox ───────────────────────────────────────────────────────────
+app.get('/api/offers', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ received: [], sent: [] });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS listing_offers (
+        id SERIAL PRIMARY KEY,
+        listing_id TEXT NOT NULL,
+        buyer_id TEXT NOT NULL,
+        amount NUMERIC NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {});
+    const base = `
+      SELECT o.id, o.listing_id, o.amount, o.status, o.created_at,
+             l.price AS listing_price, l.status AS listing_status, l.seller_id, o.buyer_id,
+             c.id AS card_id, c.player, c.card_set, c.grader, c.grade, c.ebay_thumb, c.image_url,
+             ub.handle AS buyer_handle, us.handle AS seller_handle
+      FROM listing_offers o
+      JOIN listings l ON l.id = o.listing_id
+      JOIN cards c ON c.id = l.card_id
+      LEFT JOIN users ub ON ub.id = o.buyer_id
+      LEFT JOIN users us ON us.id = l.seller_id`;
+    const [rec, sent] = await Promise.all([
+      pool.query(`${base} WHERE l.seller_id = $1 ORDER BY o.created_at DESC LIMIT 50`, [req.userId]),
+      pool.query(`${base} WHERE o.buyer_id = $1 ORDER BY o.created_at DESC LIMIT 50`, [req.userId]),
+    ]);
+    const shape = o => ({
+      id: o.id, listingId: o.listing_id,
+      amount: Number(o.amount) / 100, listingPrice: Number(o.listing_price) / 100,
+      status: o.status, listingStatus: o.listing_status, createdAt: o.created_at,
+      cardId: o.card_id, player: o.player, set: o.card_set, grader: o.grader, grade: o.grade,
+      thumbnail: o.ebay_thumb || o.image_url || null,
+      buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
+    });
+    res.json({ received: rec.rows.map(shape), sent: sent.rows.map(shape) });
+  } catch (e) {
+    console.error('offers list error:', e.message);
+    res.json({ received: [], sent: [] });
+  }
+});
+
+app.post('/api/offers/:id/accept', requireAuth, async (req, res) => {
+  const r = await getRepo().catch(() => null);
+  const pool = r?.pool;
+  if (!pool) return res.status(500).json({ error: 'No database' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [offer] } = await client.query(
+      `SELECT o.*, l.seller_id, l.card_id, l.status AS listing_status, l.vault_item_id
+       FROM listing_offers o JOIN listings l ON l.id = o.listing_id
+       WHERE o.id = $1 FOR UPDATE OF o, l`,
+      [req.params.id]
+    );
+    if (!offer) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Offer not found' }); }
+    if (offer.seller_id !== req.userId) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Not your listing' }); }
+    if (offer.status !== 'pending') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Offer is no longer pending' }); }
+    if (offer.listing_status !== 'active') { await client.query('ROLLBACK'); return res.status(410).json({ error: 'Listing is no longer active' }); }
+
+    await client.query("UPDATE listing_offers SET status = 'accepted' WHERE id = $1", [offer.id]);
+    await client.query("UPDATE listing_offers SET status = 'declined' WHERE listing_id = $1 AND id != $2 AND status = 'pending'", [offer.listing_id, offer.id]);
+    await client.query("UPDATE listings SET status = 'sold' WHERE id = $1", [offer.listing_id]);
+    await client.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [offer.listing_id]);
+    await client.query('COMMIT');
+
+    // Escrow order at the offer price (outside tx — order engine manages its own writes)
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const order = await ordersSvc.create(r, stripe, {
+      listingId: offer.listing_id, cardId: offer.card_id,
+      buyerId: offer.buyer_id, sellerId: offer.seller_id,
+      amount: Number(offer.amount), fee: Math.round(Number(offer.amount) * 0.1),
+      method: offer.vault_item_id ? 'vault' : 'direct', vaultItemId: offer.vault_item_id || null,
+    });
+
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
+    const amt = `$${(Number(offer.amount) / 100).toLocaleString()}`;
+    await notify(pool, offer.buyer_id, 'offer_accepted', `Offer accepted: ${card?.player || 'card'} — ${amt}`, 'Payment is held in escrow. The seller will ship your card.', { listingId: offer.listing_id, offerId: offer.id, orderId: order.id });
+
+    res.json({ success: true, order });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('offer accept error:', e.message);
+    res.status(500).json({ error: e.message || 'Accept failed' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/offers/:id/decline', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const { rows: [offer] } = await pool.query(
+      `SELECT o.*, l.seller_id, l.card_id FROM listing_offers o JOIN listings l ON l.id = o.listing_id WHERE o.id = $1`,
+      [req.params.id]
+    );
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    if (offer.seller_id !== req.userId) return res.status(403).json({ error: 'Not your listing' });
+    if (offer.status !== 'pending') return res.status(409).json({ error: 'Offer is no longer pending' });
+    await pool.query("UPDATE listing_offers SET status = 'declined' WHERE id = $1", [offer.id]);
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
+    await notify(pool, offer.buyer_id, 'offer_declined', `Offer declined: ${card?.player || 'card'}`, 'The seller passed on your offer. You can make another anytime.', { listingId: offer.listing_id, offerId: offer.id });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('offer decline error:', e.message);
+    res.status(500).json({ error: 'Decline failed' });
   }
 });
 
