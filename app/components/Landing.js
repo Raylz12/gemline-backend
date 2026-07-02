@@ -139,7 +139,7 @@ function HeroStack({ cards, onOpen }) {
 
 /* ── live movers grid ────────────────────────────────────────────────────── */
 function MoverTile({ c, onOpen, delay }) {
-  const pct = Number(c.gain_7d) || 0;
+  const pct = Number(c.gain7d) || 0;
   const up = pct >= 0;
   return (
     <button className={`lp-mover reveal ${up ? 'up' : 'down'}`} style={{ transitionDelay: `${delay}ms` }}
@@ -183,33 +183,32 @@ export default function Landing() {
     setTimeout(() => { router.push(target || '/market'); }, 650);
   }, [router]);
 
-  /* Live data — never blocks first paint; skeletons until it lands */
+  /* Live data — never blocks first paint; skeletons until it lands.
+     One feed call (top sellers by volume) powers both hero stack and movers:
+     high-volume cards = recognizable names with believable 7-day moves. */
   useEffect(() => {
-    fetch('/api/market/feed?limit=40&sort=sales')
+    fetch('/api/market/feed?limit=100&sort=sales')
       .then(r => r.json())
       .then(d => {
+        const feed = d.feed || [];
         const seen = new Set();
-        const picks = (d.feed || []).filter(c => {
+        const hero = feed.filter(c => {
           if (!c.thumbnail || Number(c.marketPrice) < 25 || seen.has(c.player)) return false;
           seen.add(c.player);
           return true;
         }).slice(0, 5);
-        setHeroCards(picks);
-      }).catch(() => {});
+        setHeroCards(hero);
 
-    fetch('/api/market/heatmap')
-      .then(r => r.json())
-      .then(d => {
-        const seen = new Set();
-        const ok = (c) => {
-          const pct = Number(c.gain_7d) || 0, price = Number(c.marketPrice) || 0;
-          if (!c.thumbnail || price < 10 || pct === 0 || Math.abs(pct) > 200 || seen.has(c.player)) return false;
-          seen.add(c.player);
+        const heroIds = new Set(hero.map(c => c.cardId));
+        const seen2 = new Set();
+        const pool = feed.filter(c => {
+          const pct = Number(c.gain7d) || 0;
+          if (!c.thumbnail || Number(c.marketPrice) < 15 || pct === 0 || heroIds.has(c.cardId) || seen2.has(c.player)) return false;
+          seen2.add(c.player);
           return true;
-        };
-        const cards = d.cards || [];
-        const gainers = cards.filter(c => Number(c.gain_7d) > 0).sort((a, b) => b.gain_7d - a.gain_7d).filter(ok).slice(0, 4);
-        const losers = cards.filter(c => Number(c.gain_7d) < 0).sort((a, b) => a.gain_7d - b.gain_7d).filter(ok).slice(0, 4);
+        }).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 8);
+        const gainers = pool.filter(c => c.gain7d > 0).sort((a, b) => b.gain7d - a.gain7d);
+        const losers = pool.filter(c => c.gain7d < 0).sort((a, b) => a.gain7d - b.gain7d);
         setMovers([...gainers, ...losers]);
       }).catch(() => setMovers([]));
 
