@@ -3,6 +3,10 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../components/AuthContext';
 import CardDetail from '../components/CardDetail';
 
+// Buy at the low ask, exit at Card Hedge high (FMV) net of the 10% marketplace
+// fee — the same net-edge model the analytics arb tab uses.
+const MARKETPLACE_FEE = 0.10;
+
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtP = (n) => {
   if (!n || n <= 0) return '—';
@@ -286,11 +290,10 @@ function SpreadMatrix({ cards, onSelect }) {
       }}>
         <div style={{ width: 32 }} />
         <div style={{ flex: 1, minWidth: 160, fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase' }}>CARD</div>
-        <Th label="LOW" col="lo" w={72} />
-        <Th label="MKT" col="market" w={72} />
-        <Th label="HIGH" col="hi" w={72} />
-        <Th label="SPREAD $" col="spread" w={78} />
-        <Th label="EDGE %" col="edge" w={110} />
+        <Th label="BUY (LOW)" col="lo" w={72} />
+        <Th label="FMV (HIGH)" col="hi" w={72} />
+        <Th label="NET EDGE $" col="netEdge" w={92} />
+        <Th label="NET % (AF 10% FEE)" col="netPct" w={116} />
         <Th label="7D %" col="gain7d" w={64} />
         <Th label="7D VOL" col="sales7d" w={64} />
         <Th label="30D VOL" col="sales30d" w={68} />
@@ -299,8 +302,8 @@ function SpreadMatrix({ cards, onSelect }) {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {sorted.map((c, i) => {
           const isUp = (c.gain7d || 0) >= 0;
-          const edgePct = Math.min((c.edge / 80) * 100, 100);
-          const edgeColor = c.edge > 30 ? '#34D88A' : c.edge > 15 ? '#E8B339' : '#5B8DEF';
+          const netBarPct = Math.min(Math.max((c.netPct / 40) * 100, 0), 100);
+          const netColor = c.netEdge > 0 ? '#34D88A' : '#FF5C6C';
           return (
             <div
               key={c.id}
@@ -329,26 +332,25 @@ function SpreadMatrix({ cards, onSelect }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {c.player} {c.rookie ? <span style={{ fontSize: 8, background: '#E8B339', color: '#000', borderRadius: 2, padding: '1px 3px', marginLeft: 3 }}>RC</span> : null}
+                    {c.momentum ? <span title="Undervalued and trending up" style={{ fontSize: 8, background: 'rgba(52,216,138,.15)', color: '#34D88A', borderRadius: 2, padding: '1px 4px', marginLeft: 4, fontWeight: 700 }}>🔥 MOM</span> : null}
                   </div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', marginTop: 1 }}>
                     {c.grader} {c.grade} · {c.set?.slice(0, 22)}{c.set?.length > 22 ? '…' : ''}
                   </div>
                 </div>
               </div>
-              {/* Lo */}
+              {/* Buy (low ask) */}
               <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: '#34D88A', fontWeight: 600 }}>{fmtP(c.lo)}</span>
-              {/* Market */}
-              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 700 }}>{fmtP(c.market)}</span>
-              {/* Hi */}
-              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: '#FF5C6C', fontWeight: 600 }}>{fmtP(c.hi)}</span>
-              {/* Spread $ */}
-              <span style={{ width: 78, fontFamily: 'var(--mono)', fontSize: 11, color: '#E8B339', fontWeight: 600 }}>{fmtP(c.spread)}</span>
-              {/* Edge bar */}
-              <div style={{ width: 110, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* FMV (high) */}
+              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 700 }}>{fmtP(c.hi)}</span>
+              {/* Net edge $ (after 10% fee) */}
+              <span style={{ width: 92, fontFamily: 'var(--mono)', fontSize: 11, color: netColor, fontWeight: 700 }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</span>
+              {/* Net % bar */}
+              <div style={{ width: 116, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ width: `${edgePct}%`, height: '100%', background: edgeColor, borderRadius: 2 }} />
+                  <div style={{ width: `${netBarPct}%`, height: '100%', background: netColor, borderRadius: 2 }} />
                 </div>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: edgeColor, width: 34, textAlign: 'right' }}>{c.edge?.toFixed(0)}%</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: netColor, width: 40, textAlign: 'right' }}>{(c.netPct >= 0 ? '+' : '') + (c.netPct?.toFixed(0))}%</span>
               </div>
               {/* 7D change */}
               <span style={{ width: 64, fontFamily: 'var(--mono)', fontSize: 10, color: isUp ? '#34D88A' : '#FF5C6C', textAlign: 'right' }}>
@@ -389,8 +391,11 @@ export default function ArbitragePage() {
     try {
       const res = await fetch('/api/market/arb');
       const data = await res.json();
-      // Merge all categories into a de-duped pool
+      // Merge all categories into a de-duped pool. arbPlays first — it's the
+      // decision-grade net-edge bucket (real lo/hi inventory, net-positive
+      // after the 10% fee) that also powers the analytics arb tab.
       const allCards = [
+        ...(data.arbPlays || []),
         ...(data.gainers || []),
         ...(data.losers || []),
         ...(data.undervalued || []),
@@ -426,15 +431,23 @@ export default function ArbitragePage() {
     return () => clearInterval(arbIntervalRef.current);
   }, [fetchArbData]);
 
-  // Derived datasets
+  // Derived datasets — the play is: buy at the low ask, exit at Card Hedge high
+  // (FMV) net of the 10% marketplace fee. Ranked by net edge $, momentum flag
+  // for undervalued + trending up. Same treatment as the analytics arb tab.
   const cardsWithEdge = useMemo(() => cards
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
-    .map(c => ({
-      ...c,
-      edge: +((( c.hi - c.lo) / c.lo) * 100).toFixed(1),
-      spread: +(c.hi - c.lo).toFixed(2),
-    }))
-    .sort((a, b) => b.edge - a.edge), [cards]);
+    .map(c => {
+      const buy = c.lo, fmv = c.hi;
+      const netEdge = +(fmv * (1 - MARKETPLACE_FEE) - buy).toFixed(2);
+      const netPct = +((netEdge / buy) * 100).toFixed(1);
+      return {
+        ...c, buy, fmv, netEdge, netPct,
+        edge: netPct,                       // sort key stays 'edge'
+        spread: +(fmv - buy).toFixed(2),    // gross spread retained for reference
+        momentum: netEdge > 0 && (c.gain7d || 0) > 0,
+      };
+    })
+    .sort((a, b) => b.netEdge - a.netEdge), [cards]);
 
   const gainers = useMemo(() => [...cards].filter(c => c.gain7d > 0 && c.market > 0).sort((a, b) => b.gain7d - a.gain7d).slice(0, 12), [cards]);
   const losers  = useMemo(() => [...cards].filter(c => c.gain7d < 0 && c.market > 0).sort((a, b) => a.gain7d - b.gain7d).slice(0, 12), [cards]);
@@ -445,7 +458,8 @@ export default function ArbitragePage() {
   const topGainer = gainers[0];
   const topLoser  = losers[0];
   const totalVolume = useMemo(() => cards.reduce((s, c) => s + (c.sales30d || 0), 0), [cards]);
-  const avgEdge = useMemo(() => cardsWithEdge.length ? (cardsWithEdge.reduce((s, c) => s + c.edge, 0) / cardsWithEdge.length).toFixed(1) : '—', [cardsWithEdge]);
+  const netPlays = useMemo(() => cardsWithEdge.filter(c => c.netEdge > 0), [cardsWithEdge]);
+  const avgNetEdge = useMemo(() => netPlays.length ? (netPlays.reduce((s, c) => s + c.netEdge, 0) / netPlays.length).toFixed(0) : '—', [netPlays]);
 
   if (loading) {
     return (
@@ -503,8 +517,8 @@ export default function ArbitragePage() {
         <StatBox label="30D TOTAL VOLUME" value={fmtNum(totalVolume)} sub="transactions" color="#5B8DEF" />
         <StatBox label="TOP GAINER · 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || ''} color="#34D88A" glow />
         <StatBox label="TOP LOSER · 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || ''} color="#FF5C6C" glow />
-        <StatBox label="AVG SPREAD EDGE" value={`${avgEdge}%`} sub={`${cardsWithEdge.length} cards with spread data`} color="#E8B339" />
-        <StatBox label="ARB OPPORTUNITIES" value={cardsWithEdge.filter(c => c.edge > 15).length} sub="edge > 15%" color="#9B7BFF" />
+        <StatBox label="AVG NET EDGE" value={avgNetEdge === '—' ? '—' : `$${avgNetEdge}`} sub={`across ${netPlays.length} net-positive plays`} color="#E8B339" />
+        <StatBox label="ARB PLAYS" value={netPlays.length} sub="net-positive after 10% fee" color="#9B7BFF" />
       </div>
 
       {/* ── Main 4-panel grid ── */}
@@ -587,9 +601,9 @@ export default function ArbitragePage() {
       {/* ── Spread matrix (full width) ── */}
       <div style={{ margin: '1px 8px 8px', height: 480 }}>
         <Panel
-          title="PRICE SPREAD MATRIX"
+          title="NET-EDGE ARB MATRIX"
           badgeColor="#E8B339"
-          badge={`${cardsWithEdge.length} OPPORTUNITIES`}
+          badge={`${netPlays.length} NET PLAYS · AFTER 10% FEE`}
           right="CLICK COLUMN TO SORT · CLICK ROW TO DRILL"
           style={{ height: '100%' }}
         >
@@ -597,7 +611,7 @@ export default function ArbitragePage() {
             <SpreadMatrix cards={cardsWithEdge.slice(0, 100)} onSelect={setSelected} />
           ) : (
             <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>
-              NO SPREAD DATA — CARDS NEED LO/HI RANGE FROM CARDHEDGE
+              NO NET-EDGE DATA — CARDS NEED LO/HI RANGE FROM CARDHEDGE
             </div>
           )}
         </Panel>

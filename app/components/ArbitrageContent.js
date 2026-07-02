@@ -2,6 +2,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 
+// Buy at low ask, exit at Card Hedge high (FMV) net of the 10% marketplace fee.
+const MARKETPLACE_FEE = 0.10;
+
 // ── Formatters ────────────────────────────────────────────────────────────────
 const fmtP = (n) => {
   if (!n || n <= 0) return '—';
@@ -174,12 +177,12 @@ function SpreadTable({ cards, onSelect }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(255,255,255,.02)', borderBottom: '1px solid rgba(255,255,255,.05)', flexShrink: 0, gap: 0 }}>
         <div style={{ width: 28 }} />
-        <div style={{ flex: 1, minWidth: 180, fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,.28)' }}>CARD / EDGE</div>
-        <Th label="LOW" col="lo" w={72} align="right" />
+        <div style={{ flex: 1, minWidth: 180, fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,.28)' }}>CARD / NET EDGE</div>
+        <Th label="BUY (LOW)" col="lo" w={72} align="right" />
         <Th label="PRICE" col="market" w={74} align="right" />
-        <Th label="HIGH" col="hi" w={72} align="right" />
-        <Th label="SPREAD" col="spread" w={76} align="right" />
-        <Th label="EDGE %" col="edge" w={120} />
+        <Th label="FMV (HIGH)" col="hi" w={72} align="right" />
+        <Th label="NET EDGE" col="netEdge" w={80} align="right" />
+        <Th label="NET % (AF FEE)" col="netPct" w={120} />
         <Th label="7D" col="gain7d" w={58} align="right" />
         <Th label="7D VOL" col="sales7d" w={62} align="right" />
         <Th label="30D VOL" col="sales30d" w={66} align="right" />
@@ -188,8 +191,8 @@ function SpreadTable({ cards, onSelect }) {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {sorted.map((c, i) => {
           const up = (c.gain7d || 0) >= 0;
-          const edgeColor = c.edge > 30 ? '#34D88A' : c.edge > 15 ? '#E8B339' : '#5B8DEF';
-          const edgePct = Math.min((c.edge / 80) * 100, 100);
+          const netColor = c.netEdge > 0 ? '#34D88A' : '#FF5C6C';
+          const netBarPct = Math.min(Math.max((c.netPct / 40) * 100, 0), 100);
           return (
             <div key={c.id} onClick={() => onSelect(c)} onMouseEnter={() => setHov(c.id)} onMouseLeave={() => setHov(null)}
               style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,.03)', background: hov === c.id ? 'rgba(255,255,255,.04)' : i % 2 === 0 ? 'rgba(255,255,255,.01)' : 'transparent', cursor: 'pointer', transition: 'background .1s' }}>
@@ -202,6 +205,7 @@ function SpreadTable({ cards, onSelect }) {
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {c.player}
                     {c.rookie && <span style={{ fontSize: 7, background: '#E8B339', color: '#000', borderRadius: 2, padding: '1px 3px', marginLeft: 4, fontWeight: 700 }}>RC</span>}
+                    {c.momentum && <span title="Undervalued and trending up" style={{ fontSize: 7, background: 'rgba(52,216,138,.15)', color: '#34D88A', borderRadius: 2, padding: '1px 4px', marginLeft: 4, fontWeight: 700 }}>🔥 MOM</span>}
                   </div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', marginTop: 1 }}>{c.grader} {c.grade} · {c.set?.slice(0, 24)}{c.set?.length > 24 ? '…' : ''}</div>
                 </div>
@@ -210,16 +214,16 @@ function SpreadTable({ cards, onSelect }) {
               <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: '#34D88A', fontWeight: 600, textAlign: 'right' }}>{fmtP(c.lo)}</span>
               {/* Price */}
               <span style={{ width: 74, fontFamily: 'var(--mono)', fontSize: 11, color: '#fff', fontWeight: 700, textAlign: 'right' }}>{fmtP(c.market)}</span>
-              {/* Hi */}
-              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: '#FF5C6C', fontWeight: 600, textAlign: 'right' }}>{fmtP(c.hi)}</span>
-              {/* Spread $ */}
-              <span style={{ width: 76, fontFamily: 'var(--mono)', fontSize: 11, color: '#E8B339', fontWeight: 600, textAlign: 'right' }}>{fmtP(c.spread)}</span>
-              {/* Edge bar */}
+              {/* FMV (high) */}
+              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 600, textAlign: 'right' }}>{fmtP(c.hi)}</span>
+              {/* Net edge $ (after 10% fee) */}
+              <span style={{ width: 80, fontFamily: 'var(--mono)', fontSize: 11, color: netColor, fontWeight: 700, textAlign: 'right' }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</span>
+              {/* Net % bar */}
               <div style={{ width: 120, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.07)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ width: `${edgePct}%`, height: '100%', background: edgeColor, borderRadius: 2, transition: 'width .4s' }} />
+                  <div style={{ width: `${netBarPct}%`, height: '100%', background: netColor, borderRadius: 2, transition: 'width .4s' }} />
                 </div>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: edgeColor, width: 32, textAlign: 'right' }}>{c.edge?.toFixed(0)}%</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: netColor, width: 34, textAlign: 'right' }}>{(c.netPct >= 0 ? '+' : '') + (c.netPct?.toFixed(0))}%</span>
               </div>
               {/* 7D */}
               <span style={{ width: 58, fontFamily: 'var(--mono)', fontSize: 10, color: up ? '#34D88A' : '#FF5C6C', textAlign: 'right' }}>
@@ -267,31 +271,52 @@ export default function ArbitrageContent({ onSelectCard }) {
       ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
     });
 
-    // Fetch gainers + losers + volume in parallel — separate queries so each sort is correct
+    // arbPlays rows come pre-shaped from /api/market/arb (id/market/lo/hi).
+    const mapArb = c => ({
+      id: c.id, player: c.player, sport: c.sport, set: c.set,
+      grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
+      market: Number(c.market) || 0, lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
+      thumbnail: c.thumbnail, rookie: c.rookie,
+      sales7d: Number(c.sales7d) || 0, sales30d: Number(c.sales30d) || 0,
+      gain7d: Number(c.gain7d) || 0, cardhedge_id: c.cardhedge_id || null,
+      theme: ['#f0f2f5', '#e8eaed'],
+      ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+    });
+
+    // Fetch the decision-grade arb bucket + gainers/losers/volume in parallel.
     Promise.all([
+      fetch('/api/market/arb').then(r => r.json()).catch(() => ({})),
       fetch('/api/market/feed?limit=100&sort=gain').then(r => r.json()),
       fetch('/api/market/feed?limit=100&sort=loss').then(r => r.json()),
       fetch('/api/market/feed?limit=100&sort=sales').then(r => r.json()),
-    ]).then(([gainData, lossData, salesData]) => {
+    ]).then(([arbData, gainData, lossData, salesData]) => {
       const seen = new Set();
-      const merge = (feeds) => {
-        const out = [];
-        for (const f of feeds) {
-          for (const c of (f.feed || [])) {
-            if (!seen.has(c.cardId)) { seen.add(c.cardId); out.push(mapCard(c)); }
-          }
+      const out = [];
+      // arbPlays first so the net-edge bucket seeds the pool.
+      for (const c of (arbData.arbPlays || [])) {
+        if (c.id && !seen.has(c.id)) { seen.add(c.id); out.push(mapArb(c)); }
+      }
+      for (const f of [gainData, lossData, salesData]) {
+        for (const c of (f.feed || [])) {
+          if (!seen.has(c.cardId)) { seen.add(c.cardId); out.push(mapCard(c)); }
         }
-        return out;
-      };
-      setCards(merge([gainData, lossData, salesData]));
+      }
+      setCards(out);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  // Derived slices — data already pre-sorted from server, just slice
+  // Derived slices — the play: buy at low ask, exit at Card Hedge high (FMV)
+  // net of the 10% marketplace fee. Ranked by net edge $, momentum flag for
+  // undervalued + trending up (matches the analytics arb tab + /arbitrage).
   const withEdge = useMemo(() => cards
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
-    .map(c => ({ ...c, edge: +((( c.hi - c.lo) / c.lo) * 100).toFixed(1), spread: +(c.hi - c.lo).toFixed(2) }))
-    .sort((a, b) => b.edge - a.edge), [cards]);
+    .map(c => {
+      const buy = c.lo, fmv = c.hi;
+      const netEdge = +(fmv * (1 - MARKETPLACE_FEE) - buy).toFixed(2);
+      const netPct = +((netEdge / buy) * 100).toFixed(1);
+      return { ...c, buy, fmv, netEdge, netPct, edge: netPct, spread: +(fmv - buy).toFixed(2), momentum: netEdge > 0 && (c.gain7d || 0) > 0 };
+    })
+    .sort((a, b) => b.netEdge - a.netEdge), [cards]);
 
   // Cap at ±500% — anything beyond is a data artifact (null→priced = fake ∞% gain)
   const realGain  = c => c.gain7d > -500 && c.gain7d < 500;
@@ -305,8 +330,9 @@ export default function ArbitrageContent({ onSelectCard }) {
   const topGainer = gainers[0];
   const topLoser  = losers[0];
   const totalVol  = useMemo(() => cards.reduce((s, c) => s + (c.sales30d || 0), 0), [cards]);
-  const avgEdge   = useMemo(() => withEdge.length ? (withEdge.reduce((s, c) => s + c.edge, 0) / withEdge.length).toFixed(1) : '—', [withEdge]);
-  const signals   = withEdge.filter(c => c.edge > 15).length;
+  const netPlays  = useMemo(() => withEdge.filter(c => c.netEdge > 0), [withEdge]);
+  const avgEdge   = useMemo(() => netPlays.length ? (netPlays.reduce((s, c) => s + c.netEdge, 0) / netPlays.length).toFixed(0) : '—', [netPlays]);
+  const signals   = netPlays.length;
 
   const select = (c) => onSelectCard?.(c);
 
@@ -343,7 +369,7 @@ export default function ArbitrageContent({ onSelectCard }) {
         <Stat label="Top Gainer 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || 'no data'} color="#34D88A" glow />
         <Stat label="Top Loser 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || 'no data'} color="#FF5C6C" glow />
         <Stat label="Weekly Volume" value={fmtNum(totalVol)} sub="trades tracked" color="#5B8DEF" />
-        <Stat label="Signals Active" value={signals} sub="cross-platform" color="#9B7BFF" />
+        <Stat label="Net Arb Plays" value={signals} sub={avgEdge === '—' ? 'after 10% fee' : `avg +$${avgEdge} net`} color="#9B7BFF" />
       </div>
 
       {/* ── 4-panel grid ── */}
@@ -390,9 +416,9 @@ export default function ArbitrageContent({ onSelectCard }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15, color: 'var(--txt)' }}>Undervalued Radar</span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>biggest edge × trading volume</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>net edge after 10% fee × liquidity</span>
         </div>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: '#E8B339' }}>{withEdge.length} signals</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: '#E8B339' }}>{netPlays.length} net plays</span>
       </div>
 
       {/* ── Spread matrix ── */}
@@ -401,7 +427,7 @@ export default function ArbitrageContent({ onSelectCard }) {
           <SpreadTable cards={withEdge.slice(0, 100)} onSelect={select} />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)' }}>
-            NO SPREAD DATA AVAILABLE
+            NO NET-EDGE DATA AVAILABLE
           </div>
         )}
       </div>
