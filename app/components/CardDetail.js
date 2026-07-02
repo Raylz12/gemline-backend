@@ -5,6 +5,7 @@ import { useCardStore } from './CardStore';
 import { useAuth } from './AuthContext';
 import { toast } from '../lib/toast';
 import PaymentModal from './PaymentModal';
+import AuthModal from './AuthModal';
 
 function WhyCheap({ cardhedgeId, grade, market }) {
   const [open, setOpen] = useState(false);
@@ -346,6 +347,9 @@ export default function CardDetail({ card: c, onClose }) {
   const [priceStats, setPriceStats] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [chartDays, setChartDays] = useState(30);
+  const [effectiveDays, setEffectiveDays] = useState(30); // actual window shown (auto-widens on sparse data)
+  const [widened, setWidened] = useState(null); // { from, points } when auto-widened to 1Y
+  const [showAuth, setShowAuth] = useState(false);
   const [chartGrade, setChartGrade] = useState(null); // null = use card's own grade
   const [cardWants, setCardWants] = useState([]);
   const [showBidForm, setShowBidForm] = useState(false);
@@ -380,7 +384,7 @@ export default function CardDetail({ card: c, onClose }) {
   }, [c.id]);
 
   const handlePlaceBid = async () => {
-    if (!token) { toast('Please log in first', true); return; }
+    if (!token) { setShowAuth(true); return; }
     if (!bidFormAmount || Number(bidFormAmount) <= 0) { toast('Enter a valid amount', true); return; }
     setSubmittingBid(true);
     try {
@@ -401,25 +405,44 @@ export default function CardDetail({ card: c, onClose }) {
     finally { setSubmittingBid(false); }
   };
 
-  // Fetch price history from Card Hedge — re-runs when grade or days changes
+  // Fetch price history from Card Hedge — re-runs when grade or days changes.
+  // Sparse data: if the requested window has <3 points, auto-widen to 1Y with a label.
   useEffect(() => {
     const chId = c.cardhedge_id;
     if (!chId) return;
+    let cancelled = false;
     setHistoryLoading(true);
     const activeGrade = chartGrade || (c.grader && c.grade ? `${c.grader} ${c.grade}` : 'PSA 10');
-    fetch(`/api/cards/${chId}/history?grade=${encodeURIComponent(activeGrade)}&days=${chartDays}`)
-      .then(r => r.json())
-      .then(d => {
-        setPriceHistory(d.prices || []);
-        setPriceComps(d.comps || []);
-        setPriceStats(d.stats || null);
-      })
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false));
+    const getWindow = (days) =>
+      fetch(`/api/cards/${chId}/history?grade=${encodeURIComponent(activeGrade)}&days=${days}`).then(r => r.json());
+    (async () => {
+      let d = { prices: [], comps: [], stats: null };
+      let days = chartDays;
+      let widenedFrom = null;
+      try {
+        d = await getWindow(chartDays);
+        if ((d.prices || []).length < 3 && chartDays < 365) {
+          const wide = await getWindow(365);
+          if ((wide.prices || []).length > (d.prices || []).length) {
+            widenedFrom = { from: chartDays, points: (d.prices || []).length };
+            d = wide;
+            days = 365;
+          }
+        }
+      } catch {}
+      if (cancelled) return;
+      setPriceHistory(d.prices || []);
+      setPriceComps(d.comps || []);
+      setPriceStats(d.stats || null);
+      setEffectiveDays(days);
+      setWidened(widenedFrom);
+      setHistoryLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [c.cardhedge_id, c.grader, c.grade, chartDays, chartGrade]);
 
   const handleBuy = async (listing) => {
-    if (!token) { toast('Please log in first', true); return; }
+    if (!token) { setShowAuth(true); return; }
     setBuying(listing.id);
     try {
       const res = await fetch(`/api/listings/${listing.id}/buy`, {
@@ -439,7 +462,7 @@ export default function CardDetail({ card: c, onClose }) {
   };
 
   const handleOffer = async () => {
-    if (!token) { toast('Please log in first', true); return; }
+    if (!token) { setShowAuth(true); return; }
     if (!offerAmount || Number(offerAmount) <= 0) { toast('Enter a valid amount', true); return; }
     setSubmittingOffer(true);
     try {
@@ -483,7 +506,7 @@ export default function CardDetail({ card: c, onClose }) {
   }, [c.id, c.player]);
 
   const handleLike = async () => {
-    if (!token) { toast('Please log in to like cards', true); return; }
+    if (!token) { setShowAuth(true); return; }
     const newState = !isLiked;
     setIsLiked(newState);
     try {
@@ -496,7 +519,7 @@ export default function CardDetail({ card: c, onClose }) {
   };
 
   const handlePin = async () => {
-    if (!token) { toast('Please log in to pin cards', true); return; }
+    if (!token) { setShowAuth(true); return; }
     const newState = !isPinned;
     setIsPinned(newState);
     try {
@@ -602,7 +625,7 @@ export default function CardDetail({ card: c, onClose }) {
                 </button>
                 <button className="cd-icon" disabled={addingToPortfolio} title="Add to portfolio"
                   onClick={async () => {
-                    if (!token) { toast('Please log in first', true); return; }
+                    if (!token) { setShowAuth(true); return; }
                     setAddingToPortfolio(true);
                     try {
                       const res = await fetch('/api/portfolio/add', {
@@ -655,8 +678,8 @@ export default function CardDetail({ card: c, onClose }) {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                       <h4 className="cd-h4">Price History</h4>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        {[7, 30, 90].map(d => (
-                          <button key={d} onClick={() => setChartDays(d)} className={`cd-chip ${chartDays === d ? 'on' : ''}`}>{d}D</button>
+                        {[7, 30, 90, 365].map(d => (
+                          <button key={d} onClick={() => setChartDays(d)} className={`cd-chip ${chartDays === d ? 'on' : ''}`}>{d === 365 ? '1Y' : `${d}D`}</button>
                         ))}
                       </div>
                     </div>
@@ -679,14 +702,19 @@ export default function CardDetail({ card: c, onClose }) {
                       </div>
                     ) : priceHistory.length > 1 ? (
                       <div className="cd-chartwrap">
+                        {widened && (
+                          <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
+                            {widened.points === 0 ? 'No sales' : `${widened.points} sale${widened.points === 1 ? '' : 's'}`} in last {widened.from}D — showing 1Y
+                          </div>
+                        )}
                         <PriceChart prices={priceHistory} comps={priceComps} lo={c.lo || null} hi={c.hi || null} currentPrice={c.market || null} />
                         {priceStats && (
                           <div className="cd-tiles" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 10 }}>
                             {[
                               { label: 'OPEN', val: priceStats.open },
                               { label: 'CLOSE', val: priceStats.close },
-                              { label: `${chartDays}D LOW`, val: priceStats.low },
-                              { label: `${chartDays}D HIGH`, val: priceStats.high },
+                              { label: `${effectiveDays === 365 ? '1Y' : `${effectiveDays}D`} LOW`, val: priceStats.low },
+                              { label: `${effectiveDays === 365 ? '1Y' : `${effectiveDays}D`} HIGH`, val: priceStats.high },
                             ].map(({ label, val }) => (
                               <div key={label} className="cd-tile">
                                 <div className="cd-tile-label">{label}</div>
@@ -704,7 +732,9 @@ export default function CardDetail({ card: c, onClose }) {
                         </div>
                       </div>
                     ) : (
-                      <div className="cd-empty" style={{ height: 64 }}>No price history for this {chartDays}D window</div>
+                      <div className="cd-empty" style={{ height: 64 }}>
+                        {chartDays < 365 ? 'No sales in the last year for this grade' : `No price history for this ${chartDays === 365 ? '1Y' : `${chartDays}D`} window`}
+                      </div>
                     )}
                   </div>
                 )}
@@ -819,7 +849,7 @@ export default function CardDetail({ card: c, onClose }) {
             {tab === 'comps' && (
               <div className="cd-tabbody">
                 <div className="cd-block">
-                  <h4 className="cd-h4">Recent Sales ({chartDays}D)</h4>
+                  <h4 className="cd-h4">Recent Sales</h4>
                   {priceComps.length > 0 ? (
                     <div className="cd-comps">
                       {priceComps.slice(0, 12).map((comp, i) => (
@@ -827,13 +857,19 @@ export default function CardDetail({ card: c, onClose }) {
                           <span className="mono cd-ladder-dim">
                             {comp.date ? new Date(comp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                           </span>
-                          <span className="cd-comp-src">{comp.source || 'sale'}</span>
+                          {comp.url ? (
+                            <a className="cd-comp-src" href={comp.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)', textDecoration: 'none' }}>
+                              {comp.source || 'sale'} ↗
+                            </a>
+                          ) : (
+                            <span className="cd-comp-src">{comp.source || 'sale'}</span>
+                          )}
                           <span className="mono cd-comp-price">${Number(comp.price).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="cd-empty" style={{ height: 56 }}>No comp sales in this window — try a longer range on the chart tab</div>
+                    <div className="cd-empty" style={{ height: 56 }}>No recent comparable sales for this grade</div>
                   )}
                 </div>
 
@@ -967,6 +1003,8 @@ export default function CardDetail({ card: c, onClose }) {
           </div>
         </div>
       )}
+
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
 
       {payModal && (
         <PaymentModal
