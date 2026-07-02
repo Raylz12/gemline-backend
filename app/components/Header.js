@@ -172,6 +172,26 @@ export default function Header() {
 
   const handleNavClick = () => {};
 
+  // Navigate to /market with the current search applied (shared store state
+  // already drives the market feed refetch).
+  const goToMarket = () => {
+    setSearchOpen(false);
+    setSearchResults([]);
+    if (pathname !== '/market') router.push('/market');
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      clearTimeout(searchTimer.current);
+      const val = (searchQuery || '').trim();
+      if (val.length < 2) return;
+      goToMarket();
+    } else if (e.key === 'Escape') {
+      setSearchOpen(false);
+    }
+  };
+
   return (
     <>
       <header className={headerHidden ? 'header-hidden' : ''}>
@@ -185,6 +205,7 @@ export default function Header() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" /></svg>
             <input placeholder="Search players, sets, slabs…" value={searchQuery || ''} 
               onChange={e => handleSearchInput(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }} />
             <kbd>/</kbd>
             {searchOpen && searchResults.length > 0 && (
@@ -201,7 +222,7 @@ export default function Header() {
                     </div>
                   </div>
                 ))}
-                <div className="search-all" onClick={() => { setSearchOpen(false); if (pathname !== '/') router.push('/'); }}>
+                <div className="search-all" onClick={goToMarket}>
                   View all results →
                 </div>
               </div>
