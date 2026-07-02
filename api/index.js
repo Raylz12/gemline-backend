@@ -1190,6 +1190,161 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
   }
 });
 
+// ── Marketplace listings CRUD (Sell UI + Market feed) ───────────────────────
+// Prices are stored in CENTS in the DB (matches for-card/buy flow); list
+// endpoints return DOLLARS for display.
+app.get('/api/listings', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ listings: [] });
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 200, 1), 500);
+    const { rows } = await pool.query(`
+      SELECT l.id, l.card_id, l.price, l.kind, l.status, l.open_to_offers,
+             l.listing_type, l.created_at, u.handle AS seller_handle,
+             c.player, c.card_set, c.grader, c.grade, c.year, c.variant, c.sport,
+             c.ebay_thumb, c.image_url,
+             (SELECT COUNT(*) FROM listing_offers o WHERE o.listing_id = l.id AND o.status = 'pending') AS offer_count
+      FROM listings l
+      LEFT JOIN users u ON u.id = l.seller_id
+      LEFT JOIN cards c ON c.id = l.card_id
+      WHERE l.status = 'active' AND l.kind = 'buy_now'
+      ORDER BY l.created_at DESC
+      LIMIT $1
+    `, [limit]);
+    res.json({
+      listings: rows.map(l => ({
+        id: l.id, card_id: l.card_id, cardId: l.card_id,
+        price: Number(l.price) / 100,
+        kind: l.kind, status: l.status,
+        open_to_offers: l.open_to_offers ?? false,
+        listing_type: l.listing_type || 'buy_now',
+        seller_handle: l.seller_handle || 'seller',
+        offer_count: Number(l.offer_count) || 0,
+        player: l.player, card_set: l.card_set, grader: l.grader, grade: l.grade,
+        year: l.year, variant: l.variant, sport: l.sport,
+        ebay_thumb: l.ebay_thumb, image_url: l.image_url,
+        created_at: l.created_at,
+      })),
+    });
+  } catch (e) {
+    console.error('listings/list error:', e.message);
+    res.json({ listings: [] });
+  }
+});
+
+app.get('/api/listings/mine', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ listings: [] });
+    const { rows } = await pool.query(`
+      SELECT l.id, l.card_id, l.price, l.kind, l.status, l.open_to_offers,
+             l.listing_type, l.description, l.photo_urls, l.created_at,
+             c.player, c.card_set, c.grader, c.grade, c.year, c.variant, c.sport,
+             c.ebay_thumb, c.image_url,
+             (SELECT COUNT(*) FROM listing_offers o WHERE o.listing_id = l.id AND o.status = 'pending') AS offer_count
+      FROM listings l
+      LEFT JOIN cards c ON c.id = l.card_id
+      WHERE l.seller_id = $1 AND l.status IN ('active','sold','completed')
+      ORDER BY l.created_at DESC
+      LIMIT 200
+    `, [req.userId]);
+    res.json({
+      listings: rows.map(l => ({
+        id: l.id, card_id: l.card_id,
+        price: Number(l.price) / 100,
+        kind: l.kind, status: l.status,
+        open_to_offers: l.open_to_offers ?? false,
+        listing_type: l.listing_type || 'buy_now',
+        description: l.description || '',
+        photo_urls: l.photo_urls || [],
+        offer_count: Number(l.offer_count) || 0,
+        player: l.player, card_set: l.card_set, grader: l.grader, grade: l.grade,
+        year: l.year, variant: l.variant, sport: l.sport,
+        ebay_thumb: l.ebay_thumb, image_url: l.image_url,
+        created_at: l.created_at,
+      })),
+    });
+  } catch (e) {
+    console.error('listings/mine error:', e.message);
+    res.json({ listings: [] });
+  }
+});
+
+app.post('/api/listings', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const { cardId, price, listingType, openToOffers, description, photos } = req.body || {};
+    if (!cardId) return res.status(400).json({ error: 'cardId required' });
+    const dollars = Number(price);
+    if (!isFinite(dollars) || dollars <= 0) return res.status(400).json({ error: 'Price must be greater than 0' });
+    const { rows: [card] } = await pool.query('SELECT id FROM cards WHERE id = $1', [cardId]);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    const cents = Math.round(dollars * 100);
+    const photoUrls = Array.isArray(photos) ? photos.slice(0, 8) : [];
+    const { rows: [listing] } = await pool.query(`
+      INSERT INTO listings (card_id, seller_id, kind, price, currency, status,
+                            open_to_offers, listing_type, description, photo_urls, created_at)
+      VALUES ($1, $2, 'buy_now', $3, 'USD', 'active', $4, $5, $6, $7, NOW())
+      RETURNING id, card_id, price, status, open_to_offers, listing_type, created_at
+    `, [cardId, req.userId, cents, !!openToOffers, listingType || 'buy_now',
+        description || null, JSON.stringify(photoUrls)]);
+    res.json({ ...listing, price: Number(listing.price) / 100 });
+  } catch (e) {
+    console.error('listings/create error:', e.message);
+    res.status(500).json({ error: 'Failed to create listing' });
+  }
+});
+
+app.put('/api/listings/:id', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const { rows: [l] } = await pool.query('SELECT id, seller_id FROM listings WHERE id = $1', [req.params.id]);
+    if (!l) return res.status(404).json({ error: 'Listing not found' });
+    if (l.seller_id !== req.userId) return res.status(403).json({ error: 'Not your listing' });
+    const updates = [];
+    const params = [];
+    if (req.body?.price !== undefined) {
+      const dollars = Number(req.body.price);
+      if (!isFinite(dollars) || dollars <= 0) return res.status(400).json({ error: 'Price must be greater than 0' });
+      params.push(Math.round(dollars * 100)); updates.push(`price = $${params.length}`);
+    }
+    if (req.body?.openToOffers !== undefined) { params.push(!!req.body.openToOffers); updates.push(`open_to_offers = $${params.length}`); }
+    if (req.body?.description !== undefined) { params.push(req.body.description || null); updates.push(`description = $${params.length}`); }
+    if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
+    params.push(req.params.id);
+    const { rows: [upd] } = await pool.query(
+      `UPDATE listings SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING id, price, status`, params);
+    res.json({ ...upd, price: Number(upd.price) / 100 });
+  } catch (e) {
+    console.error('listings/update error:', e.message);
+    res.status(500).json({ error: 'Failed to update listing' });
+  }
+});
+
+app.delete('/api/listings/:id', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const { rows: [l] } = await pool.query('SELECT id, seller_id, card_id FROM listings WHERE id = $1', [req.params.id]);
+    if (!l) return res.status(404).json({ error: 'Listing not found' });
+    if (l.seller_id !== req.userId) return res.status(403).json({ error: 'Not your listing' });
+    await pool.query("UPDATE listings SET status = 'cancelled' WHERE id = $1", [req.params.id]);
+    // Keep any linked portfolio item in sync
+    await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [req.params.id]).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('listings/delete error:', e.message);
+    res.status(500).json({ error: 'Failed to cancel listing' });
+  }
+});
+
 // ── Buy a listing directly (CardDetail buy flow) ────────────────────────────
 app.post('/api/listings/:id/buy', requireAuth, async (req, res) => {
   try {
