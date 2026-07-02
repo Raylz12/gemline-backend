@@ -956,8 +956,8 @@ app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bids (
       id SERIAL PRIMARY KEY,
-      listing_id TEXT NOT NULL,
-      bidder_id TEXT NOT NULL,
+      listing_id UUID NOT NULL,
+      bidder_id UUID NOT NULL,
       amount NUMERIC NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -1008,14 +1008,15 @@ app.post('/api/auctions/:id/bid', requireAuth, async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Outbid notification (post-commit, fire-and-forget)
+    // Outbid notification (post-commit; awaited — serverless freezes kill fire-and-forget)
     if (prevTop?.bidder_id && prevTop.bidder_id !== req.userId) {
-      pool.query('SELECT player FROM cards WHERE id = $1', [listing.card_id])
-        .then(({ rows: [card] }) => notify(pool, prevTop.bidder_id, 'outbid',
+      try {
+        const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [listing.card_id]);
+        await notify(pool, prevTop.bidder_id, 'outbid',
           `You've been outbid: ${card?.player || 'your card'}`,
           `New high bid is $${bidAmount.toLocaleString()}. Jump back in before it ends.`,
-          { listingId, cardId: listing.card_id }))
-        .catch(() => {});
+          { listingId, cardId: listing.card_id });
+      } catch {}
     }
 
     const reserve = listing.reserve_price != null ? Number(listing.reserve_price) : null;
@@ -1132,8 +1133,8 @@ app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS listing_offers (
         id SERIAL PRIMARY KEY,
-        listing_id TEXT NOT NULL,
-        buyer_id TEXT NOT NULL,
+        listing_id UUID NOT NULL,
+        buyer_id UUID NOT NULL,
         amount NUMERIC NOT NULL,
         status TEXT DEFAULT 'pending',
         created_at TIMESTAMPTZ DEFAULT NOW()
@@ -1144,13 +1145,14 @@ app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
       [req.params.id, req.userId, Math.round(amount * 100)]
     );
 
-    // Notify the seller
-    pool.query('SELECT player FROM cards WHERE id = $1', [l.card_id])
-      .then(({ rows: [card] }) => notify(pool, l.seller_id, 'offer_received',
+    // Notify the seller (awaited — serverless freezes kill fire-and-forget)
+    try {
+      const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [l.card_id]);
+      await notify(pool, l.seller_id, 'offer_received',
         `New offer: ${card?.player || 'your listing'} — $${amount.toLocaleString()}`,
         `Listed at $${(Number(l.price) / 100).toLocaleString()}. Review it in your Offers inbox.`,
-        { listingId: l.id, cardId: l.card_id, offerId: offer.id }))
-      .catch(() => {});
+        { listingId: l.id, cardId: l.card_id, offerId: offer.id });
+    } catch {}
 
     res.json({ success: true, offerId: offer.id });
   } catch (e) {
@@ -1168,8 +1170,8 @@ app.get('/api/offers', requireAuth, async (req, res) => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS listing_offers (
         id SERIAL PRIMARY KEY,
-        listing_id TEXT NOT NULL,
-        buyer_id TEXT NOT NULL,
+        listing_id UUID NOT NULL,
+        buyer_id UUID NOT NULL,
         amount NUMERIC NOT NULL,
         status TEXT DEFAULT 'pending',
         created_at TIMESTAMPTZ DEFAULT NOW()
