@@ -71,7 +71,10 @@ export async function authenticateAtHub(repo, stripe, order, { result = 'passed'
 
 // Carrier delivered webhook → start the inspection window.
 export async function markDelivered(repo, order, shipment = null) {
-  if (shipment) await transition(repo, 'shipment', shipment, 'delivered', {});
+  if (shipment) {
+    shipment.delivered_at = new Date().toISOString();
+    await transition(repo, 'shipment', shipment, 'delivered', {});
+  }
   await transition(repo, 'order', order, ORDER.DELIVERED, {});
   order.inspection_ends_at = new Date(Date.now() + INSPECTION_DAYS * 86400e3).toISOString();
   await repo.orders.update(order);

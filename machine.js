@@ -24,15 +24,17 @@ export function can(type, from, to) {
 export async function transition(repo, type, record, to, { actor = null, payload = null } = {}) {
   const from = record.status;
   if (!can(type, from, to)) throw new TransitionError(type, from, to);
+  const now = new Date().toISOString();
   record.status = to;
-  record.updated_at = new Date().toISOString();
+  // Only touch updated_at when the row actually has that column (shipments don't).
+  if ('updated_at' in record || !('created_at' in record)) record.updated_at = now;
   // Persist the new state — without this, status changes only lived in memory
   // and every order stayed 'created' in the database.
   const key = REPO_KEY[type];
   if (key && repo[key]?.update) await repo[key].update(record);
   await repo.events.insert({
     entity_type: type, entity_id: record.id, from_state: from, to_state: to,
-    actor_id: actor, payload, created_at: record.updated_at,
+    actor_id: actor, payload, created_at: now,
   });
   return record;
 }
