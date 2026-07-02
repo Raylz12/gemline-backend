@@ -28,13 +28,39 @@ export function settlementRouter(repo, stripe) {
   };
 
   // ── orders (auth required) ──
-  r.post('/orders', requireAuth, wrap(req => orders.create(repo, stripe, { ...req.body, userId: req.userId })));
-  r.post('/orders/:id/ship', requireAuth, wrap(async req => orders.ship(repo, await need('orders', req.params.id), req.body)));
-  r.post('/orders/:id/authenticate', requireAuth, wrap(async req => orders.authenticateAtHub(repo, stripe, await need('orders', req.params.id), req.body)));
-  r.post('/orders/:id/delivered', requireAuth, wrap(async req => orders.markDelivered(repo, await need('orders', req.params.id))));
-  r.post('/orders/:id/settle', requireAuth, wrap(async req => orders.settle(repo, stripe, await need('orders', req.params.id))));
-  r.post('/orders/:id/dispute', requireAuth, wrap(async req => orders.dispute(repo, await need('orders', req.params.id), req.body)));
-  r.post('/orders/:id/resolve', requireAuth, wrap(async req => orders.resolveDispute(repo, stripe, await need('orders', req.params.id), req.body)));
+  // Ownership guards: these lifecycle moves change who gets paid, so the caller
+  // must be a party to the order (or platform admin) — never an arbitrary user.
+  const forbid = (msg = 'Not your order') => { const e = new Error(msg); e.code = 'FORBIDDEN'; throw e; };
+  const isAdmin = async (userId) => (await repo.users.get(userId))?.role === 'admin';
+  r.post('/orders', requireAuth, wrap(req => orders.create(repo, stripe, { ...req.body, buyerId: req.userId, userId: req.userId })));
+  r.post('/orders/:id/ship', requireAuth, wrap(async req => {
+    const o = await need('orders', req.params.id);
+    if (o.seller_id !== req.userId) forbid('Only the seller can mark shipped');
+    return orders.ship(repo, o, req.body);
+  }));
+  r.post('/orders/:id/authenticate', requireAuth, wrap(async req => {
+    if (!(await isAdmin(req.userId))) forbid('Authentication hub is platform-only');
+    return orders.authenticateAtHub(repo, stripe, await need('orders', req.params.id), req.body);
+  }));
+  r.post('/orders/:id/delivered', requireAuth, wrap(async req => {
+    const o = await need('orders', req.params.id);
+    if (o.buyer_id !== req.userId && o.seller_id !== req.userId && !(await isAdmin(req.userId))) forbid();
+    return orders.markDelivered(repo, o);
+  }));
+  r.post('/orders/:id/settle', requireAuth, wrap(async req => {
+    const o = await need('orders', req.params.id);
+    if (o.buyer_id !== req.userId && !(await isAdmin(req.userId))) forbid('Only the buyer can settle');
+    return orders.settle(repo, stripe, o);
+  }));
+  r.post('/orders/:id/dispute', requireAuth, wrap(async req => {
+    const o = await need('orders', req.params.id);
+    if (o.buyer_id !== req.userId && o.seller_id !== req.userId) forbid();
+    return orders.dispute(repo, o, { ...req.body, openerId: req.userId });
+  }));
+  r.post('/orders/:id/resolve', requireAuth, wrap(async req => {
+    if (!(await isAdmin(req.userId))) forbid('Dispute resolution is platform-only');
+    return orders.resolveDispute(repo, stripe, await need('orders', req.params.id), req.body);
+  }));
 
   // ── trades (auth required) ──
   r.post('/trades', requireAuth, wrap(req => trades.propose(repo, { ...req.body, proposerId: req.userId })));

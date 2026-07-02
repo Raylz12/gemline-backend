@@ -18,7 +18,7 @@ async function vaultedItem(repo, cardId, ownerId) {
 
 const repo = memoryRepo();
 const buyer = await repo.users.insert({ handle: 'buyer', email: 'b@x.com', role: 'buyer' });
-const seller = await repo.users.insert({ handle: 'seller', email: 's@x.com', role: 'seller' });
+const seller = await repo.users.insert({ handle: 'seller', email: 's@x.com', role: 'seller', stripe_account_id: 'acct_test_seller' });
 const card = await repo.cards.insert({ player: 'Luka Dončić', grader: 'PSA', grade: '10' });
 
 console.log('\n1. Direct-ship order, happy path');
