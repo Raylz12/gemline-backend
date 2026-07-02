@@ -37,6 +37,7 @@ app.use(cors({
 // Camera scans post a full-resolution photo — needs a bigger body limit (registered
 // BEFORE the global 128kb parser; express.json skips already-parsed bodies).
 app.use('/api/cards/analyze', express.json({ limit: '6mb' }));
+app.use('/api/portfolio/:id/verify-scan', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '100kb' }));   // prevent large payload attacks
 app.use(express.static(join(__dirname, '..', 'public')));
 
