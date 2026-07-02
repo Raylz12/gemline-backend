@@ -150,10 +150,12 @@ export default function Header() {
           const results = (data.feed || []).map(c => ({
             id: c.cardId, player: c.player, sport: c.sport, set: c.set,
             grader: c.grader, grade: c.grade, market: Number(c.marketPrice) || 0,
-            thumbnail: c.thumbnail, gain7d: Number(c.gain_7d) || 0,
+            thumbnail: c.thumbnail, gain7d: Number(c.gain7d ?? c.gain_7d) || 0,
             lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
-            sales7d: Number(c.sales_7d) || 0, sales30d: Number(c.sales_30d) || 0,
+            sales7d: Number(c.sales7d ?? c.sales_7d) || 0, sales30d: Number(c.sales30d ?? c.sales_30d) || 0,
             rookie: c.rookie, variant: c.variant, year: c.year, confidence: c.confidence,
+            // Without these the card detail can't load charts/comps/grade ladder ("no data on card")
+            cardhedge_id: c.cardhedge_id, grades: c.grades || [], num: c.num, saleCount: c.saleCount,
           }));
           setSearchResults(results);
           setSearchOpen(results.length > 0);
