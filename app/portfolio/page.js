@@ -454,7 +454,7 @@ export default function PortfolioPage() {
               }} />
               <div className="nm" style={{ flex: 1, minWidth: 0 }}>
                 {item.player}
-                <small style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>{item.set}</span><span className="mchip mchip-grade">{`${item.grader || 'RAW'} ${item.grade || ''}`.trim()}</span></small>
+                <small style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.set}</span><span className="mchip mchip-grade" style={{ flexShrink: 0 }}>{`${item.grader || 'RAW'} ${item.grade || ''}`.trim()}</span></small>
               </div>
               <div className="num">
                 {item.marketValue ? fmt(item.marketValue) : '—'}
