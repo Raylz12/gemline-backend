@@ -64,7 +64,9 @@ header{position:sticky;top:0;z-index:40;background:#0f1117;border-bottom:1px sol
 .avatar{width:36px;height:36px;border-radius:var(--r-sm);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff}
 .menu{display:none}
 
-main{max-width:1320px;margin:0 auto;padding:26px 22px 80px;position:relative;z-index:1}
+main{max-width:1320px;margin:0 auto;padding:26px 22px 80px;position:relative}
+/* NOTE: main must NOT create a stacking context (no z-index) — fixed .overlay/.modal-overlay
+   rendered inside main get trapped under the sticky header (z100) / mobile nav (z200) otherwise. */
 .view{display:none;animation:fade .35s ease}
 .view.on{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
