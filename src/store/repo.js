@@ -25,7 +25,8 @@ let _seq = 0;
 const fakeId = (p) => `${p}_${Date.now()}_${++_seq}`;
 
 export const stripeStub = {
-  async authorize({ amount })               { return { id: fakeId('pi'), amount, status: 'requires_capture' }; },
+  async authorize({ amount })               { return { id: fakeId('pi'), amount, status: 'requires_capture', client_secret: null }; },
+  async retrieve(piId)                      { return { id: piId, status: 'requires_capture', client_secret: null }; },
   async capture(piId)                       { return { id: piId, status: 'succeeded' }; },
   async capturePartial(piId, amount)        { return { id: piId, amount, status: 'succeeded' }; },
   async transfer({ amount, destination })   { return { id: fakeId('tr'), amount, destination }; },

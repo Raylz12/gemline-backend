@@ -36,6 +36,57 @@ export async function create(repo, stripe, { listingId = null, cardId, buyerId, 
   return transition(repo, 'order', order, ORDER.AWAITING_SHIPMENT, { actor: sellerId });
 }
 
+// ── Checkout with real payment capture ──────────────────────────────────────
+// beginCheckout: order starts in pending_payment with an unconfirmed PI whose
+// client_secret goes back to the buyer's Payment Element. Nothing is owed or
+// shipped until the buyer actually confirms the payment (finalizePayment).
+export async function beginCheckout(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, method, paymentDueAt = null }) {
+  const order = await repo.orders.insert({
+    listing_id: listingId, card_id: cardId, buyer_id: buyerId, seller_id: sellerId,
+    amount, platform_fee: fee, currency: 'USD', fulfillment_method: method,
+    status: ORDER.CREATED, payment_due_at: paymentDueAt, created_at: new Date().toISOString(),
+  });
+  await repo.events.insert({ entity_type: 'order', entity_id: order.id, from_state: null, to_state: ORDER.CREATED });
+
+  const escrow = await escrowSvc.hold(repo, stripe, {
+    orderId: order.id, payerId: buyerId, payeeId: sellerId, amount, fee,
+    metadata: { gemline_listing_id: listingId || '', gemline_buyer_id: buyerId || '', gemline_seller_id: sellerId || '' },
+  });
+  order.escrow_id = escrow.id;
+  await transition(repo, 'order', order, ORDER.PENDING_PAYMENT, { actor: buyerId, payload: { amount, fee } });
+  return { order, escrow, clientSecret: escrow.client_secret, paymentIntentId: escrow.stripe_payment_intent_id };
+}
+
+// Buyer confirmed the PI (webhook or client-side completion ping) — move the
+// order into fulfillment. Idempotent: a non-pending order is returned as-is.
+export async function finalizePayment(repo, stripe, order, { actor = null } = {}) {
+  if (order.status !== ORDER.PENDING_PAYMENT) return order;
+  if (order.fulfillment_method === 'vault') {
+    // Vault-held card — transfer ownership and settle instantly (capture + payout).
+    const listing = order.listing_id ? await repo.listings.get(order.listing_id) : null;
+    const vaultItemId = listing?.vault_item_id || null;
+    if (vaultItemId) {
+      const vi = await repo.vault.get(vaultItemId);
+      if (vi) await vaultSvc.transferOwnership(repo, vi, order.buyer_id);
+    }
+    return settle(repo, stripe, order);
+  }
+  return transition(repo, 'order', order, ORDER.AWAITING_SHIPMENT, { actor });
+}
+
+// Buyer abandoned/expired checkout — cancel PI, void hold, cancel order.
+// Safe: the PI was never confirmed, so no funds were ever authorized.
+export async function cancelPendingPayment(repo, stripe, order, { reason = 'payment_abandoned' } = {}) {
+  if (order.status !== ORDER.PENDING_PAYMENT) return { order, pi: null };
+  let pi = null;
+  if (order.escrow_id) {
+    const escrow = await repo.escrow.get(order.escrow_id);
+    if (escrow && escrow.status === 'held') pi = await escrowSvc.voidHold(repo, stripe, escrow);
+  }
+  await transition(repo, 'order', order, ORDER.CANCELLED, { payload: { reason } });
+  return { order, pi };
+}
+
 // Seller ships. For 'authenticated', the first hop goes to the hub.
 export async function ship(repo, order, { carrier, tracking, insuredValue, signature = true }) {
   const toHub = order.fulfillment_method === 'authenticated';

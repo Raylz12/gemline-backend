@@ -125,19 +125,52 @@ export async function createPaymentIntent({ amount, currency = 'USD', buyerId, l
   };
 }
 
-export async function authorize({ amount, currency = 'usd', payerId }) {
+export async function authorize({ amount, currency = 'usd', payerId, metadata = {} }) {
   const stripe = await getStripe();
   if (!stripe) {
-    return { id: `pi_stub_${Date.now()}`, status: 'requires_capture' };
+    return { id: `pi_stub_${Date.now()}`, status: 'requires_capture', client_secret: null };
   }
   const amountCents = Math.round(Number(amount));
   const pi = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: currency.toLowerCase(),
     capture_method: 'manual',
-    metadata: { payer_id: payerId || '' },
+    automatic_payment_methods: { enabled: true },
+    metadata: { payer_id: payerId || '', ...metadata },
   });
-  return { id: pi.id, status: pi.status, amount: pi.amount };
+  // client_secret is returned to the buyer's Payment Element so they can
+  // confirm the PI. It is never persisted — retrieve() re-fetches it on demand.
+  return { id: pi.id, status: pi.status, amount: pi.amount, client_secret: pi.client_secret };
+}
+
+// Retrieve current PI state (status + client_secret for resumed checkouts).
+export async function retrieve(paymentIntentId) {
+  const stripe = await getStripe();
+  if (!stripe || !paymentIntentId || paymentIntentId.startsWith('pi_stub')) {
+    return { id: paymentIntentId, status: 'requires_capture', client_secret: null };
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  return { id: pi.id, status: pi.status, amount: pi.amount, client_secret: pi.client_secret };
+}
+
+// Cancel an unconfirmed/uncaptured PI (checkout abandoned or expired).
+// Defensive: never throws — an already-cancelled/settled PI reports its state.
+export async function cancelIntent(paymentIntentId) {
+  const stripe = await getStripe();
+  if (!stripe || !paymentIntentId || paymentIntentId.startsWith('pi_stub')) {
+    return { id: paymentIntentId, status: 'canceled' };
+  }
+  try {
+    const pi = await stripe.paymentIntents.cancel(paymentIntentId);
+    return { id: pi.id, status: pi.status };
+  } catch (e) {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+      return { id: pi.id, status: pi.status, error: e.message };
+    } catch {
+      return { id: paymentIntentId, status: 'unknown', error: e.message };
+    }
+  }
 }
 
 // Capture is defensive: it never throws. If the PI was never confirmed by the
@@ -207,6 +240,8 @@ export async function verifyWebhook(rawBody, signature) {
 // ── Real Stripe client object (replaces stripeStub in production) ─────────────
 export const stripeClient = {
   authorize,
+  retrieve,
+  cancel: cancelIntent,
   capture,
   transfer,
   refund,

@@ -945,18 +945,21 @@ async function settleEndedAuctions(r, { force = false } = {}) {
         continue;
       }
 
-      // Winner — create escrow order at the winning bid
-      const order = await ordersSvc.create(r, stripe, {
+      // Winner — create a pending_payment order. The winner must complete
+      // payment (Payment Element) within 24h before anything ships; if they
+      // don't, the lazy sweep cancels it and the seller can relist.
+      const { order } = await ordersSvc.beginCheckout(r, stripe, {
         listingId: a.id, cardId: a.card_id, buyerId: a.winner_id, sellerId: a.seller_id,
         amount: winningBid, fee: Math.round(winningBid * 0.1),
-        method: a.vault_item_id ? 'vault' : 'direct', vaultItemId: a.vault_item_id || null,
+        method: a.vault_item_id ? 'vault' : 'direct',
+        paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
       });
       await pool.query("UPDATE listings SET status = 'sold' WHERE id = $1", [a.id]);
       await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [a.id]).catch(() => {});
-      await notify(pool, a.winner_id, 'auction_won', `You won: ${a.player} — ${priceStr}`, 'Payment is held in escrow. The seller will ship your card.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
+      await notify(pool, a.winner_id, 'auction_won', `You won: ${a.player} — ${priceStr}`, 'Complete payment within 24h to secure your card — open Orders to pay now.', { listingId: a.id, cardId: a.card_id, orderId: order.id, action: 'complete_payment' });
       const wonTpl = emailTpl.auctionWon({ player: a.player, price: priceStr });
       await emailUser(pool, a.winner_id, wonTpl.subject, wonTpl.html);
-      await notify(pool, a.seller_id, 'auction_sold', `Sold: ${a.player} — ${priceStr}`, 'Ship the card to complete the sale and release your payout.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
+      await notify(pool, a.seller_id, 'auction_sold', `Sold: ${a.player} — ${priceStr}`, 'The winner has 24h to pay. You will be notified to ship once payment clears.', { listingId: a.id, cardId: a.card_id, orderId: order.id });
       settled++;
     } catch (e) {
       console.error('settle auction', a.id, 'error:', e.message);
@@ -1357,29 +1360,165 @@ app.delete('/api/listings/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ── Checkout capture plumbing ─────────────────────────────────────────────────
+// Payment windows: direct buys get 30 min (buyer is at the keyboard); auction
+// wins and accepted offers get 24 h (buyer gets a notification + Orders CTA).
+const BUY_PAYMENT_WINDOW_MS = 30 * 60_000;
+const NOTIFIED_PAYMENT_WINDOW_MS = 24 * 3600_000;
+const paymentDue = (ms) => new Date(Date.now() + ms).toISOString();
+
+// The buyer's PI actually confirmed — move the order into fulfillment,
+// finish listing/portfolio bookkeeping, and tell both parties. Idempotent.
+async function finalizePaidOrder(r, stripe, order) {
+  if (order.status !== 'pending_payment') return order;
+  const pool = r.pool;
+  await ordersSvc.finalizePayment(r, stripe, order);
+  if (pool) {
+    if (order.listing_id) {
+      await pool.query("UPDATE listings SET status = 'sold' WHERE id = $1 AND status NOT IN ('sold', 'completed')", [order.listing_id]).catch(() => {});
+      await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [order.listing_id]).catch(() => {});
+    }
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+    const amt = `$${(Number(order.amount) / 100).toLocaleString()}`;
+    await notify(pool, order.seller_id, 'order_paid',
+      `Sold: ${card?.player || 'card'} — ${amt}`,
+      order.fulfillment_method === 'vault'
+        ? 'Payment captured — the vaulted card transferred to the buyer and your payout is on its way.'
+        : 'Payment received and held in escrow. Ship the card to release your payout.',
+      { orderId: order.id, cardId: order.card_id, listingId: order.listing_id });
+    await notify(pool, order.buyer_id, 'payment_confirmed',
+      `Payment confirmed: ${card?.player || 'card'} — ${amt}`,
+      order.fulfillment_method === 'vault'
+        ? 'Vault transfer complete — the card is yours.'
+        : 'Your payment is held in escrow. The seller will ship your card.',
+      { orderId: order.id, cardId: order.card_id });
+    const soldTpl = emailTpl.orderPaid?.({ player: card?.player || 'your card', amount: amt });
+    if (soldTpl) await emailUser(pool, order.seller_id, soldTpl.subject, soldTpl.html);
+  }
+  return order;
+}
+
+// Checkout abandoned, failed, or expired — cancel PI + order and unlock the
+// listing so inventory is never stuck behind an unpaid order.
+async function cancelCheckout(r, stripe, order, reason) {
+  const pool = r.pool;
+  const { pi } = await ordersSvc.cancelPendingPayment(r, stripe, order, { reason });
+  const listing = order.listing_id ? await r.listings.get(order.listing_id).catch(() => null) : null;
+  if (pool && listing) {
+    if (listing.kind === 'auction') {
+      // The auction already ended — close it out so the seller can relist.
+      if (listing.status === 'sold') await pool.query("UPDATE listings SET status = 'completed' WHERE id = $1", [listing.id]).catch(() => {});
+      await notify(pool, order.seller_id, 'auction_payment_lapsed',
+        'Auction winner did not pay',
+        'The winning bidder never completed payment, so the sale was cancelled. You can relist the card anytime.',
+        { listingId: listing.id, cardId: order.card_id, orderId: order.id });
+    } else if (listing.status === 'sold') {
+      // Fixed-price listing — put it back on the market.
+      await pool.query("UPDATE listings SET status = 'active' WHERE id = $1", [listing.id]).catch(() => {});
+      await pool.query('UPDATE portfolios SET is_listed = true, listing_id = $1 WHERE user_id = $2 AND card_id = $3 AND listing_id IS NULL', [listing.id, order.seller_id, order.card_id]).catch(() => {});
+      await pool.query("UPDATE listing_offers SET status = 'expired' WHERE listing_id = $1 AND status = 'accepted'", [listing.id]).catch(() => {});
+    }
+  }
+  if (pool && reason !== 'buyer_cancelled') {
+    await notify(pool, order.buyer_id, 'order_cancelled',
+      'Order cancelled — payment not completed',
+      'Your payment was not completed in time, so the order was cancelled. No charge was made.',
+      { orderId: order.id, cardId: order.card_id });
+  }
+  return pi;
+}
+
+// Lazy sweep: pending_payment orders past their window get cancelled and their
+// listings unlocked. Throttled to 1/min; runs from order reads + buy attempts.
+// (A cron would be strictly better for abandoned carts nobody re-reads — noted
+//  in report: add a Vercel cron hitting POST /api/checkout/sweep every ~10min.)
+let _lastPendingSweep = 0;
+async function expirePendingPayments(r, { force = false } = {}) {
+  const pool = r.pool;
+  if (!pool) return { expired: 0 };
+  const now = Date.now();
+  if (!force && now - _lastPendingSweep < 60_000) return { skipped: true };
+  _lastPendingSweep = now;
+  const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+  const { rows } = await pool.query(
+    "SELECT id FROM orders WHERE status = 'pending_payment' AND payment_due_at IS NOT NULL AND payment_due_at < NOW() LIMIT 20");
+  let expired = 0;
+  for (const row of rows) {
+    try {
+      const order = await r.orders.get(row.id);
+      if (!order || order.status !== 'pending_payment') continue;
+      await cancelCheckout(r, stripe, order, 'payment_window_expired');
+      expired++;
+    } catch (e) { console.error('pending sweep', row.id, e.message); }
+  }
+  return { expired };
+}
+
+app.post('/api/checkout/sweep', async (req, res) => {
+  try {
+    const r = await getRepo();
+    res.json({ ok: true, ...(await expirePendingPayments(r, { force: true })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Buy a listing directly (CardDetail buy flow) ────────────────────────────
+// Creates a pending_payment order + manual-capture PI and returns the PI's
+// client_secret — the buyer confirms in the Payment Element before anything
+// ships. The listing is locked ('sold') while payment is pending and unlocks
+// automatically if the buyer abandons.
 app.post('/api/listings/:id/buy', requireAuth, async (req, res) => {
   try {
     const r = await getRepo();
+    const pool = r.pool;
     const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
-    const l = await r.listings.get(req.params.id);
+    let l = await r.listings.get(req.params.id);
     if (!l) return res.status(404).json({ error: 'Listing not found' });
-    if (l.status !== 'active') return res.status(410).json({ error: 'Listing no longer available' });
     if (l.seller_id === req.userId) return res.status(400).json({ error: 'Cannot buy your own listing' });
-    const method = l.vault_item_id ? 'vault' : 'direct';
-    const order = await ordersSvc.create(r, stripe, {
-      listingId: l.id, cardId: l.card_id, buyerId: req.userId, sellerId: l.seller_id,
-      amount: Number(l.price), fee: Math.round(Number(l.price) * 0.1),
-      method, vaultItemId: l.vault_item_id || null,
-    });
-    // Mark listing sold + sync portfolio flag if the seller had it linked
-    if (r.pool) {
-      await r.pool.query("UPDATE listings SET status = 'completed' WHERE id = $1", [l.id]).catch(e => console.error('listing complete:', e.message));
-      await r.pool.query("UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1", [l.id]).catch(() => {});
-    } else {
-      await r.listings.update({ id: l.id, status: 'completed' }).catch(() => {});
+
+    // If the listing is locked by an expired pending-payment order, free it now.
+    if (l.status !== 'active' && pool) {
+      const { rows: [stale] } = await pool.query(
+        "SELECT id FROM orders WHERE listing_id = $1 AND status = 'pending_payment' AND payment_due_at < NOW() LIMIT 1", [l.id]);
+      if (stale) {
+        const staleOrder = await r.orders.get(stale.id);
+        if (staleOrder) await cancelCheckout(r, stripe, staleOrder, 'payment_window_expired');
+        l = await r.listings.get(req.params.id);
+      }
     }
-    res.json({ order, instant: order.status === 'settled' });
+    if (l.status !== 'active') return res.status(410).json({ error: 'Listing no longer available' });
+
+    // Atomic lock — loses the race politely if two buyers hit Buy at once.
+    if (pool) {
+      const { rows } = await pool.query("UPDATE listings SET status = 'sold' WHERE id = $1 AND status = 'active' RETURNING id", [l.id]);
+      if (!rows.length) return res.status(410).json({ error: 'Listing no longer available' });
+    }
+
+    const method = l.vault_item_id ? 'vault' : 'direct';
+    try {
+      const { order, clientSecret, paymentIntentId } = await ordersSvc.beginCheckout(r, stripe, {
+        listingId: l.id, cardId: l.card_id, buyerId: req.userId, sellerId: l.seller_id,
+        amount: Number(l.price), fee: Math.round(Number(l.price) * 0.1),
+        method, paymentDueAt: paymentDue(BUY_PAYMENT_WINDOW_MS),
+      });
+      if (!clientSecret) {
+        // No Stripe key (dev/stub) — finalize immediately so local flows still work.
+        await finalizePaidOrder(r, stripe, order);
+        return res.json({ order, instant: order.status === 'settled' });
+      }
+      res.json({
+        order: { id: order.id, status: order.status, amount: order.amount, platform_fee: order.platform_fee },
+        requiresPayment: true,
+        payment: {
+          orderId: order.id, clientSecret, paymentIntentId,
+          amount: Number(order.amount), fee: Number(order.platform_fee),
+          expiresAt: order.payment_due_at,
+        },
+      });
+    } catch (e) {
+      // Order/PI creation failed after we locked the listing — unlock it.
+      if (pool) await pool.query("UPDATE listings SET status = 'active' WHERE id = $1 AND status = 'sold'", [l.id]).catch(() => {});
+      throw e;
+    }
   } catch (e) {
     console.error('listings/buy error:', e.message);
     res.status(500).json({ error: e.message || 'Purchase failed' });
@@ -1387,6 +1526,85 @@ app.post('/api/listings/:id/buy', requireAuth, async (req, res) => {
 });
 
 // ── Make an offer on a listing ───────────────────────────────────────────
+// -- Checkout: fetch payment info for an existing pending order (resume) --
+app.get('/api/orders/:id/payment', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Not your order' });
+    if (order.status !== 'pending_payment') {
+      return res.json({ status: order.status, requiresPayment: false });
+    }
+    const escrow = order.escrow_id ? await r.escrow.get(order.escrow_id) : null;
+    let clientSecret = null;
+    if (escrow?.stripe_payment_intent_id && stripe.retrieve) {
+      const pi = await stripe.retrieve(escrow.stripe_payment_intent_id);
+      clientSecret = pi.client_secret;
+    }
+    res.json({
+      status: order.status, requiresPayment: true,
+      payment: {
+        orderId: order.id, clientSecret,
+        paymentIntentId: escrow?.stripe_payment_intent_id || null,
+        amount: Number(order.amount), fee: Number(order.platform_fee),
+        expiresAt: order.payment_due_at,
+      },
+    });
+  } catch (e) {
+    console.error('order payment info error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// -- Checkout: buyer-side completion ping (webhook is source of truth, but this
+//    finalizes instantly on redirect-back so the UI does not wait on the hook) --
+app.post('/api/orders/:id/payment/complete', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Not your order' });
+    if (order.status !== 'pending_payment') {
+      return res.json({ ok: true, status: order.status });
+    }
+    // Trust Stripe, not the client: only finalize if the PI actually succeeded
+    // (or is authorized/requires_capture under manual capture).
+    const escrow = order.escrow_id ? await r.escrow.get(order.escrow_id) : null;
+    if (escrow?.stripe_payment_intent_id && stripe.retrieve) {
+      const pi = await stripe.retrieve(escrow.stripe_payment_intent_id);
+      if (['succeeded', 'requires_capture', 'processing'].includes(pi.status)) {
+        await finalizePaidOrder(r, stripe, order);
+        return res.json({ ok: true, status: order.status });
+      }
+      return res.json({ ok: false, status: order.status, piStatus: pi.status });
+    }
+    await finalizePaidOrder(r, stripe, order);
+    res.json({ ok: true, status: order.status });
+  } catch (e) {
+    console.error('order payment complete error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// -- Checkout: buyer cancels a pending-payment order (closes the modal) --
+app.post('/api/orders/:id/payment/cancel', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Not your order' });
+    if (order.status === 'pending_payment') await cancelCheckout(r, stripe, order, 'buyer_cancelled');
+    res.json({ ok: true, status: order.status });
+  } catch (e) {
+    console.error('order payment cancel error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
   try {
     const r = await getRepo();
@@ -1499,18 +1717,20 @@ app.post('/api/offers/:id/accept', requireAuth, async (req, res) => {
     await client.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [offer.listing_id]);
     await client.query('COMMIT');
 
-    // Escrow order at the offer price (outside tx — order engine manages its own writes)
+    // Pending-payment order at the offer price (outside tx — order engine
+    // manages its own writes). Buyer must complete payment within 24h.
     const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
-    const order = await ordersSvc.create(r, stripe, {
+    const { order } = await ordersSvc.beginCheckout(r, stripe, {
       listingId: offer.listing_id, cardId: offer.card_id,
       buyerId: offer.buyer_id, sellerId: offer.seller_id,
       amount: Number(offer.amount), fee: Math.round(Number(offer.amount) * 0.1),
-      method: offer.vault_item_id ? 'vault' : 'direct', vaultItemId: offer.vault_item_id || null,
+      method: offer.vault_item_id ? 'vault' : 'direct',
+      paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
     });
 
     const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
     const amt = `$${(Number(offer.amount) / 100).toLocaleString()}`;
-    await notify(pool, offer.buyer_id, 'offer_accepted', `Offer accepted: ${card?.player || 'card'} — ${amt}`, 'Payment is held in escrow. The seller will ship your card.', { listingId: offer.listing_id, offerId: offer.id, orderId: order.id });
+    await notify(pool, offer.buyer_id, 'offer_accepted', `Offer accepted: ${card?.player || 'card'} — ${amt}`, 'Complete payment within 24h to secure your card — open Orders to pay now.', { listingId: offer.listing_id, offerId: offer.id, orderId: order.id, action: 'complete_payment' });
     const accTpl = emailTpl.offerAccepted({ player: card?.player || 'card', amount: amt });
     await emailUser(pool, offer.buyer_id, accTpl.subject, accTpl.html);
 
@@ -1552,9 +1772,11 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ purchases: [], sales: [] });
+    // Lazy sweep: expire stale pending_payment orders on every order read.
+    await expirePendingPayments(r).catch(() => {});
     const base = `
       SELECT o.id, o.listing_id, o.card_id, o.buyer_id, o.seller_id, o.amount, o.platform_fee,
-             o.fulfillment_method, o.status, o.created_at, o.updated_at, o.inspection_ends_at,
+             o.fulfillment_method, o.status, o.created_at, o.updated_at, o.inspection_ends_at, o.payment_due_at,
              c.player, c.card_set, c.grader, c.grade, c.year, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle,
              s.carrier, s.tracking_number, s.shipped_at, s.delivered_at AS ship_delivered_at
@@ -1576,6 +1798,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       amount: Number(o.amount) / 100, fee: Number(o.platform_fee) / 100,
       status: o.status, method: o.fulfillment_method,
       createdAt: o.created_at, updatedAt: o.updated_at, inspectionEndsAt: o.inspection_ends_at,
+      paymentDueAt: o.payment_due_at || null,
+      needsPayment: o.status === 'pending_payment',
       player: o.player, set: o.card_set, grader: o.grader, grade: o.grade, year: o.year,
       thumbnail: o.ebay_thumb || o.image_url || null,
       buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
@@ -3312,9 +3536,28 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
       }
       break;
     }
-    case 'payment_intent.amount_capturable_updated': {
+    // Manual-capture PIs land here the moment the buyer confirms payment (funds
+    // authorized, not yet captured). This is the signal that a pending_payment
+    // order should move into fulfillment. 'succeeded' also handled below for
+    // any automatic-capture flows.
+    case 'payment_intent.amount_capturable_updated':
+    case 'payment_intent.succeeded': {
       const pi = event.data.object;
-      console.log('[webhook] PI authorized:', pi.id, '$' + (pi.amount / 100));
+      console.log('[webhook] PI paid:', pi.id, event.type, '$' + (pi.amount / 100));
+      if (pool) {
+        try {
+          const { rows: [esc] } = await pool.query(
+            'SELECT id, order_id FROM escrow_holds WHERE stripe_payment_intent_id = $1', [pi.id]);
+          if (esc?.order_id) {
+            const order = await r.orders.get(esc.order_id);
+            if (order && order.status === 'pending_payment') {
+              const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+              await finalizePaidOrder(r, stripe, order);
+              console.log('[webhook] order', order.id, 'finalized ->', order.status);
+            }
+          }
+        } catch (e) { console.error('[webhook] PI paid handling:', e.message); }
+      }
       break;
     }
     case 'payment_intent.payment_failed':
@@ -3328,13 +3571,13 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
           const { rows: [esc] } = await pool.query(
             `SELECT id, order_id, status FROM escrow_holds WHERE stripe_payment_intent_id = $1`, [pi.id]);
           if (esc?.order_id && esc.status === 'held') {
-            const { rows: [o] } = await pool.query(`SELECT id, status FROM orders WHERE id = $1`, [esc.order_id]);
-            if (o && ['created', 'escrow_held', 'awaiting_shipment'].includes(o.status)) {
-              await pool.query(`UPDATE orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [o.id]);
-              await pool.query(`UPDATE escrow_holds SET status = 'void', updated_at = NOW() WHERE id = $1`, [esc.id]);
-              await pool.query(
-                `INSERT INTO events (entity_type, entity_id, from_state, to_state, payload) VALUES ('order', $1, $2, 'cancelled', $3)`,
-                [o.id, o.status, JSON.stringify({ reason: event.type, pi: pi.id })]).catch(() => {});
+            const order = await r.orders.get(esc.order_id);
+            if (order && ['pending_payment', 'created', 'escrow_held', 'awaiting_shipment'].includes(order.status)) {
+              // cancelCheckout voids the hold, cancels the order, and unlocks the
+              // listing (returns fixed-price listings to 'active').
+              const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+              await cancelCheckout(r, stripe, order, event.type);
+              console.log('[webhook] order', order.id, 'cancelled + listing unlocked');
             }
           }
         } catch (e) { console.error('[webhook] PI failure handling:', e.message); }

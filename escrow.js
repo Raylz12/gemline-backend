@@ -4,16 +4,27 @@
 import { transition } from './machine.js';
 import { ESCROW as S } from './states.js';
 
-export async function hold(repo, stripe, { orderId = null, tradeId = null, payerId, payeeId = null, amount, fee = 0, currency = 'USD' }) {
+export async function hold(repo, stripe, { orderId = null, tradeId = null, payerId, payeeId = null, amount, fee = 0, currency = 'USD', metadata = {} }) {
   // Stripe: PaymentIntent with capture_method:'manual' (authorize, hold funds).
-  const pi = await stripe.authorize({ amount, currency, payerId });
+  const pi = await stripe.authorize({ amount, currency, payerId, metadata: { gemline_order_id: orderId || '', ...metadata } });
   const rec = await repo.escrow.insert({
     order_id: orderId, trade_id: tradeId, payer_id: payerId, payee_id: payeeId,
     amount, platform_fee: fee, currency, status: S.HELD,
     stripe_payment_intent_id: pi.id, created_at: new Date().toISOString(),
   });
   await repo.events.insert({ entity_type: 'escrow', entity_id: rec.id, from_state: null, to_state: S.HELD, payload: { amount } });
+  // Non-persisted: handed to the buyer's Payment Element to confirm the PI.
+  rec.client_secret = pi.client_secret || null;
   return rec;
+}
+
+// Checkout abandoned/expired before the buyer confirmed — cancel the PI and
+// void the hold. No money ever moved (the PI was never confirmed).
+export async function voidHold(repo, stripe, escrow) {
+  let pi = { id: escrow.stripe_payment_intent_id, status: 'canceled' };
+  if (stripe.cancel) pi = await stripe.cancel(escrow.stripe_payment_intent_id);
+  await transition(repo, 'escrow', escrow, S.VOID, { payload: { pi_status: pi?.status || null } });
+  return pi;
 }
 
 export async function release(repo, stripe, escrow, { payeeId } = {}) {
