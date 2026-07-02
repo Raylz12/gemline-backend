@@ -51,6 +51,38 @@ app.get('/health', (_req, res) => res.json({
     : 'Running in-memory — set DATABASE_URL for persistent multi-user data',
 }));
 
+// ── SEO: chunked card sitemaps ────────────────────────────────────────────────
+// /api/sitemap/:c where :c is a uuid first-hex-char chunk (0-f). Each chunk is
+// ~40K priced cards — under the 50K sitemap limit — selected by uuid range so
+// there are no OFFSET scans over 750K rows. Referenced from /sitemap.xml.
+app.get('/api/sitemap/:c', async (req, res) => {
+  try {
+    const c = String(req.params.c).toLowerCase();
+    if (!/^[0-9a-f]$/.test(c)) return res.status(404).send('Not found');
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).send('No database');
+    const lo = `${c}0000000-0000-0000-0000-000000000000`;
+    const hiChar = c === 'f' ? null : (parseInt(c, 16) + 1).toString(16);
+    const where = hiChar
+      ? `id >= $1::uuid AND id < $2::uuid`
+      : `id >= $1::uuid`;
+    const params = hiChar ? [lo, `${hiChar}0000000-0000-0000-0000-000000000000`] : [lo];
+    const { rows } = await pool.query(
+      `SELECT id FROM cards WHERE catalog_price > 0 AND ${where} ORDER BY id`, params
+    );
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      rows.map(x => `<url><loc>https://gemlinecards.com/card/${x.id}</loc></url>`).join('\n') +
+      `\n</urlset>`;
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+    res.send(xml);
+  } catch (e) {
+    console.error('sitemap chunk error:', e.message);
+    res.status(500).send('sitemap error');
+  }
+});
+
 // ── Live platform stats (cached 5 min) ──────────────────────────────────────
 app.get('/api/stats/live', async (req, res) => {
   try {

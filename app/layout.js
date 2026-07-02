@@ -9,6 +9,7 @@ export const metadata = {
   title: 'GEMLINE — The Card Exchange',
   description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, virtual pack rips, and AI-powered search across 500K+ cards.',
   robots: { index: true, follow: true },
+  alternates: { canonical: './' },   // resolves per-page against metadataBase — do not hardcode the homepage
   openGraph: {
     title: 'GEMLINE — The Card Exchange',
     description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, and AI-powered search across 500K+ cards.',
@@ -33,7 +34,6 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#07080d" />
-        <link rel="canonical" href="https://gemlinecards.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
