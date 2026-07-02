@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ─────────────────────────── enums (state vocab) ───────────────────────────
 CREATE TYPE user_role          AS ENUM ('buyer','seller','admin','authenticator');
 CREATE TYPE listing_kind       AS ENUM ('buy_now','auction');
-CREATE TYPE listing_status     AS ENUM ('active','sold','cancelled');
+CREATE TYPE listing_status     AS ENUM ('active','sold','cancelled','completed');
 CREATE TYPE fulfillment_method AS ENUM ('direct','authenticated','vault');
 CREATE TYPE order_status       AS ENUM (
   'created','escrow_held','awaiting_shipment','at_auth_hub','authenticating',
