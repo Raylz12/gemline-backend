@@ -8,6 +8,7 @@ import { settlementRouter } from '../src/routes/settlement.js';
 import { appRouter } from '../src/routes/app.js';
 import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
 import { rateLimit } from '../src/middleware/rateLimit.js';
+import * as ordersSvc from '../orders.js';
 import { stripeClient, createPaymentIntent, createConnectAccount, createOnboardingLink, getAccountStatus, verifyWebhook } from '../src/adapters/stripe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -904,6 +905,95 @@ app.get('/api/auctions/:id/bids', async (req, res) => {
     });
   } catch (e) {
     res.json({ bids: [] });
+  }
+});
+
+// ── Listings for a specific card — public (powers CardDetail "For Sale") ──────
+app.get('/api/listings/for-card/:cardId', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ listings: [] });
+    const { rows } = await pool.query(`
+      SELECT l.id, l.price, l.kind, l.created_at, u.handle AS seller_handle
+      FROM listings l
+      LEFT JOIN users u ON u.id = l.seller_id
+      WHERE l.card_id = $1 AND l.status = 'active' AND l.kind = 'buy_now'
+      ORDER BY l.price ASC
+      LIMIT 10
+    `, [req.params.cardId]);
+    res.json({
+      listings: rows.map(l => ({
+        id: l.id,
+        price: Number(l.price) / 100, // cents → dollars for display
+        kind: l.kind,
+        seller_handle: l.seller_handle || 'seller',
+        open_to_offers: true,
+        created_at: l.created_at,
+      })),
+    });
+  } catch (e) {
+    console.error('listings/for-card error:', e.message);
+    res.json({ listings: [] });
+  }
+});
+
+// ── Buy a listing directly (CardDetail buy flow) ────────────────────────────
+app.post('/api/listings/:id/buy', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const l = await r.listings.get(req.params.id);
+    if (!l) return res.status(404).json({ error: 'Listing not found' });
+    if (l.status !== 'active') return res.status(410).json({ error: 'Listing no longer available' });
+    if (l.seller_id === req.userId) return res.status(400).json({ error: 'Cannot buy your own listing' });
+    const method = l.vault_item_id ? 'vault' : 'direct';
+    const order = await ordersSvc.create(r, stripe, {
+      listingId: l.id, cardId: l.card_id, buyerId: req.userId, sellerId: l.seller_id,
+      amount: Number(l.price), fee: Math.round(Number(l.price) * 0.1),
+      method, vaultItemId: l.vault_item_id || null,
+    });
+    // Mark listing sold + sync portfolio flag if the seller had it linked
+    await r.listings.update({ ...l, status: 'completed' }).catch(() => {});
+    if (r.pool) {
+      await r.pool.query("UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1", [l.id]).catch(() => {});
+    }
+    res.json({ order, instant: order.status === 'settled' });
+  } catch (e) {
+    console.error('listings/buy error:', e.message);
+    res.status(500).json({ error: e.message || 'Purchase failed' });
+  }
+});
+
+// ── Make an offer on a listing ───────────────────────────────────────────
+app.post('/api/listings/:id/offer', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    const amount = Number(req.body?.amount);
+    if (!amount || amount < 0.01) return res.status(400).json({ error: 'Invalid offer amount' });
+    const { rows: [l] } = await pool.query("SELECT * FROM listings WHERE id = $1 AND status = 'active'", [req.params.id]);
+    if (!l) return res.status(404).json({ error: 'Listing not found' });
+    if (l.seller_id === req.userId) return res.status(400).json({ error: 'Cannot offer on your own listing' });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS listing_offers (
+        id SERIAL PRIMARY KEY,
+        listing_id TEXT NOT NULL,
+        buyer_id TEXT NOT NULL,
+        amount NUMERIC NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {});
+    const { rows: [offer] } = await pool.query(
+      'INSERT INTO listing_offers (listing_id, buyer_id, amount) VALUES ($1, $2, $3) RETURNING id',
+      [req.params.id, req.userId, Math.round(amount * 100)]
+    );
+    res.json({ success: true, offerId: offer.id });
+  } catch (e) {
+    console.error('listings/offer error:', e.message);
+    res.status(500).json({ error: 'Offer failed' });
   }
 });
 

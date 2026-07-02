@@ -11,7 +11,7 @@ export async function list(repo, userId) {
              c.player, c.sport, c.card_set, c.variant, c.number,
              c.grader, c.grade, c.image_url, c.ebay_thumb,
              c.catalog_price,
-             (SELECT MIN(l.price) FROM listings l WHERE l.card_id = c.id AND l.status = 'active') AS market_value
+             (SELECT MIN(l.price) FROM listings l WHERE l.card_id = c.id AND l.status = 'active' AND l.kind = 'buy_now') AS market_value
       FROM portfolios p
       JOIN cards c ON c.id = p.card_id
       WHERE p.user_id = $1
@@ -19,7 +19,8 @@ export async function list(repo, userId) {
     `, [userId]);
     return rows.map(item => {
       const costBasis = item.purchase_price ? Number(item.purchase_price) : null;
-      const marketValue = item.market_value ? Number(item.market_value) : (item.catalog_price ? Number(item.catalog_price) : null);
+      // listings.price is stored in cents; catalog_price is dollars
+      const marketValue = item.market_value ? Number(item.market_value) / 100 : (item.catalog_price ? Number(item.catalog_price) : null);
       const pnl = (marketValue && costBasis) ? marketValue - costBasis : null;
       const pnlPct = (pnl && costBasis) ? +((pnl / costBasis) * 100).toFixed(1) : null;
       return {
