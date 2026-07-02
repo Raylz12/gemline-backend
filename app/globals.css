@@ -3143,8 +3143,8 @@ main>*{animation:fade .3s ease}
 .cd-act.ghost{background:var(--panel-2);border:1px solid var(--line-2);color:var(--txt);flex:1}
 .cd-act.ghost:hover{border-color:var(--gold);color:var(--gold)}
 .cd-act.ghost.active{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
-.cd-act.watch{flex:0 0 auto}
-.cd-act.watch.on{color:#ff5c6c;border-color:rgba(255,92,108,.5);background:rgba(255,92,108,.08)}
+.cd-act.cd-watch{position:static;width:auto;height:auto;flex:0 0 auto;background:var(--panel-2)}
+.cd-act.cd-watch.on{color:#ff5c6c;border-color:rgba(255,92,108,.5);background:rgba(255,92,108,.08)}
 
 .cd-similar{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .cd-sim-card{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;transition:.15s;min-width:0}
