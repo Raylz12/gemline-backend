@@ -223,11 +223,11 @@ export default function SellPage() {
       <>
         <div className="eyebrow">Sell</div>
         <h1 className="page">List your cards.</h1>
-        <p className="sub">Set your price backed by real market data. 0.75% platform fee — the lowest in the industry.</p>
+        <p className="sub">Set your price backed by real market data. Listing is free — GEMLINE keeps 10% only when your card sells.</p>
         <PreviewGate
           icon=""
           cta="Start selling on GEMLINE"
-          subtitle="List cards at your price. Buy now, make offers, or auction. Just 0.75% fee per sale."
+          subtitle="List cards at your price. Buy now, make offers, or auction. Free to list — 10% only when it sells."
           preview={<SampleCardGrid count={8} />}
         />
       </>
@@ -404,8 +404,16 @@ export default function SellPage() {
               </div>
 
               {price && fmv?.avg && (
-                <div style={{ fontSize: 12, color: Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'var(--up)' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'var(--down)' : 'var(--muted)', marginBottom: 16 }}>
+                <div style={{ fontSize: 12, color: Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'var(--up)' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'var(--down)' : 'var(--muted)', marginBottom: 10 }}>
                   {Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'Below market — will sell fast' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'Above market range' : 'Fair market price'}
+                </div>
+              )}
+
+              {/* Fee transparency AT the price step — not just buried in review */}
+              {price && Number(price) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', background: 'var(--ink)', borderRadius: 8, padding: '9px 14px', marginBottom: 16, fontSize: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>You&apos;ll receive after the 10% fee</span>
+                  <span className="mono" style={{ color: 'var(--up)', fontWeight: 700, fontSize: 14 }}>${(Number(price) * 0.9).toFixed(2)}</span>
                 </div>
               )}
 

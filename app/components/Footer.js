@@ -28,6 +28,7 @@ const COLUMNS = [
     blurb: 'Who we are and how to reach us.',
     links: [
       { href: '/about', label: 'About' },
+      { href: '/fees', label: 'Fees & Payouts' },
       { href: '/faq', label: 'FAQ' },
       { href: '/contact', label: 'Contact' },
     ],

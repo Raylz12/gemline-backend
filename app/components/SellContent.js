@@ -172,7 +172,7 @@ export default function SellContent() {
       <>
         <div className="eyebrow">Sell</div>
         <h1 className="page">List your cards.</h1>
-        <p className="sub">Set your price backed by real market data. 0.75% platform fee — the lowest in the industry.</p>
+        <p className="sub">Set your price backed by real market data. Listing is free — GEMLINE keeps 10% only when your card sells.</p>
         {/* Teaser */}
         <div style={{ opacity: 0.4, pointerEvents: 'none', marginTop: 20 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -188,7 +188,7 @@ export default function SellContent() {
         <SignupTeaser
           icon=""
           title="Start selling on GEMLINE"
-          subtitle="List cards at your price. Buy now, make offers, or auction. Just 0.75% fee per sale."
+          subtitle="List cards at your price. Buy now, make offers, or auction. Free to list — 10% only when it sells."
         />
       </>
     );
