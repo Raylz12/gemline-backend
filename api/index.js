@@ -410,7 +410,7 @@ app.get('/api/admin/listings', requireAdmin, async (req, res) => {
     if (q) { params.push(`%${q}%`); conds.push(`(c.player ILIKE $${params.length} OR u.handle ILIKE $${params.length})`); }
     params.push(limit + 1, (page - 1) * limit);
     const { rows } = await pool.query(`
-      SELECT l.id, l.price, l.status::text, l.kind::text, l.created_at, l.cert_verified,
+      SELECT l.id, (l.price / 100.0)::numeric AS price, l.status::text, l.kind::text, l.created_at, l.cert_verified,
              c.player, c.card_set, c.grader, c.grade, c.year,
              u.id AS seller_id, u.handle AS seller_handle,
              (SELECT COUNT(*)::int FROM reports rp WHERE rp.target_type = 'listing' AND rp.target_id = l.id::text AND rp.status = 'open') AS open_reports
@@ -487,7 +487,7 @@ app.get('/api/admin/reports', requireAdmin, async (req, res) => {
     const labels = {};
     if (byType.listing.length) {
       const { rows: ls } = await pool.query(`
-        SELECT l.id::text, l.status::text, l.price, c.player, u.handle AS seller
+        SELECT l.id::text, l.status::text, (l.price / 100.0)::numeric AS price, c.player, u.handle AS seller
         FROM listings l JOIN cards c ON c.id = l.card_id JOIN users u ON u.id = l.seller_id
         WHERE l.id::text = ANY($1)`, [byType.listing]).catch(() => ({ rows: [] }));
       for (const l of ls) labels[`listing:${l.id}`] = { label: `${l.player} — $${Number(l.price).toLocaleString()} by @${l.seller}`, status: l.status, sellerHandle: l.seller };
@@ -3493,6 +3493,31 @@ app.get('/api/packs/collection', requireAuth, async (req, res) => {
   } catch (e) {
     console.error('packs/collection:', e.message);
     res.json({ pulls: [] });
+  }
+});
+
+// ── Seller stats — compact dashboard strip on the sell page ───────────────
+app.get('/api/seller/stats', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ activeListings: 0, activeValue: 0, pendingOffers: 0, sold: { count: 0, gross: 0 } });
+    const [listings, offers, sold] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(price), 0)::numeric / 100.0 AS v FROM listings WHERE seller_id = $1 AND status = 'active'", [req.userId]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM listing_offers o JOIN listings l ON l.id = o.listing_id
+                  WHERE l.seller_id = $1 AND o.status IN ('pending', 'countered') AND l.status = 'active'`, [req.userId]).catch(() => ({ rows: [{ n: 0 }] })),
+      pool.query(`SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0)::bigint AS cents FROM orders
+                  WHERE seller_id = $1 AND status NOT IN ('cancelled', 'refunded', 'pending_payment', 'created')`, [req.userId]),
+    ]);
+    res.json({
+      activeListings: listings.rows[0].n,
+      activeValue: Number(listings.rows[0].v) || 0,
+      pendingOffers: offers.rows[0].n,
+      sold: { count: sold.rows[0].n, gross: Number(sold.rows[0].cents) / 100 },
+    });
+  } catch (e) {
+    console.error('seller/stats error:', e.message);
+    res.json({ activeListings: 0, activeValue: 0, pendingOffers: 0, sold: { count: 0, gross: 0 } });
   }
 });
 

@@ -29,6 +29,7 @@ export default function SellContent() {
   // My listings
   const [myListings, setMyListings] = useState([]);
   const [loadingMine, setLoadingMine] = useState(false);
+  const [sellerStats, setSellerStats] = useState(null);
   const [editId, setEditId] = useState(null);
   const [editPrice, setEditPrice] = useState('');
 
@@ -70,6 +71,10 @@ export default function SellContent() {
       .then(d => setMyListings(d.listings || []))
       .catch(() => {})
       .finally(() => setLoadingMine(false));
+    fetch('/api/seller/stats', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setSellerStats(d); })
+      .catch(() => {});
   }, [tab, token]);
 
   const selectCard = (card) => {
@@ -501,6 +506,21 @@ export default function SellContent() {
 
       {tab === 'my' && (
         <div>
+          {sellerStats && (sellerStats.activeListings > 0 || sellerStats.sold.count > 0) && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+              {[
+                ['For Sale', `${sellerStats.activeListings}`, sellerStats.activeValue > 0 ? fmt(sellerStats.activeValue) + ' listed value' : null],
+                ['Open Offers', `${sellerStats.pendingOffers}`, sellerStats.pendingOffers > 0 ? 'awaiting your response' : null],
+                ['Sold', `${sellerStats.sold.count}`, sellerStats.sold.gross > 0 ? fmt(sellerStats.sold.gross) + ' gross' : null],
+              ].map(([label, value, sub]) => (
+                <div key={label} style={{ flex: 1, minWidth: 130, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: 1, textTransform: 'uppercase', color: 'var(--muted)' }}>{label}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 800, marginTop: 2 }}>{value}</div>
+                  {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+          )}
           {loadingMine && <div style={{ color: 'var(--muted)', padding: 20 }}>Loading...</div>}
           {!loadingMine && myListings.length === 0 && (
             <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)' }}>

@@ -259,7 +259,7 @@ export default function Header() {
                     {c.thumbnail && <img src={c.thumbnail} alt="" className="search-thumb" />}
                     <div className="search-info">
                       <div className="search-name">{c.player}{c.gradeCount > 1 ? <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400, marginLeft: 6 }}>{c.gradeCount} grades</span> : null}</div>
-                      <div className="search-meta"><span className="mchip mchip-grade" style={{ marginRight: 6 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{[c.year, c.set].filter(Boolean).join(' ')}</div>
+                      <div className="search-meta"><span className="mchip mchip-grade" style={{ marginRight: 6 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{[String(c.set || '').startsWith(String(c.year)) ? null : c.year, c.set].filter(Boolean).join(' ')}</div>
                     </div>
                     <div className="search-price">
                       {c.market > 0 ? `$${c.market.toLocaleString()}` : 'TBD'}
