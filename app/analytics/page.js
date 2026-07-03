@@ -185,12 +185,12 @@ function ArbTable({ onSelect }) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search player, set, variant…"
-              aria-label="Search arbitrage plays"
+              aria-label="Search deals"
             />
             {query && <button className="arb-search-x" onClick={() => setQuery('')} aria-label="Clear search">×</button>}
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min net edge:</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min savings:</span>
             {[0, 10, 25, 50].map(v => (
               <button key={v} onClick={() => setMinNet(v)} style={btn(minNet === v)}>${v}+</button>
             ))}
@@ -209,8 +209,8 @@ function ArbTable({ onSelect }) {
             <span style={{ fontSize: 11, color: 'var(--muted)' }}>Sort:</span>
             <select value={arbSort} onChange={e => setArbSort(e.target.value)}
               style={{ padding: '5px 10px', borderRadius: 6, fontSize: 11, background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line)', cursor: 'pointer' }}>
-              <option value="netEdge">Net edge $</option>
-              <option value="netPct">Net edge %</option>
+              <option value="netEdge">Best deal $</option>
+              <option value="netPct">Best deal %</option>
               <option value="buy">Buy price (low first)</option>
               <option value="liquidity">Liquidity (30d sales)</option>
             </select>
@@ -230,14 +230,14 @@ function ArbTable({ onSelect }) {
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={{ color: 'var(--dim)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}><IconZap size={32} /></div>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{q ? `No plays match “${q}”` : 'No plays match these filters'}</div>
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>{q ? 'Try fewer words, or clear the liquidity/sport filters.' : 'Lower the min net edge or liquidity filter.'}</p>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>{q ? 'Try fewer words, or clear the liquidity/sport filters.' : 'Lower the min savings or liquidity filter.'}</p>
         </div>
       ) : (
         <div>
           {/* Desktop: wide table. Mobile (<=768px): stacked play-cards, no clipped columns. */}
           <div className="arb-desktop">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(220px,300px) 96px 82px', gap: 8, padding: '6px 12px', fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--line)' }}>
-            <div>Card</div><div>The Play (after {Math.round(MARKETPLACE_FEE * 100)}% fee)</div><div style={{ textAlign: 'right' }}>Net Edge</div><div style={{ textAlign: 'right' }}>Liquidity</div>
+            <div>Card</div><div>The Deal (after {Math.round(MARKETPLACE_FEE * 100)}% fee)</div><div style={{ textAlign: 'right' }}>You Save</div><div style={{ textAlign: 'right' }}>Liquidity</div>
           </div>
           {filtered.map((r, i) => {
             const liqLabel = (r.sales7d || 0) >= 5 ? 'high' : (r.sales7d || 0) >= 3 ? 'med' : (r.sales30d || 0) > 0 ? 'low' : 'thin';
@@ -262,10 +262,10 @@ function ArbTable({ onSelect }) {
                 <div style={{ alignSelf: 'center', fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   <span style={{ color: 'var(--muted)' }}>Buy </span>
                   <span style={{ color: 'var(--txt)', fontWeight: 700 }}>{fmt(r.buy)}</span>
-                  <span style={{ color: 'var(--dim)' }}> → FMV </span>
+                  <span style={{ color: 'var(--dim)' }}> · fair value </span>
                   <span style={{ color: 'var(--txt)', fontWeight: 700 }}>{fmt(r.fmv)}</span>
                   <span style={{ color: 'var(--dim)' }}> → </span>
-                  <span style={{ color: netColor, fontWeight: 700 }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)} net</span>
+                  <span style={{ color: netColor, fontWeight: 700 }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)} after fees</span>
                 </div>
                 <div style={{ textAlign: 'right', alignSelf: 'center' }}>
                   <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)}</div>
@@ -295,15 +295,15 @@ function ArbTable({ onSelect }) {
                     </div>
                     <div className="arb-card-edge">
                       <div className="v" style={{ color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)}</div>
-                      <div className="k">net edge</div>
+                      <div className="k">you save</div>
                     </div>
                   </div>
                   <div className="arb-card-play">
-                    Buy <b style={{ color: 'var(--txt)' }}>{fmt(r.buy)}</b> → FMV <b style={{ color: 'var(--txt)' }}>{fmt(r.fmv)}</b> → <b style={{ color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)} net</b>
+                    Buy <b style={{ color: 'var(--txt)' }}>{fmt(r.buy)}</b> · fair value <b style={{ color: 'var(--txt)' }}>{fmt(r.fmv)}</b> · <b style={{ color: netColor }}>{r.netEdge >= 0 ? '+' : ''}{fmt(r.netEdge)} after fees</b>
                   </div>
                   <div className="arb-card-chips">
                     <span className={`arb-chip ${(r.sales7d || 0) >= 5 ? 'up' : ''}`}>{liqLabel} {(r.sales7d || 0)}/{(r.sales30d || 0)}</span>
-                    <span className="arb-chip" style={{ color: netColor }}>{r.netPct >= 0 ? '+' : ''}{r.netPct.toFixed(0)}% after fee</span>
+                    <span className="arb-chip" style={{ color: netColor }}>{r.netPct >= 0 ? '+' : ''}{r.netPct.toFixed(0)}% value after fees</span>
                     {r.momentum && <span className="arb-chip hot">momentum</span>}
                   </div>
                 </div>
@@ -419,7 +419,7 @@ export default function AnalyticsPage() {
       {/* View selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, marginTop: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <div className="seg">
-          {[['movers', 'Movers', IconTrendUp], ['heatmap', 'Heatmap', IconGrid], ['arbitrage', 'Arbitrage', IconZap]].map(([v, label, Ic]) => (
+          {[['movers', 'Movers', IconTrendUp], ['heatmap', 'Heatmap', IconGrid], ['arbitrage', 'Deals', IconZap]].map(([v, label, Ic]) => (
             <button key={v} className={view === v ? 'on' : ''} onClick={() => setView(v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ic size={13} /> {label}</button>
           ))}
         </div>

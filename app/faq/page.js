@@ -15,11 +15,11 @@ const FAQS = [
   },
   {
     q: 'What fees does GEMLINE charge?',
-    a: 'A marketplace fee applies on completed sales. Net figures shown on the Arbitrage desk already account for a 10% fee on the sell side.',
+    a: 'Listing is free. When your card sells, GEMLINE keeps a 10% marketplace fee and you receive the rest — the sell flow shows your exact net payout before you list. Buyers pay the listed price.',
   },
   {
-    q: 'What is the Arbitrage desk?',
-    a: 'It surfaces cards trading below their fair-market value, showing the net edge after fees and the recent sales volume so you can judge exit liquidity before you act.',
+    q: 'What is the Deal Finder?',
+    a: 'The Deal Finder (under Price Guide → Deals) surfaces cards listed below their fair market value, with the 10% fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
   },
   {
     q: 'How do live auctions work?',

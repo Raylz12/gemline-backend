@@ -296,8 +296,8 @@ function SpreadMatrix({ cards, onSelect }) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Sort</span>
         <select value={sortCol} onChange={e => { const col = e.target.value; setSortCol(col); setSortDir(col === 'lo' ? 'asc' : 'desc'); }}
           style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12, background: 'rgba(255,255,255,.05)', color: 'var(--txt,#eef1f6)', border: '1px solid rgba(255,255,255,.1)' }}>
-          <option value="netEdge">Net edge $</option>
-          <option value="netPct">Net edge %</option>
+          <option value="netEdge">Best deal $</option>
+          <option value="netPct">Best deal %</option>
           <option value="lo">Buy price (low first)</option>
           <option value="sales30d">Liquidity (30d sales)</option>
           <option value="gain7d">7D move</option>
@@ -319,15 +319,15 @@ function SpreadMatrix({ cards, onSelect }) {
               </div>
               <div className="arb-card-edge">
                 <div className="v" style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</div>
-                <div className="k">net edge</div>
+                <div className="k">you save</div>
               </div>
             </div>
             <div className="arb-card-play">
-              Buy <b style={{ color: '#34D88A' }}>{fmtP(c.lo)}</b> → FMV <b style={{ color: 'var(--txt,#eef1f6)' }}>{fmtP(c.hi)}</b> → <b style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))} net</b>
+              Buy <b style={{ color: '#34D88A' }}>{fmtP(c.lo)}</b> · fair value <b style={{ color: 'var(--txt,#eef1f6)' }}>{fmtP(c.hi)}</b> · <b style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))} after fees</b>
             </div>
             <div className="arb-card-chips">
               <span className={`arb-chip ${(c.sales7d || 0) >= 5 ? 'up' : ''}`}>{liqLabel} {c.sales7d || 0}/{c.sales30d || 0}</span>
-              <span className="arb-chip" style={{ color: netColor }}>{(c.netPct >= 0 ? '+' : '') + c.netPct?.toFixed(0)}% after fee</span>
+              <span className="arb-chip" style={{ color: netColor }}>{(c.netPct >= 0 ? '+' : '') + c.netPct?.toFixed(0)}% value after fees</span>
               {c.momentum ? <span className="arb-chip hot">momentum</span> : null}
             </div>
           </div>
@@ -348,7 +348,7 @@ function SpreadMatrix({ cards, onSelect }) {
         <div style={{ flex: 1, minWidth: 160, fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase' }}>CARD</div>
         <Th label="BUY (LOW)" col="lo" w={72} />
         <Th label="FMV (HIGH)" col="hi" w={72} />
-        <Th label="NET EDGE $" col="netEdge" w={92} />
+        <Th label="YOU SAVE $" col="netEdge" w={92} />
         <Th label="NET % (AF 10% FEE)" col="netPct" w={116} />
         <Th label="7D %" col="gain7d" w={64} />
         <Th label="7D VOL" col="sales7d" w={64} />
@@ -589,8 +589,8 @@ export default function ArbitragePage() {
       <ProGate
         page
         allowed={hasCapability(user, 'arbitrage')}
-        title="Create a free account to unlock the Arb Terminal"
-        sub="Net-edge plays after fees, momentum flags, and full-market search — free with a GEMLINE account."
+        title="Create a free account to unlock the Deal Finder"
+        sub="Cards priced below fair value — fees already counted — plus movers and full-market search, free with a GEMLINE account."
         cta="Create a free account"
         onUnlock={() => setShowAuth(true)}
       >
@@ -604,7 +604,7 @@ export default function ArbitragePage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#E8B339', fontWeight: 700, letterSpacing: '.1em' }}>
-            GEMLINE ARB TERMINAL
+            GEMLINE DEAL FINDER
           </span>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', letterSpacing: '.08em' }}>
             POWERED BY CARDHEDGE
@@ -643,7 +643,7 @@ export default function ArbitragePage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search player, set, variant…"
-            aria-label="Search arbitrage plays"
+            aria-label="Search deals"
           />
           {query && <button className="arb-search-x" onClick={() => setQuery('')} aria-label="Clear search">×</button>}
         </div>
@@ -659,8 +659,8 @@ export default function ArbitragePage() {
         <StatBox label="30D TOTAL VOLUME" value={fmtNum(totalVolume)} sub="transactions" color="#5B8DEF" />
         <StatBox label="TOP GAINER · 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || ''} color="#34D88A" glow />
         <StatBox label="TOP LOSER · 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || ''} color="#FF5C6C" glow />
-        <StatBox label="AVG NET EDGE" value={avgNetEdge === '—' ? '—' : `$${avgNetEdge}`} sub={`across ${netPlays.length} net-positive plays`} color="#E8B339" />
-        <StatBox label="ARB PLAYS" value={netPlays.length} sub="net-positive after 10% fee" color="#9B7BFF" />
+        <StatBox label="AVG SAVINGS" value={avgNetEdge === '—' ? '—' : `$${avgNetEdge}`} sub={`across ${netPlays.length} live deals`} color="#E8B339" />
+        <StatBox label="DEALS TODAY" value={netPlays.length} sub="below fair value after the 10% fee" color="#9B7BFF" />
       </div>
 
       {/* ── Main 4-panel grid ── */}
@@ -743,9 +743,9 @@ export default function ArbitragePage() {
       {/* ── Spread matrix (full width) ── */}
       <div style={{ margin: '1px 8px 8px', height: 480 }}>
         <Panel
-          title="NET-EDGE ARB MATRIX"
+          title="DEAL BOARD"
           badgeColor="#E8B339"
-          badge={`${netPlays.length} NET PLAYS · AFTER 10% FEE`}
+          badge={`${netPlays.length} DEALS · FEES INCLUDED`}
           right="CLICK COLUMN TO SORT · CLICK ROW TO DRILL"
           style={{ height: '100%' }}
         >
@@ -753,7 +753,7 @@ export default function ArbitragePage() {
             <SpreadMatrix cards={cardsWithEdge.slice(0, 100)} onSelect={setSelected} />
           ) : (
             <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>
-              NO NET-EDGE DATA — CARDS NEED LO/HI RANGE FROM CARDHEDGE
+              NO DEAL DATA — CARDS NEED LO/HI RANGE FROM CARDHEDGE
             </div>
           )}
         </Panel>
