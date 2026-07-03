@@ -18,9 +18,11 @@ const CAPABILITY_PLAN = {
 
 export function hasCapability(user, capability) {
   const plan = CAPABILITY_PLAN[capability] || 'free';
-  if (!user) return false;               // visitors: frosted teaser + CTA
-  if (plan === 'free') return true;      // any account
-  return user.plan === plan;             // future paid tiers
+  // Gate ACTIONS, not information: free capabilities are readable signed-out
+  // (analytics, deal finder, card insight, community). Write paths (post, bid,
+  // buy, watch) each prompt sign-in at the point of action instead.
+  if (plan === 'free') return true;
+  return !!user && user.plan === plan;   // future paid tiers
 }
 
 export default function ProGate({

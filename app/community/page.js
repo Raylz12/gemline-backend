@@ -299,7 +299,7 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
           fontSize: 10, fontWeight: 600, fontFamily: 'var(--mono)',
           color: meta.color, background: 'var(--panel-2)', border: `1px solid ${meta.color}33`,
           padding: '3px 9px', borderRadius: 20, letterSpacing: '.08em',
-        }}>{meta.icon} {meta.label}</div>
+        }}><span className="emoji">{meta.icon}</span> {meta.label}</div>
       </div>
 
       {/* Post body */}
@@ -448,7 +448,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
                       background: postType === t ? 'var(--gold)' : 'var(--panel-2)',
                       border: `1px solid ${postType === t ? 'var(--gold)' : 'var(--line)'}`,
                       color: postType === t ? '#000' : 'var(--muted)', cursor: 'pointer',
-                    }}>{TYPE_META[t]?.icon} {t.charAt(0).toUpperCase() + t.slice(1)}</button>
+                    }}><span className="emoji">{TYPE_META[t]?.icon}</span> {t.charAt(0).toUpperCase() + t.slice(1)}</button>
                   ))}
                 </div>
                 {postError && <div style={{ color: 'var(--down)', fontSize: 12, marginBottom: 6 }}>{postError}</div>}

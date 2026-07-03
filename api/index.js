@@ -1042,7 +1042,8 @@ app.get('/api/market/feed', async (req, res) => {
       case 'sales': orderBy = 'sales_30d DESC NULLS LAST'; break;
       case 'newest': orderBy = 'year DESC NULLS LAST'; break;
       default:
-        orderBy = `(COALESCE(sales_7d,0)*2 + COALESCE(sales_30d,0) + ABS(COALESCE(gain_7d,0))*5 + RANDOM()*20) DESC`;
+        // Trending: never lead page 1 with imageless placeholder tiles (~21% of catalog)
+        orderBy = `(ebay_thumb IS NOT NULL OR image_url IS NOT NULL) DESC, (COALESCE(sales_7d,0)*2 + COALESCE(sales_30d,0) + ABS(COALESCE(gain_7d,0))*5 + RANDOM()*20) DESC`;
         break;
     }
 
@@ -3683,10 +3684,6 @@ app.get('/api/users/:userId/following', async (req, res) => {
 });
 
 // Feed stub (auth required)
-app.get('/api/users/feed', requireAuth, async (_req, res) => {
-  res.json({ feed: [], message: 'Feed coming soon — follow users to see their activity here.' });
-});
-
 // Public portfolio by handle
 app.get('/api/users/:handle/portfolio', async (req, res) => {
   try {

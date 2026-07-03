@@ -125,6 +125,9 @@ select.sortsel{background:var(--panel);border:1px solid var(--line);border-radiu
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;transition:.2s;cursor:pointer;position:relative;min-height:280px;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 /* grid tiles + list rows are real <a> links now (SEO + open-in-new-tab) */
 a.card,a.list-row{color:inherit;text-decoration:none}
+/* Emoji glyphs inside mono/display type: force an emoji-capable font so
+   badges/labels never render as tofu boxes */
+.emoji{font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Twemoji Mozilla',sans-serif}
 .card:hover{transform:translateY(-2px);border-color:var(--gold);box-shadow:0 0 0 2px var(--gold),0 8px 24px rgba(0,0,0,.1)}
 .edge-flag{position:absolute;top:9px;left:9px;z-index:3;font-family:var(--mono);font-size:10px;font-weight:600;padding:3px 7px;border-radius:6px;display:flex;align-items:center;gap:4px}
 .edge-flag.hot{background:var(--up);color:#04140c}
@@ -754,7 +757,12 @@ footer .wordmark span{color:var(--gold)}
   .grid { grid-template-columns: 1fr !important; }
   .card-img-box { height: 180px !important; }
   .eyebrow { font-size: 10px !important; }
-  .ticker { font-size: 12px !important; } .tk { font-size: 12px !important; gap: 7px !important; padding: 0 12px !important; }
+  /* Mobile: the stock-ticker tape is a 38px tax on every page — drop it */
+  .ticker { display: none !important; }
+  /* Market mobile: kill hero chrome + duplicate search chips so the first
+     card row lands inside the first viewport */
+  .market-hero { display: none !important; }
+  .scout-chips { display: none !important; }
   .card { min-height: 240px !important; }
 }
 

@@ -217,9 +217,12 @@ export default function MarketplacePage() {
 
   return (
     <>
-      <div className="eyebrow">Marketplace</div>
-      <h1 className="page">Every card, priced live.</h1>
-      <p className="sub">Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence — every price is verified against live market data.</p>
+      {/* .market-hero collapses on mobile so cards land in the first viewport */}
+      <div className="market-hero">
+        <div className="eyebrow">Marketplace</div>
+        <h1 className="page">Every card, priced live.</h1>
+        <p className="sub">Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence — every price is verified against live market data.</p>
+      </div>
 
       {/* Scout — AI Card Search */}
       <div style={{ marginBottom: 24 }}>

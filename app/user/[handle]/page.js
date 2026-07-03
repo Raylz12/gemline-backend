@@ -179,7 +179,7 @@ export default function UserPortfolioPage() {
                     background: 'var(--panel)', border: `1px solid ${(badgeTierColor[b.tier] || '#666')}55`,
                     color: badgeTierColor[b.tier] || 'var(--muted)',
                   }}>
-                  <span>{b.emoji}</span> {b.name}
+                  <span className="emoji">{b.emoji}</span> {b.name}
                 </span>
               ))}
             </div>

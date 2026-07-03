@@ -358,6 +358,13 @@ export default function AnalyticsPage() {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [view, setView] = useState('movers'); // movers | heatmap | arbitrage
+  // Deep links (incl. the retired /heatmap redirect): /analytics?view=heatmap
+  useEffect(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get('view');
+      if (['movers', 'heatmap', 'arbitrage'].includes(v)) setView(v);
+    } catch {}
+  }, []);
   const [sport, setSport] = useState('All');
   const [sort, setSort] = useState('gainers'); // gainers | losers | volume | value
   const [cards, setCards] = useState([]);
