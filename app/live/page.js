@@ -73,12 +73,16 @@ export default function LivePage() {
   const [topBids, setTopBids] = useState([]);
   const [loading, setLoading] = useState(true);
   const [auctionSort, setAuctionSort] = useState('ending_soon');
-  const [wantSort, setWantSort] = useState('boost_desc');
+  const [wantSort, setWantSort] = useState('amount_desc');
   // Never advertise a dead floor: when there are zero auctions/bids the hero
   // shows the always-alive catalog stat instead of "0 AUCTIONS · 0 OPEN BIDS".
   const [cardsPriced, setCardsPriced] = useState(0);
+  // Credits economy is feature-flagged OFF by default (no honest sink since
+  // packs retired) — boost badges/buttons/tiers only render when re-enabled.
+  const [creditsOn, setCreditsOn] = useState(false);
   useEffect(() => {
     fetch('/api/stats/live').then(r => r.json()).then(d => setCardsPriced(Number(d.totalCards) || 0)).catch(() => {});
+    fetch('/api/flags').then(r => r.json()).then(d => setCreditsOn((d.flags || {}).credits === true)).catch(() => {});
   }, []);
 
   // Bid modal (auction)
@@ -383,7 +387,7 @@ export default function LivePage() {
             </span>
           </div>
           <h1 className="live-hero-title">The Hobby,<br /><span className="live-hero-gold">In Real Time.</span></h1>
-          <p className="live-hero-sub">Bid on live auctions. Post open bids. Boost your offers to stand out.</p>
+          <p className="live-hero-sub">Bid on live auctions. Post open bids. Find your grail on the floor.</p>
           <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
             <button className="btn btn-primary btn-lg" onClick={() => { if (!token) { toast('Please log in first', true); return; } setCreateAuctionModal(true); }}>
               + List a Card for Auction
@@ -423,7 +427,7 @@ export default function LivePage() {
                   <div className="live-top-bid-info">
                     <div className="live-top-bid-player">{w.player}</div>
                     <div className="live-top-bid-meta">{w.grader} {w.grade}</div>
-                    {tier && <BoostBadge credits={w.boost_credits} />}
+                    {creditsOn && tier && <BoostBadge credits={w.boost_credits} />}
                   </div>
                   <div className="live-top-bid-price">
                     <div className="live-top-bid-amount">{fmt(Number(w.bid_amount) / 100)}</div>
@@ -620,7 +624,7 @@ export default function LivePage() {
         <>
           <div className="toolbar" style={{ marginBottom: 18 }}>
             <select className="sortsel" value={wantSort} onChange={e => setWantSort(e.target.value)}>
-              <option value="boost_desc">Most Boosted</option>
+              {creditsOn && <option value="boost_desc">Most Boosted</option>}
               <option value="amount_desc">Highest Bid</option>
               <option value="newest">Newest</option>
               <option value="ending_soon">Ending Soon</option>
@@ -652,7 +656,7 @@ export default function LivePage() {
                       <div className="live-want-player">{w.player}</div>
                       <div className="live-want-meta">{w.grader} {w.grade} {' '}{w.card_set}</div>
                       <div className="live-want-buyer">@{w.buyer_handle}</div>
-                      {tier && <BoostBadge credits={w.boost_credits} />}
+                      {creditsOn && tier && <BoostBadge credits={w.boost_credits} />}
                     </div>
                     {/* Price + actions */}
                     <div className="live-want-right">
@@ -661,9 +665,11 @@ export default function LivePage() {
                       <div className="live-want-actions">
                         {isOwn ? (
                           <>
-                            <button onClick={() => { setBoostModal(w); setBoostAmount(10); }} className="live-want-boost-btn">
-                              Boost
-                            </button>
+                            {creditsOn && (
+                              <button onClick={() => { setBoostModal(w); setBoostAmount(10); }} className="live-want-boost-btn">
+                                Boost
+                              </button>
+                            )}
                             <button onClick={() => cancelWant(w.id)} className="live-want-cancel-btn">✕</button>
                           </>
                         ) : (
@@ -851,6 +857,7 @@ export default function LivePage() {
                   </div>
                 </div>
 
+                {creditsOn && (
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, display: 'block' }}>Boost your bid (optional)</label>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -874,6 +881,7 @@ export default function LivePage() {
                     ))}
                   </div>
                 </div>
+                )}
 
                 <div className="live-modal-actions">
                   <button onClick={() => setWantModal(false)} className="live-modal-cancel">Cancel</button>

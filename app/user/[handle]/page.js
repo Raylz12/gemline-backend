@@ -27,12 +27,9 @@ export default function UserPortfolioPage() {
   const [showcaseIds, setShowcaseIds] = useState([]);
   const [showAll, setShowAll] = useState(false);
 
-  // If viewing own profile, redirect to /portfolio
-  useEffect(() => {
-    if (user && user.handle && user.handle.toLowerCase() === handle?.toLowerCase()) {
-      router.replace('/portfolio');
-    }
-  }, [user, handle, router]);
+  // Own profile renders too (how others see you) — self just gets no
+  // follow/trade/report/block actions. /profile/[handle] redirects here.
+  const isSelf = !!(user && user.handle && user.handle.toLowerCase() === handle?.toLowerCase());
 
   // Load user portfolio
   useEffect(() => {
@@ -187,12 +184,33 @@ export default function UserPortfolioPage() {
               ))}
             </div>
           )}
+          {profileUser.bio && (
+            <div style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 6px', maxWidth: 520 }}>{profileUser.bio}</div>
+          )}
           <div className="user-profile-stats">
+            {profileUser.created_at && (
+              <>
+                <span title="Member since">Collector since <strong>{new Date(profileUser.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</strong></span>
+                <span className="community-dot">·</span>
+              </>
+            )}
             <span><strong>{Number(profileUser.follower_count) || 0}</strong> followers</span>
             <span className="community-dot">·</span>
             <span><strong>{Number(profileUser.following_count) || 0}</strong> following</span>
             <span className="community-dot">·</span>
             <span><strong>{cards.length}</strong> cards</span>
+            {Number(profileUser.sales_count) > 0 && (
+              <>
+                <span className="community-dot">·</span>
+                <span><strong>{profileUser.sales_count}</strong> sales</span>
+              </>
+            )}
+            {Number(profileUser.trades_count) > 0 && (
+              <>
+                <span className="community-dot">·</span>
+                <span><strong>{profileUser.trades_count}</strong> trades</span>
+              </>
+            )}
             {totalValue > 0 && (
               <>
                 <span className="community-dot">·</span>
@@ -208,7 +226,12 @@ export default function UserPortfolioPage() {
           </div>
         </div>
         <div className="user-profile-actions">
-          {token && (
+          {isSelf && (
+            <button className="btn-primary" onClick={() => router.push('/portfolio')} style={{ fontSize: 13, padding: '8px 16px' }}>
+              My Collection
+            </button>
+          )}
+          {token && !isSelf && (
             <>
               <button
                 className={`community-follow-btn ${isFollowing ? 'following' : ''}`}
@@ -216,9 +239,11 @@ export default function UserPortfolioPage() {
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </button>
+              {cards.length > 0 && (
               <button className="btn-primary" onClick={() => setShowTrade(true)} style={{ fontSize: 13, padding: '8px 16px' }}>
-                🔄 Propose Trade
+                Propose Trade
               </button>
+              )}
               <button onClick={() => setShowReport(true)} title="Report this user" style={{
                 fontSize: 12, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
                 background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',

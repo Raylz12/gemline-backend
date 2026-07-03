@@ -66,7 +66,7 @@ function ProfileCard({ user, token, authFetch }) {
 
   return (
     <div className="panel" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: 16, marginBottom: 20 }}>
-      <Link href={`/profile/${user.handle}`} style={{ flexShrink: 0 }}>
+      <Link href={`/user/${user.handle}`} style={{ flexShrink: 0 }}>
         <div style={{
           width: 52, height: 52, borderRadius: '50%',
           background: 'linear-gradient(135deg,#16c784,#10b377)',
@@ -77,7 +77,7 @@ function ProfileCard({ user, token, authFetch }) {
         {!editing ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              <Link href={`/profile/${user.handle}`} style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 16, color: 'var(--txt)', textDecoration: 'none' }}>@{user.handle}</Link>
+              <Link href={`/user/${user.handle}`} style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 16, color: 'var(--txt)', textDecoration: 'none' }}>@{user.handle}</Link>
               <button onClick={() => setEditing(true)} style={{
                 fontSize: 11, color: 'var(--gold)', background: 'none', border: '1px solid var(--gold)',
                 borderRadius: 6, padding: '2px 8px', cursor: 'pointer',

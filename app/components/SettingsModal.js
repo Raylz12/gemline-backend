@@ -519,7 +519,7 @@ export default function SettingsModal({ onClose }) {
               {/* View Profile Button */}
               <div style={{ marginBottom: 12 }}>
                 <button className="btn-ghost" style={{ fontSize: 12, padding: '10px 14px', width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
-                  onClick={() => { onClose(); router.push(`/profile/${profile?.handle || user?.handle}`); }}>
+                  onClick={() => { onClose(); router.push(`/user/${profile?.handle || user?.handle}`); }}>
                   <IconUser size={14} /> View My Profile
                 </button>
               </div>

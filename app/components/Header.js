@@ -137,6 +137,11 @@ export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [recentCards, setRecentCards] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
+  // Credits economy is flag-gated OFF by default (no sink since packs retired).
+  const [creditsOn, setCreditsOn] = useState(false);
+  useEffect(() => {
+    fetch('/api/flags').then(r => r.json()).then(d => setCreditsOn((d.flags || {}).credits === true)).catch(() => {});
+  }, []);
   const searchTimer = useRef(null);
   const lastScroll = useRef(0);
   const searchRef = useRef(null);
@@ -291,7 +296,7 @@ export default function Header() {
 
           <div className="nav-right">
             <NotificationBell />
-            {user && (
+            {user && creditsOn && (
               <button id="walletPill" title="Buy credits" onClick={() => setShowCredits(true)}>
                 <span className="mono">{wallet.credits}</span>
                 <span className="addc">+</span>
@@ -305,7 +310,7 @@ export default function Header() {
                 </button>
                 {avatarOpen && (
                   <div className="avatar-dropdown" onClick={() => setAvatarOpen(false)}>
-                    <Link href={`/profile/${user.handle || 'me'}`} className="avatar-dd-item">
+                    <Link href={`/user/${user.handle || 'me'}`} className="avatar-dd-item">
                       My Profile
                     </Link>
                     <button className="avatar-dd-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setAvatarOpen(false); setShowSettings(true); }}>

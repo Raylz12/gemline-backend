@@ -3701,7 +3701,10 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
     // Follower counts + portfolio + earned badges + showcase picks — one round-trip batch
     const [fcRes, cardsRes, badgesRes, showcaseRes] = await Promise.all([
       pool.query(
-        'SELECT (SELECT COUNT(*) FROM follows WHERE following_id = $1) as follower_count, (SELECT COUNT(*) FROM follows WHERE follower_id = $1) as following_count',
+        `SELECT (SELECT COUNT(*) FROM follows WHERE following_id = $1) as follower_count,
+                (SELECT COUNT(*) FROM follows WHERE follower_id = $1) as following_count,
+                (SELECT COUNT(*) FROM orders WHERE seller_id = $1 AND status = 'settled') as sales_count,
+                (SELECT COUNT(*) FROM trades WHERE (proposer_id = $1 OR counterparty_id = $1) AND status IN ('accepted','settling','settled')) as trades_count`,
         [user.id]),
       pool.query(`
         SELECT p.id as portfolio_id, p.card_id, p.verification_status, c.player, c.sport, c.card_set, c.grader, c.grade,
