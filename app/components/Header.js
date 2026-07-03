@@ -131,6 +131,7 @@ export default function Header() {
   const [headerHidden, setHeaderHidden] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [recentCards, setRecentCards] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
   const searchTimer = useRef(null);
   const lastScroll = useRef(0);
@@ -157,30 +158,46 @@ export default function Header() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Live search dropdown
+  // Live typeahead — tokenized family search over the full 287K-card catalog
+  // (POST /api/catalog/search: every word must match player/set/variant/year,
+  // results grouped by card family). Falls back gracefully to nothing on error.
   const handleSearchInput = (val) => {
     setSearchQuery(val);
     clearTimeout(searchTimer.current);
-    if (!val || val.length < 2) { setSearchResults([]); setSearchOpen(false); return; }
+    if (!val || val.length < 2) { setSearchResults([]); setSearchOpen(!!val ? false : recentCards.length > 0); return; }
     searchTimer.current = setTimeout(() => {
-      fetch(`/api/market/feed?limit=8&search=${encodeURIComponent(val)}`)
+      fetch('/api/catalog/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: val }),
+      })
         .then(r => r.json())
         .then(data => {
-          const results = (data.feed || []).map(c => ({
-            id: c.cardId, player: c.player, sport: c.sport, set: c.set,
-            grader: c.grader, grade: c.grade, market: Number(c.marketPrice) || 0,
-            thumbnail: c.thumbnail, gain7d: Number(c.gain7d ?? c.gain_7d) || 0,
-            lo: Number(c.lo) || 0, hi: Number(c.hi) || 0,
-            sales7d: Number(c.sales7d ?? c.sales_7d) || 0, sales30d: Number(c.sales30d ?? c.sales_30d) || 0,
-            rookie: c.rookie, variant: c.variant, year: c.year, confidence: c.confidence,
-            // Without these the card detail can't load charts/comps/grade ladder ("no data on card")
-            cardhedge_id: c.cardhedge_id, grades: c.grades || [], num: c.num, saleCount: c.saleCount,
-          }));
+          const results = (data.families || []).slice(0, 8).map(f => {
+            // Best tier for the row: the priced tier CardDetail should open on.
+            const priced = (f.tiers || []).filter(t => t.price > 0);
+            const best = priced.sort((a, b) => b.price - a.price)[0] || (f.tiers || [])[0] || {};
+            return {
+              id: best.id, player: f.player, sport: f.sport, set: f.card_set,
+              grader: best.grader || 'RAW', grade: best.grade || '',
+              market: Number(best.price) || Number(f.topPrice) || 0,
+              thumbnail: f.ebay_thumb || f.image_url || null,
+              variant: f.variant, year: f.year, num: f.number,
+              gradeCount: (f.tiers || []).length,
+            };
+          }).filter(r => r.id);
           setSearchResults(results);
           setSearchOpen(results.length > 0);
         })
         .catch(() => {});
     }, 250);
+  };
+
+  // Recently viewed — CardDetail writes localStorage 'gemline_recent' on every
+  // open; surface it when the search box is focused while empty.
+  const loadRecent = () => {
+    try { setRecentCards(JSON.parse(localStorage.getItem('gemline_recent') || '[]').slice(0, 6)); }
+    catch { setRecentCards([]); }
   };
 
   // Close dropdown on click outside
@@ -227,25 +244,33 @@ export default function Header() {
             <input placeholder="Search players, sets, slabs…" value={searchQuery || ''} 
               onChange={e => handleSearchInput(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }} />
+              onFocus={() => {
+                if (searchResults.length > 0) { setSearchOpen(true); return; }
+                if (!(searchQuery || '').trim()) { loadRecent(); setSearchOpen(true); }
+              }} />
             <kbd>/</kbd>
-            {searchOpen && searchResults.length > 0 && (
+            {searchOpen && (searchResults.length > 0 || (!(searchQuery || '').trim() && recentCards.length > 0)) && (
               <div className="search-dropdown">
-                {searchResults.map(c => (
+                {searchResults.length === 0 && !(searchQuery || '').trim() && (
+                  <div style={{ padding: '8px 12px 4px', fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: 1, textTransform: 'uppercase', color: 'var(--muted)' }}>Recently viewed</div>
+                )}
+                {(searchResults.length > 0 ? searchResults : recentCards).map(c => (
                   <div key={c.id} className="search-result" onClick={() => { setSelectedCard(c); setSearchOpen(false); }}>
                     {c.thumbnail && <img src={c.thumbnail} alt="" className="search-thumb" />}
                     <div className="search-info">
-                      <div className="search-name">{c.player}</div>
-                      <div className="search-meta"><span className="mchip mchip-grade" style={{ marginRight: 6 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{c.set}</div>
+                      <div className="search-name">{c.player}{c.gradeCount > 1 ? <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400, marginLeft: 6 }}>{c.gradeCount} grades</span> : null}</div>
+                      <div className="search-meta"><span className="mchip mchip-grade" style={{ marginRight: 6 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{[c.year, c.set].filter(Boolean).join(' ')}</div>
                     </div>
                     <div className="search-price">
                       {c.market > 0 ? `$${c.market.toLocaleString()}` : 'TBD'}
                     </div>
                   </div>
                 ))}
-                <div className="search-all" onClick={goToMarket}>
-                  View all results →
-                </div>
+                {searchResults.length > 0 && (
+                  <div className="search-all" onClick={goToMarket}>
+                    View all results →
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -415,6 +415,23 @@ export default function CardDetail({ card: cardProp, onClose }) {
     return merged;
   }, [cardProp, hydrated]);
 
+  // Recently viewed — feeds the header search's empty-state dropdown. Waits for
+  // hydration when possible so the stored entry has a thumbnail + price.
+  useEffect(() => {
+    const id = fam?.id;
+    if (!id || !fam?.player) return;
+    try {
+      const entry = {
+        id, player: fam.player, set: fam.set || '', year: fam.year || '',
+        grader: fam.grader || 'RAW', grade: fam.grade || '',
+        market: Number(fam.market) || 0, thumbnail: fam.thumbnail || null,
+      };
+      const prev = JSON.parse(localStorage.getItem('gemline_recent') || '[]');
+      const next = [entry, ...prev.filter(x => x && x.id !== id)].slice(0, 8);
+      localStorage.setItem('gemline_recent', JSON.stringify(next));
+    } catch { /* private mode etc. — not worth surfacing */ }
+  }, [fam?.id, fam?.thumbnail]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Grade-tier switcher ──
   // Clicking a tier in the Grade Ladder swaps the WHOLE panel (hero price,
   // FMV bar, chart, comps, listings) to that tier. null = the card's own tier.

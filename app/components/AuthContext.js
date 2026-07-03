@@ -69,6 +69,8 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Signup failed');
     localStorage.setItem('gemline_token', data.token);
+    // Brand-new account — ClientLayout shows the preferences onboarding once.
+    try { localStorage.setItem('gemline_onboard', 'pending'); } catch {}
     tokenRef.current = data.token;
     setToken(data.token);
     setUser(data.user);
