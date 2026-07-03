@@ -335,3 +335,16 @@ CREATE TABLE IF NOT EXISTS watchlist (
   UNIQUE (user_id, card_id)
 );
 CREATE INDEX IF NOT EXISTS idx_watch_card ON watchlist (card_id);
+
+-- ── Order messages + counteroffers + cancel requests (added 2026-07-03) ────
+CREATE TABLE IF NOT EXISTS order_messages (
+  id         BIGSERIAL PRIMARY KEY,
+  order_id   uuid NOT NULL,
+  sender_id  uuid NOT NULL,
+  body       text NOT NULL,
+  read       boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_omsg_order ON order_messages (order_id, created_at);
+-- listing_offers gains: counter_amount NUMERIC, countered_at TIMESTAMPTZ (lazy ALTER)
+-- orders gains: cancel_requested_by uuid, cancel_requested_at timestamptz, cancel_reason text (lazy ALTER)

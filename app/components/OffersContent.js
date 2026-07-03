@@ -20,6 +20,7 @@ function StatusPill({ status, listingStatus }) {
     pending: { label: 'PENDING', bg: 'var(--gold-soft)', color: 'var(--gold)' },
     accepted: { label: 'ACCEPTED', bg: 'var(--up-soft)', color: 'var(--up)' },
     declined: { label: 'DECLINED', bg: 'var(--down-soft)', color: 'var(--down)' },
+    countered: { label: 'COUNTERED', bg: 'rgba(96,165,250,.12)', color: '#60a5fa' },
   };
   const s = map[status] || { label: (status || '').toUpperCase(), bg: 'var(--panel-2)', color: 'var(--muted)' };
   const stale = status === 'pending' && listingStatus !== 'active';
@@ -37,6 +38,8 @@ export default function OffersContent() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('received');
   const [acting, setActing] = useState(null); // offer id being accepted/declined
+  const [counterId, setCounterId] = useState(null); // offer id with open counter form
+  const [counterAmt, setCounterAmt] = useState('');
 
   const load = useCallback(() => {
     if (!token) { setLoading(false); return; }
@@ -56,6 +59,39 @@ export default function OffersContent() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || `${action} failed`);
       toast(action === 'accept' ? `Offer accepted — ${fmt(offer.amount)} in escrow ✓` : 'Offer declined');
+      load();
+    } catch (e) { toast(e.message, true); }
+    finally { setActing(null); }
+  };
+
+  const sendCounter = async (offer) => {
+    const amt = Number(counterAmt);
+    if (!amt || amt <= 0) { toast('Enter a counter amount', true); return; }
+    setActing(offer.id);
+    try {
+      const res = await authFetch(`/api/offers/${offer.id}/counter`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Counter failed');
+      toast(`Countered at ${fmt(amt)} — buyer notified ✓`);
+      setCounterId(null); setCounterAmt('');
+      load();
+    } catch (e) { toast(e.message, true); }
+    finally { setActing(null); }
+  };
+
+  const respondCounter = async (offer, accept) => {
+    setActing(offer.id);
+    try {
+      const res = await authFetch(`/api/offers/${offer.id}/respond-counter`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accept }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      toast(accept ? 'Deal! Complete payment in Orders to secure the card ✓' : 'Counter declined');
       load();
     } catch (e) { toast(e.message, true); }
     finally { setActing(null); }
@@ -121,11 +157,14 @@ export default function OffersContent() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="mono" style={{ fontSize: 17, fontWeight: 700, color: 'var(--gold)' }}>{fmt(o.amount)}</div>
+                  {o.counterAmount != null && (
+                    <div style={{ fontSize: 11, color: '#60a5fa', fontFamily: 'var(--mono)', fontWeight: 600 }}>counter {fmt(o.counterAmount)}</div>
+                  )}
                   <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
                     {pctOfList !== null ? `${pctOfList}% of ask ${fmt(o.listingPrice)}` : ''}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <StatusPill status={o.status} listingStatus={o.listingStatus} />
                   {view === 'received' && isPendingActive && (
                     <>
@@ -133,13 +172,41 @@ export default function OffersContent() {
                         style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'var(--up)', color: '#04140c', cursor: acting === o.id ? 'wait' : 'pointer', border: 'none' }}>
                         {acting === o.id ? '…' : 'Accept'}
                       </button>
+                      <button onClick={() => { setCounterId(counterId === o.id ? null : o.id); setCounterAmt(String(Math.round((o.amount + o.listingPrice) / 2))); }}
+                        style={{ padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(96,165,250,.12)', color: '#60a5fa', border: '1px solid rgba(96,165,250,.3)', cursor: 'pointer' }}>
+                        Counter
+                      </button>
                       <button onClick={() => act(o, 'decline')} disabled={acting === o.id}
                         style={{ padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'var(--panel-2)', color: 'var(--muted)', border: '1px solid var(--line-2)', cursor: 'pointer' }}>
                         Decline
                       </button>
                     </>
                   )}
+                  {view === 'sent' && o.status === 'countered' && o.listingStatus === 'active' && (
+                    <>
+                      <button onClick={() => respondCounter(o, true)} disabled={acting === o.id}
+                        style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'var(--up)', color: '#04140c', cursor: acting === o.id ? 'wait' : 'pointer', border: 'none' }}>
+                        {acting === o.id ? '…' : `Accept ${fmt(o.counterAmount)}`}
+                      </button>
+                      <button onClick={() => respondCounter(o, false)} disabled={acting === o.id}
+                        style={{ padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'var(--panel-2)', color: 'var(--muted)', border: '1px solid var(--line-2)', cursor: 'pointer' }}>
+                        Decline
+                      </button>
+                    </>
+                  )}
                 </div>
+                {view === 'received' && counterId === o.id && isPendingActive && (
+                  <div style={{ width: '100%', display: 'flex', gap: 6, alignItems: 'center', paddingTop: 10, borderTop: '1px dashed var(--line)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>Counter at</span>
+                    <input type="number" min="1" value={counterAmt} onChange={e => setCounterAmt(e.target.value)}
+                      style={{ width: 110, padding: '8px 10px', borderRadius: 8, fontSize: 13, fontFamily: 'var(--mono)', background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line-2)' }} />
+                    <button onClick={() => sendCounter(o)} disabled={acting === o.id}
+                      style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#60a5fa', color: '#04101c', border: 'none', cursor: acting === o.id ? 'wait' : 'pointer' }}>
+                      {acting === o.id ? '…' : 'Send Counter'}
+                    </button>
+                    <span style={{ fontSize: 11, color: 'var(--dim)' }}>buyer offered {fmt(o.amount)} · ask {fmt(o.listingPrice)}</span>
+                  </div>
+                )}
               </div>
             );
           })}

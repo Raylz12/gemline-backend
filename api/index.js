@@ -9,6 +9,7 @@ import { appRouter } from '../src/routes/app.js';
 import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
 import { rateLimit, pgRateLimit, getIp } from '../src/middleware/rateLimit.js';
 import * as ordersSvc from '../orders.js';
+import * as escrowSvc from '../escrow.js';
 import { transition } from '../machine.js';
 import { emailUser, templates as emailTpl } from '../lib/email.js';
 import { stripeClient, createPaymentIntent, createConnectAccount, createOnboardingLink, getAccountStatus, verifyWebhook } from '../src/adapters/stripe.js';
@@ -2241,8 +2242,9 @@ app.get('/api/offers', requireAuth, async (req, res) => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `).catch(() => {});
+    await ensureCounterCols(pool);
     const base = `
-      SELECT o.id, o.listing_id, o.amount, o.status, o.created_at,
+      SELECT o.id, o.listing_id, o.amount, o.status, o.created_at, o.counter_amount, o.countered_at,
              l.price AS listing_price, l.status AS listing_status, l.seller_id, o.buyer_id,
              c.id AS card_id, c.player, c.card_set, c.grader, c.grade, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle
@@ -2258,6 +2260,8 @@ app.get('/api/offers', requireAuth, async (req, res) => {
     const shape = o => ({
       id: o.id, listingId: o.listing_id,
       amount: Number(o.amount) / 100, listingPrice: Number(o.listing_price) / 100,
+      counterAmount: o.counter_amount != null ? Number(o.counter_amount) / 100 : null,
+      counteredAt: o.countered_at || null,
       status: o.status, listingStatus: o.listing_status, createdAt: o.created_at,
       cardId: o.card_id, player: o.player, set: o.card_set, grader: o.grader, grade: o.grade,
       thumbnail: o.ebay_thumb || o.image_url || null,
@@ -2348,6 +2352,341 @@ app.post('/api/offers/:id/decline', requireAuth, async (req, res) => {
   }
 });
 
+// ── Counteroffers ──────────────────────────────────────────────────────
+let _counterColsReady = false;
+async function ensureCounterCols(pool) {
+  if (_counterColsReady) return;
+  await pool.query('ALTER TABLE listing_offers ADD COLUMN IF NOT EXISTS counter_amount NUMERIC').catch(() => {});
+  await pool.query('ALTER TABLE listing_offers ADD COLUMN IF NOT EXISTS countered_at TIMESTAMPTZ').catch(() => {});
+  _counterColsReady = true;
+}
+
+// Seller counters a pending offer at a new price. One counter per offer —
+// the ball moves to the buyer (accept / decline via respond-counter).
+app.post('/api/offers/:id/counter', requireAuth, limitMoney, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureCounterCols(pool);
+    const amount = Number(req.body?.amount);
+    if (!amount || amount < 0.01) return res.status(400).json({ error: 'Invalid counter amount' });
+    const { rows: [offer] } = await pool.query(
+      `SELECT o.*, l.seller_id, l.card_id, l.price AS listing_price, l.status AS listing_status
+       FROM listing_offers o JOIN listings l ON l.id = o.listing_id WHERE o.id = $1`,
+      [req.params.id]);
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    if (offer.seller_id !== req.userId) return res.status(403).json({ error: 'Not your listing' });
+    if (offer.status !== 'pending') return res.status(409).json({ error: 'Offer is no longer pending' });
+    if (offer.listing_status !== 'active') return res.status(410).json({ error: 'Listing is no longer active' });
+    const cents = Math.round(amount * 100);
+    if (cents <= Number(offer.amount)) return res.status(400).json({ error: 'Counter must be higher than the buyer\u2019s offer — accept it instead' });
+    await pool.query("UPDATE listing_offers SET status = 'countered', counter_amount = $1, countered_at = NOW() WHERE id = $2", [cents, offer.id]);
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
+    await notify(pool, offer.buyer_id, 'offer_countered',
+      `Counteroffer: ${card?.player || 'card'} — $${amount.toLocaleString()}`,
+      `You offered $${(Number(offer.amount) / 100).toLocaleString()}; the seller countered. Accept or decline in your Offers inbox.`,
+      { listingId: offer.listing_id, offerId: offer.id, cardId: offer.card_id });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('offer counter error:', e.message);
+    res.status(500).json({ error: 'Counter failed' });
+  }
+});
+
+// Buyer answers a counteroffer. Accept → pending-payment order at the counter
+// price (same manual-capture checkout as a seller accept); decline → closed.
+app.post('/api/offers/:id/respond-counter', requireAuth, limitMoney, async (req, res) => {
+  const r = await getRepo().catch(() => null);
+  const pool = r?.pool;
+  if (!pool) return res.status(500).json({ error: 'No database' });
+  const accept = req.body?.accept === true;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [offer] } = await client.query(
+      `SELECT o.*, l.seller_id, l.card_id, l.status AS listing_status, l.vault_item_id
+       FROM listing_offers o JOIN listings l ON l.id = o.listing_id
+       WHERE o.id = $1 FOR UPDATE OF o, l`, [req.params.id]);
+    if (!offer) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Offer not found' }); }
+    if (offer.buyer_id !== req.userId) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Not your offer' }); }
+    if (offer.status !== 'countered') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'No open counteroffer' }); }
+
+    if (!accept) {
+      await client.query("UPDATE listing_offers SET status = 'declined' WHERE id = $1", [offer.id]);
+      await client.query('COMMIT');
+      const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
+      await notify(pool, offer.seller_id, 'offer_declined',
+        `Counter declined: ${card?.player || 'card'}`,
+        'The buyer passed on your counteroffer. The listing is still live.',
+        { listingId: offer.listing_id, offerId: offer.id });
+      return res.json({ success: true });
+    }
+
+    if (offer.listing_status !== 'active') { await client.query('ROLLBACK'); return res.status(410).json({ error: 'Listing is no longer active' }); }
+    await client.query("UPDATE listing_offers SET status = 'accepted' WHERE id = $1", [offer.id]);
+    await client.query("UPDATE listing_offers SET status = 'declined' WHERE listing_id = $1 AND id != $2 AND status IN ('pending','countered')", [offer.listing_id, offer.id]);
+    await client.query("UPDATE listings SET status = 'sold' WHERE id = $1", [offer.listing_id]);
+    await client.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [offer.listing_id]);
+    await client.query('COMMIT');
+
+    const amountCents = Number(offer.counter_amount);
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const { order } = await ordersSvc.beginCheckout(r, stripe, {
+      listingId: offer.listing_id, cardId: offer.card_id,
+      buyerId: offer.buyer_id, sellerId: offer.seller_id,
+      amount: amountCents, fee: Math.round(amountCents * 0.1),
+      method: offer.vault_item_id ? 'vault' : 'direct',
+      paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
+    });
+    await snapshotOrderAddress(pool, order.id, offer.buyer_id).catch(() => {});
+
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [offer.card_id]).catch(() => ({ rows: [{}] }));
+    const amt = `$${(amountCents / 100).toLocaleString()}`;
+    await notify(pool, offer.seller_id, 'offer_accepted',
+      `Counter accepted: ${card?.player || 'card'} — ${amt}`,
+      'The buyer took your counteroffer. You\u2019ll be notified to ship once payment clears.',
+      { listingId: offer.listing_id, offerId: offer.id, orderId: order.id });
+    await notify(pool, offer.buyer_id, 'offer_accepted',
+      `Deal agreed: ${card?.player || 'card'} — ${amt}`,
+      'Complete payment within 24h to secure your card — open Orders to pay now.',
+      { listingId: offer.listing_id, offerId: offer.id, orderId: order.id, action: 'complete_payment' });
+
+    res.json({ success: true, order });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('respond-counter error:', e.message);
+    res.status(500).json({ error: e.message || 'Respond failed' });
+  } finally {
+    client.release();
+  }
+});
+
+// ── Order messages — buyer↔seller thread per order ───────────────────────
+let _msgTableReady = false;
+async function ensureMsgTable(pool) {
+  if (_msgTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS order_messages (
+      id BIGSERIAL PRIMARY KEY,
+      order_id uuid NOT NULL,
+      sender_id uuid NOT NULL,
+      body TEXT NOT NULL,
+      read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_omsg_order ON order_messages (order_id, created_at)').catch(() => {});
+  _msgTableReady = true;
+}
+
+async function orderParty(pool, orderId, userId) {
+  const { rows: [o] } = await pool.query('SELECT id, buyer_id, seller_id, status, card_id, escrow_id, listing_id FROM orders WHERE id = $1', [orderId]);
+  if (!o) return { error: 404 };
+  if (o.buyer_id !== userId && o.seller_id !== userId) return { error: 403 };
+  return { order: o, other: o.buyer_id === userId ? o.seller_id : o.buyer_id };
+}
+
+app.get('/api/orders/:id/messages', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ messages: [] });
+    await ensureMsgTable(pool);
+    const p = await orderParty(pool, req.params.id, req.userId);
+    if (p.error) return res.status(p.error).json({ error: p.error === 404 ? 'Order not found' : 'Not your order' });
+    const { rows } = await pool.query(`
+      SELECT m.id, m.sender_id, m.body, m.read, m.created_at, u.handle AS sender_handle
+      FROM order_messages m LEFT JOIN users u ON u.id = m.sender_id
+      WHERE m.order_id = $1 ORDER BY m.created_at ASC LIMIT 200`, [req.params.id]);
+    // Opening the thread marks the other side's messages as read.
+    await pool.query('UPDATE order_messages SET read = TRUE WHERE order_id = $1 AND sender_id != $2 AND read = FALSE', [req.params.id, req.userId]).catch(() => {});
+    res.json({
+      messages: rows.map(m => ({
+        id: m.id, body: m.body, createdAt: m.created_at,
+        mine: m.sender_id === req.userId, senderHandle: m.sender_handle || 'user',
+      })),
+    });
+  } catch (e) { res.json({ messages: [] }); }
+});
+
+app.post('/api/orders/:id/messages', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureMsgTable(pool);
+    const body = String(req.body?.body || '').trim().slice(0, 2000);
+    if (!body) return res.status(400).json({ error: 'Message required' });
+    const p = await orderParty(pool, req.params.id, req.userId);
+    if (p.error) return res.status(p.error).json({ error: p.error === 404 ? 'Order not found' : 'Not your order' });
+    const { rows: [msg] } = await pool.query(
+      'INSERT INTO order_messages (order_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, created_at',
+      [req.params.id, req.userId, body]);
+    // Notify the other party — but don't stack unread pings for the same thread.
+    const { rows: [existing] } = await pool.query(
+      `SELECT id FROM notifications WHERE user_id = $1 AND type = 'order_message' AND read = FALSE AND data->>'orderId' = $2 LIMIT 1`,
+      [p.other, String(req.params.id)]).catch(() => ({ rows: [] }));
+    if (!existing) {
+      const { rows: [me] } = await pool.query('SELECT handle FROM users WHERE id = $1', [req.userId]).catch(() => ({ rows: [{}] }));
+      await notify(pool, p.other, 'order_message',
+        `Message from @${me?.handle || 'user'}`,
+        body.length > 90 ? body.slice(0, 90) + '…' : body,
+        { orderId: req.params.id });
+    }
+    res.json({ ok: true, id: msg.id, createdAt: msg.created_at });
+  } catch (e) {
+    console.error('order message error:', e.message);
+    res.status(500).json({ error: 'Message failed' });
+  }
+});
+
+// ── Order cancellation + disputes ─────────────────────────────────────
+let _cancelColsReady = false;
+async function ensureCancelCols(pool) {
+  if (_cancelColsReady) return;
+  await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_requested_by uuid').catch(() => {});
+  await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ').catch(() => {});
+  await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT').catch(() => {});
+  _cancelColsReady = true;
+}
+
+// Cancel + refund an order whose escrow is still held (PI authorized, never
+// captured — the "refund" is an authorization release, no money moved).
+async function executeCancel(r, order, { actor, reason }) {
+  const pool = r.pool;
+  const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+  if (order.escrow_id) {
+    const escrow = await r.escrow.get(order.escrow_id);
+    if (escrow && escrow.status === 'held') await escrowSvc.refund(r, stripe, escrow);
+  }
+  const full = await r.orders.get(order.id);
+  await transition(r, 'order', full, 'cancelled', { actor, payload: { reason } });
+  // Put the listing back on the market (best effort).
+  if (order.listing_id) {
+    await pool.query("UPDATE listings SET status = 'active' WHERE id = $1 AND status = 'sold'", [order.listing_id]).catch(() => {});
+    await pool.query(`UPDATE portfolios SET is_listed = true, listing_id = $1
+      WHERE id = (SELECT id FROM portfolios WHERE user_id = $2 AND card_id = $3 AND is_listed = false LIMIT 1)`,
+      [order.listing_id, order.seller_id, order.card_id]).catch(() => {});
+  }
+}
+
+const CANCELLABLE = ['escrow_held', 'awaiting_shipment'];
+
+// Buyer requests cancellation (seller must approve). Seller cancels directly
+// (can't fulfill) — immediate, buyer's hold is released.
+app.post('/api/orders/:id/cancel-request', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureCancelCols(pool);
+    const reason = String(req.body?.reason || '').trim().slice(0, 300);
+    const p = await orderParty(pool, req.params.id, req.userId);
+    if (p.error) return res.status(p.error).json({ error: p.error === 404 ? 'Order not found' : 'Not your order' });
+    const order = p.order;
+    if (!CANCELLABLE.includes(order.status)) {
+      return res.status(409).json({ error: `Order is ${order.status.replace(/_/g, ' ')} — it can\u2019t be cancelled at this stage` });
+    }
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+
+    if (req.userId === order.seller_id) {
+      // Seller can't fulfill → cancel immediately, release the buyer's hold.
+      await executeCancel(r, order, { actor: req.userId, reason: reason || 'seller_cancelled' });
+      await notify(pool, order.buyer_id, 'order_cancelled',
+        `Order cancelled: ${card?.player || 'card'}`,
+        'The seller cancelled this order. Your payment hold has been released — no charge.',
+        { orderId: order.id, cardId: order.card_id });
+      return res.json({ success: true, cancelled: true });
+    }
+
+    if (order.cancel_requested_by) return res.status(409).json({ error: 'Cancellation already requested' });
+    await pool.query('UPDATE orders SET cancel_requested_by = $1, cancel_requested_at = NOW(), cancel_reason = $2 WHERE id = $3',
+      [req.userId, reason || null, order.id]);
+    await notify(pool, order.seller_id, 'cancel_requested',
+      `Cancel request: ${card?.player || 'card'}`,
+      `The buyer asked to cancel${reason ? ` — “${reason}”` : ''}. Approve or decline in Portfolio → Orders.`,
+      { orderId: order.id, cardId: order.card_id });
+    res.json({ success: true, requested: true });
+  } catch (e) {
+    console.error('cancel-request error:', e.message);
+    res.status(500).json({ error: e.message || 'Cancel request failed' });
+  }
+});
+
+// Seller answers a buyer's cancel request.
+app.post('/api/orders/:id/cancel-respond', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureCancelCols(pool);
+    const approve = req.body?.approve === true;
+    const p = await orderParty(pool, req.params.id, req.userId);
+    if (p.error) return res.status(p.error).json({ error: p.error === 404 ? 'Order not found' : 'Not your order' });
+    const order = p.order;
+    if (req.userId !== order.seller_id) return res.status(403).json({ error: 'Only the seller can respond' });
+    const { rows: [full] } = await pool.query('SELECT cancel_requested_by FROM orders WHERE id = $1', [order.id]);
+    if (!full?.cancel_requested_by) return res.status(409).json({ error: 'No open cancel request' });
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+
+    if (approve) {
+      if (!CANCELLABLE.includes(order.status)) return res.status(409).json({ error: `Order is ${order.status} — too late to cancel` });
+      await executeCancel(r, order, { actor: req.userId, reason: 'buyer_requested' });
+      await notify(pool, order.buyer_id, 'order_cancelled',
+        `Cancelled: ${card?.player || 'card'}`,
+        'The seller approved your cancellation. Your payment hold has been released — no charge.',
+        { orderId: order.id, cardId: order.card_id });
+      return res.json({ success: true, cancelled: true });
+    }
+    await pool.query('UPDATE orders SET cancel_requested_by = NULL, cancel_requested_at = NULL, cancel_reason = NULL WHERE id = $1', [order.id]);
+    await notify(pool, order.buyer_id, 'cancel_declined',
+      `Cancel declined: ${card?.player || 'card'}`,
+      'The seller is proceeding with this order — it will ship as planned.',
+      { orderId: order.id, cardId: order.card_id });
+    res.json({ success: true, cancelled: false });
+  } catch (e) {
+    console.error('cancel-respond error:', e.message);
+    res.status(500).json({ error: e.message || 'Respond failed' });
+  }
+});
+
+// Buyer reports a problem after delivery — opens a dispute (admin resolves
+// toward refund or seller payout; escrow stays held meanwhile).
+app.post('/api/orders/:id/dispute', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const reason = String(req.body?.reason || '').trim().slice(0, 500);
+    if (!reason) return res.status(400).json({ error: 'Tell us what\u2019s wrong with the order' });
+    const order = await r.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Not your purchase' });
+    if (!['shipped', 'delivered', 'inspection'].includes(order.status)) {
+      return res.status(409).json({ error: `Order is ${order.status} — disputes open after shipment` });
+    }
+    if (order.status === 'shipped') {
+      const shipments = await r.shipments.list({ order_id: order.id });
+      const inTransit = shipments.find(s => s.status === 'in_transit') || null;
+      await ordersSvc.markDelivered(r, order, inTransit);
+    }
+    await ordersSvc.dispute(r, order, { openerId: req.userId, reason });
+    const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+    await notify(pool, order.seller_id, 'order_disputed',
+      `Dispute opened: ${card?.player || 'card'}`,
+      `The buyer reported a problem: “${reason.slice(0, 120)}”. Escrow is on hold while GEMLINE reviews.`,
+      { orderId: order.id, cardId: order.card_id });
+    await notify(pool, order.buyer_id, 'order_disputed',
+      `Dispute opened: ${card?.player || 'card'}`,
+      'We\u2019ve paused the seller payout while we review. Watch for updates here.',
+      { orderId: order.id, cardId: order.card_id });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('order dispute error:', e.message);
+    res.status(500).json({ error: e.message || 'Dispute failed' });
+  }
+});
+
 // ── Orders — buyer/seller order book with ship + confirm-receipt lifecycle ────
 app.get('/api/orders', requireAuth, async (req, res) => {
   try {
@@ -2356,10 +2695,15 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     if (!pool) return res.json({ purchases: [], sales: [] });
     // Lazy sweep: expire stale pending_payment orders on every order read.
     await expirePendingPayments(r).catch(() => {});
+    await ensureMsgTable(pool);
+    await ensureCancelCols(pool);
     const base = `
       SELECT o.id, o.listing_id, o.card_id, o.buyer_id, o.seller_id, o.amount, o.platform_fee,
              o.fulfillment_method, o.status, o.created_at, o.updated_at, o.inspection_ends_at, o.payment_due_at,
-             o.shipping_address,
+             o.shipping_address, o.cancel_requested_by, o.cancel_requested_at, o.cancel_reason,
+             (SELECT COUNT(*) FROM order_messages m WHERE m.order_id = o.id AND m.sender_id != $1 AND m.read = FALSE) AS unread_messages,
+             (SELECT COUNT(*) FROM order_messages m2 WHERE m2.order_id = o.id) AS message_count,
+             tl.timeline,
              c.player, c.card_set, c.grader, c.grade, c.year, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle,
              s.carrier, s.tracking_number, s.shipped_at, s.delivered_at AS ship_delivered_at
@@ -2371,7 +2715,11 @@ app.get('/api/orders', requireAuth, async (req, res) => {
         SELECT carrier, tracking_number, shipped_at, delivered_at
         FROM shipments WHERE order_id = o.id AND direction IN ('seller_to_buyer','hub_to_buyer')
         ORDER BY created_at DESC LIMIT 1
-      ) s ON true`;
+      ) s ON true
+      LEFT JOIN LATERAL (
+        SELECT json_agg(json_build_object('state', e.to_state, 'at', e.created_at) ORDER BY e.created_at) AS timeline
+        FROM events e WHERE e.entity_type = 'order' AND e.entity_id = o.id
+      ) tl ON true`;
     const [bought, sold] = await Promise.all([
       pool.query(`${base} WHERE o.buyer_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [req.userId]),
       pool.query(`${base} WHERE o.seller_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [req.userId]),
@@ -2389,6 +2737,12 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       carrier: o.carrier || null, trackingNumber: o.tracking_number || null,
       shippedAt: o.shipped_at || null, deliveredAt: o.ship_delivered_at || null,
       shippingAddress: o.shipping_address || null,
+      unreadMessages: Number(o.unread_messages) || 0,
+      messageCount: Number(o.message_count) || 0,
+      cancelRequestedBy: o.cancel_requested_by || null,
+      cancelRequestedAt: o.cancel_requested_at || null,
+      cancelReason: o.cancel_reason || null,
+      timeline: o.timeline || [],
     });
     res.json({ purchases: bought.rows.map(shape), sales: sold.rows.map(shape) });
   } catch (e) {

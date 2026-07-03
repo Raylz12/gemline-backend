@@ -23,6 +23,7 @@ const NOTIF_ICONS = {
   outbid: IconZap, auction_won: IconTrophy, auction_sold: IconDollar, auction_ended: IconBell, auction_lost: IconBell,
   offer_received: IconGavel, offer_accepted: IconCheck, offer_declined: IconBell,
   price_alert: IconZap, watch_listing: IconDollar, offer_countered: IconGavel, order_message: IconBell,
+  cancel_requested: IconBell, cancel_declined: IconBell, order_disputed: IconBell,
 };
 
 // Where a notification should take you when clicked.

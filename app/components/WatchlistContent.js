@@ -93,7 +93,7 @@ export default function WatchlistContent() {
                     {item.grader && item.grade ? <span className="mchip mchip-grade" style={{ marginLeft: 8 }}>{item.grader} {item.grade}</span> : null}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {[item.year, item.cardSet, item.number ? `#${item.number}` : null].filter(Boolean).join(' ')}
+                    {[item.cardSet?.startsWith(String(item.year)) ? null : item.year, item.cardSet, item.number ? `#${item.number}` : null].filter(Boolean).join(' ')}
                   </div>
                   {item.liveListings > 0 && (
                     <div style={{ fontSize: 11, color: 'var(--gold)', fontFamily: 'var(--mono)', marginTop: 2 }}>
