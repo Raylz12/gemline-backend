@@ -5,6 +5,7 @@ import { useAuth } from '../../components/AuthContext';
 import { fmt } from '../../lib/data';
 import { toast } from '../../lib/toast';
 import TradeProposal from '../../components/TradeProposal';
+import ReportModal from '../../components/ReportModal';
 
 export default function UserPortfolioPage() {
   const params = useParams();
@@ -19,6 +20,8 @@ export default function UserPortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [badges, setBadges] = useState([]);
   const [featuredBadgeKeys, setFeaturedBadgeKeys] = useState([]);
   const [showcaseIds, setShowcaseIds] = useState([]);
@@ -52,14 +55,35 @@ export default function UserPortfolioPage() {
       .finally(() => setLoading(false));
   }, [handle]);
 
-  // Check if following
+  // Check if following + blocked
   useEffect(() => {
     if (!profileUser?.id || !token) return;
     authFetch(`/api/users/${profileUser.id}/is-following`)
       .then(r => r.json())
       .then(d => setIsFollowing(d.following || false))
       .catch(() => {});
+    authFetch('/api/users/blocked')
+      .then(r => r.json())
+      .then(d => setIsBlocked((d.blocked || []).some(b => b.userId === profileUser.id)))
+      .catch(() => {});
   }, [profileUser, token, authFetch]);
+
+  const toggleBlock = useCallback(async () => {
+    if (!token || !profileUser) return;
+    if (!isBlocked && !confirm(`Block @${profileUser.handle}? They won't be able to offer on your listings, trade with you, or follow you — and their posts disappear from your feed.`)) return;
+    try {
+      const res = await authFetch(`/api/users/${profileUser.id}/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block: !isBlocked }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      setIsBlocked(d.blocked);
+      if (d.blocked) setIsFollowing(false); // blocking unfollows both ways
+      toast(d.blocked ? `Blocked @${profileUser.handle}` : `Unblocked @${profileUser.handle}`);
+    } catch (e) { toast(e.message, true); }
+  }, [token, profileUser, isBlocked, authFetch]);
 
   const toggleFollow = useCallback(async () => {
     if (!token || !profileUser) return;
@@ -195,10 +219,24 @@ export default function UserPortfolioPage() {
               <button className="btn-primary" onClick={() => setShowTrade(true)} style={{ fontSize: 13, padding: '8px 16px' }}>
                 🔄 Propose Trade
               </button>
+              <button onClick={() => setShowReport(true)} title="Report this user" style={{
+                fontSize: 12, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+              }}>⚑ Report</button>
+              <button onClick={toggleBlock} title={isBlocked ? 'Unblock this user' : 'Block this user'} style={{
+                fontSize: 12, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                background: isBlocked ? 'rgba(239,68,68,.12)' : 'transparent',
+                border: '1px solid ' + (isBlocked ? 'rgba(239,68,68,.4)' : 'var(--line)'),
+                color: isBlocked ? '#ef4444' : 'var(--muted)',
+              }}>{isBlocked ? 'Blocked' : 'Block'}</button>
             </>
           )}
         </div>
       </div>
+
+      {showReport && profileUser && (
+        <ReportModal targetType="user" targetId={profileUser.id} targetLabel={`@${profileUser.handle}`} onClose={() => setShowReport(false)} />
+      )}
 
       {/* Showcase — top 5 cards (picked or highest value, verified first) */}
       <div className="eyebrow" style={{ marginTop: 30 }}>Showcase</div>

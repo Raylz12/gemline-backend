@@ -224,6 +224,15 @@ export function authRouter(repo) {
       const valid = user ? await verifyPassword(password, user.password_hash) : false;
       if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
+      // Moderation: suspended accounts can't sign in. Column is additive
+      // (users.suspended_at, added by the admin panel) — tolerate its absence.
+      if (repo.pool) {
+        try {
+          const { rows: [s] } = await repo.pool.query('SELECT suspended_at FROM users WHERE id = $1', [user.id]);
+          if (s?.suspended_at) return res.status(403).json({ error: 'Your account is suspended. Contact support@gemlinecards.com to appeal.' });
+        } catch (e) { /* column not there yet — fine */ }
+      }
+
       // Lazy upgrade: legacy sha256 hash verified — rehash with bcrypt and store.
       if (!String(user.password_hash).startsWith('$2')) {
         try {

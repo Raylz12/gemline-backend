@@ -283,6 +283,11 @@ export default function Header() {
                     <button className="avatar-dd-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setAvatarOpen(false); setShowSettings(true); }}>
                       <IconSettings size={14} /> Settings
                     </button>
+                    {wallet.isAdmin && (
+                      <Link href="/admin" className="avatar-dd-item" style={{ color: 'var(--gold)' }}>
+                        Admin Panel
+                      </Link>
+                    )}
                     <div style={{ height: 1, background: 'var(--line)', margin: '4px 0' }} />
                     <button className="avatar-dd-item" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { logout(); setAvatarOpen(false); }}>
                       <IconLogout size={14} /> Sign Out

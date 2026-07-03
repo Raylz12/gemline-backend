@@ -227,6 +227,345 @@ app.post('/api/admin/ingest', async (req, res) => {
 });
 
 
+// ── Admin panel API (role-gated — users.role = 'admin') ──────────────────────
+// Distinct from the x-admin-key ops endpoints above: these back the /admin UI
+// and are gated on the signed-in user's role, never an open header key.
+let _adminTablesReady = false;
+async function ensureAdminTables(pool) {
+  if (_adminTablesReady) return;
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS feature_flags (
+      key TEXT PRIMARY KEY,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      note TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  _adminTablesReady = true;
+}
+
+async function adminGate(req, res, next) {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    const { rows: [u] } = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+    if (u?.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    await ensureAdminTables(pool);
+    await ensureTsTables(pool);
+    req.adminPool = pool;
+    next();
+  } catch (e) {
+    console.error('adminGate error:', e.message);
+    res.status(500).json({ error: 'Admin check failed' });
+  }
+}
+const requireAdmin = [requireAuth, adminGate];
+
+// Account suspension: additive users.suspended_at column. Suspended users keep
+// read access (and can still message on open orders) but can't create new
+// listings/offers/posts/trades/bids — and can't log in again.
+async function assertActiveAccount(pool, userId, res) {
+  try {
+    await ensureAdminTables(pool);
+    const { rows: [u] } = await pool.query('SELECT suspended_at FROM users WHERE id = $1', [userId]);
+    if (u?.suspended_at) {
+      res.status(403).json({ error: 'Your account is suspended. Contact support@gemlinecards.com to appeal.' });
+      return false;
+    }
+  } catch (e) { /* fail open — enforcement is best-effort, login is the hard gate */ }
+  return true;
+}
+
+// Feature flags: default-on unless a row says otherwise. 60s in-memory cache.
+const KNOWN_FLAGS = ['packs', 'mystery_packs', 'community_posts', 'trades', 'auctions', 'ai_scout'];
+let _flagCache = { at: 0, map: {} };
+async function getFlags(pool) {
+  if (Date.now() - _flagCache.at < 60_000) return _flagCache.map;
+  try {
+    await ensureAdminTables(pool);
+    const { rows } = await pool.query('SELECT key, enabled FROM feature_flags');
+    const map = {};
+    for (const k of KNOWN_FLAGS) map[k] = true;
+    for (const row of rows) map[row.key] = !!row.enabled;
+    _flagCache = { at: Date.now(), map };
+  } catch (e) { /* keep last known */ }
+  return _flagCache.map;
+}
+async function flagEnabled(pool, key) {
+  const map = await getFlags(pool);
+  return map[key] !== false;
+}
+
+app.get('/api/flags', async (_req, res) => {
+  try {
+    const r = await getRepo();
+    if (!r.pool) return res.json({ flags: {} });
+    res.json({ flags: await getFlags(r.pool) });
+  } catch (e) { res.json({ flags: {} }); }
+});
+
+app.get('/api/admin/overview', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const [users, listings, orders, reports, flags] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS total,
+                         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')::int AS new_7d,
+                         COUNT(*) FILTER (WHERE suspended_at IS NOT NULL)::int AS suspended
+                  FROM users`),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE status = 'active')::int AS active,
+                         COUNT(*)::int AS total,
+                         COUNT(*) FILTER (WHERE status = 'active' AND kind = 'auction')::int AS live_auctions
+                  FROM listings`),
+      pool.query(`SELECT status::text, COUNT(*)::int AS n, COALESCE(SUM(amount), 0)::bigint AS cents
+                  FROM orders GROUP BY status`),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE status = 'open')::int AS open, COUNT(*)::int AS total FROM reports`),
+      getFlags(pool),
+    ]);
+    const byStatus = {};
+    let gmvCents = 0;
+    for (const row of orders.rows) {
+      byStatus[row.status] = row.n;
+      if (!['cancelled', 'refunded', 'pending_payment', 'created'].includes(row.status)) gmvCents += Number(row.cents);
+    }
+    res.json({
+      users: users.rows[0],
+      listings: listings.rows[0],
+      orders: { byStatus, gmv: gmvCents / 100 },
+      reports: reports.rows[0],
+      flags,
+    });
+  } catch (e) {
+    console.error('admin/overview error:', e.message);
+    res.status(500).json({ error: 'Overview failed' });
+  }
+});
+
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const q = String(req.query.q || '').trim().slice(0, 60);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = 50;
+    const params = q ? [`%${q}%`, limit + 1, (page - 1) * limit] : [limit + 1, (page - 1) * limit];
+    const { rows } = await pool.query(`
+      SELECT u.id, u.handle, u.email, u.role::text, u.account_type, u.created_at, u.suspended_at,
+             (SELECT COUNT(*)::int FROM listings l WHERE l.seller_id = u.id AND l.status = 'active') AS active_listings,
+             (SELECT COUNT(*)::int FROM orders o WHERE o.buyer_id = u.id OR o.seller_id = u.id) AS orders,
+             (SELECT COUNT(*)::int FROM reports rp WHERE rp.target_type = 'user' AND rp.target_id = u.id::text AND rp.status = 'open') AS open_reports
+      FROM users u
+      ${q ? 'WHERE u.handle ILIKE $1 OR u.email ILIKE $1' : ''}
+      ORDER BY u.created_at DESC
+      LIMIT $${q ? 2 : 1} OFFSET $${q ? 3 : 2}`, params);
+    res.json({ users: rows.slice(0, limit), hasMore: rows.length > limit, page });
+  } catch (e) {
+    console.error('admin/users error:', e.message);
+    res.status(500).json({ error: 'User list failed' });
+  }
+});
+
+app.post('/api/admin/users/:id/suspend', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const suspend = req.body?.suspend !== false;
+    const reason = String(req.body?.reason || '').trim().slice(0, 300);
+    const { rows: [target] } = await pool.query('SELECT id, handle, role FROM users WHERE id = $1', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.role === 'admin') return res.status(400).json({ error: 'Admins can\u2019t be suspended' });
+    await pool.query('UPDATE users SET suspended_at = $1 WHERE id = $2', [suspend ? new Date() : null, target.id]);
+    let pulledListings = 0;
+    if (suspend) {
+      const { rows } = await pool.query(
+        "UPDATE listings SET status = 'cancelled' WHERE seller_id = $1 AND status = 'active' RETURNING id", [target.id]);
+      pulledListings = rows.length;
+      for (const l of rows) {
+        await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [l.id]).catch(() => {});
+      }
+      await notify(pool, target.id, 'account',
+        'Your account has been suspended',
+        reason || 'A moderator suspended your account for violating marketplace rules. Contact support@gemlinecards.com to appeal.').catch(() => {});
+    } else {
+      await notify(pool, target.id, 'account',
+        'Your account has been reinstated',
+        'A moderator lifted the suspension on your account. Welcome back.').catch(() => {});
+    }
+    console.log(`[admin] ${req.userId} ${suspend ? 'suspended' : 'unsuspended'} @${target.handle}`);
+    res.json({ ok: true, suspended: suspend, pulledListings });
+  } catch (e) {
+    console.error('admin/suspend error:', e.message);
+    res.status(500).json({ error: 'Suspend failed' });
+  }
+});
+
+app.get('/api/admin/listings', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const status = ['active', 'sold', 'cancelled', 'completed'].includes(req.query.status) ? req.query.status : null;
+    const q = String(req.query.q || '').trim().slice(0, 60);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = 50;
+    const conds = [];
+    const params = [];
+    if (status) { params.push(status); conds.push(`l.status = $${params.length}`); }
+    if (q) { params.push(`%${q}%`); conds.push(`(c.player ILIKE $${params.length} OR u.handle ILIKE $${params.length})`); }
+    params.push(limit + 1, (page - 1) * limit);
+    const { rows } = await pool.query(`
+      SELECT l.id, l.price, l.status::text, l.kind::text, l.created_at, l.cert_verified,
+             c.player, c.card_set, c.grader, c.grade, c.year,
+             u.id AS seller_id, u.handle AS seller_handle,
+             (SELECT COUNT(*)::int FROM reports rp WHERE rp.target_type = 'listing' AND rp.target_id = l.id::text AND rp.status = 'open') AS open_reports
+      FROM listings l
+      JOIN cards c ON c.id = l.card_id
+      JOIN users u ON u.id = l.seller_id
+      ${conds.length ? 'WHERE ' + conds.join(' AND ') : ''}
+      ORDER BY l.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+    res.json({ listings: rows.slice(0, limit), hasMore: rows.length > limit, page });
+  } catch (e) {
+    console.error('admin/listings error:', e.message);
+    res.status(500).json({ error: 'Listing list failed' });
+  }
+});
+
+app.post('/api/admin/listings/:id/remove', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const reason = String(req.body?.reason || '').trim().slice(0, 300);
+    const { rows: [l] } = await pool.query(`
+      SELECT l.id, l.seller_id, l.status, c.player FROM listings l JOIN cards c ON c.id = l.card_id WHERE l.id = $1`, [req.params.id]);
+    if (!l) return res.status(404).json({ error: 'Listing not found' });
+    if (l.status !== 'active') return res.status(400).json({ error: `Listing is ${l.status} — only active listings can be removed` });
+    await pool.query("UPDATE listings SET status = 'cancelled' WHERE id = $1", [l.id]);
+    await pool.query('UPDATE portfolios SET is_listed = false, listing_id = NULL WHERE listing_id = $1', [l.id]).catch(() => {});
+    await notify(pool, l.seller_id, 'listing_removed',
+      `Listing removed: ${l.player}`,
+      reason || 'A moderator removed this listing for violating marketplace rules.').catch(() => {});
+    console.log(`[admin] ${req.userId} removed listing ${l.id}`);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('admin/listing-remove error:', e.message);
+    res.status(500).json({ error: 'Remove failed' });
+  }
+});
+
+app.get('/api/admin/orders', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = 50;
+    const status = String(req.query.status || '').trim();
+    const params = status ? [status, limit + 1, (page - 1) * limit] : [limit + 1, (page - 1) * limit];
+    const { rows } = await pool.query(`
+      SELECT o.id, o.amount, o.status::text, o.created_at, o.updated_at, o.fulfillment_method::text,
+             c.player, bu.handle AS buyer_handle, se.handle AS seller_handle
+      FROM orders o
+      JOIN cards c ON c.id = o.card_id
+      JOIN users bu ON bu.id = o.buyer_id
+      JOIN users se ON se.id = o.seller_id
+      ${status ? 'WHERE o.status = $1::order_status' : ''}
+      ORDER BY o.created_at DESC
+      LIMIT $${status ? 2 : 1} OFFSET $${status ? 3 : 2}`, params);
+    res.json({ orders: rows.slice(0, limit), hasMore: rows.length > limit, page });
+  } catch (e) {
+    console.error('admin/orders error:', e.message);
+    res.status(500).json({ error: 'Order list failed' });
+  }
+});
+
+app.get('/api/admin/reports', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const status = ['open', 'resolved', 'dismissed'].includes(req.query.status) ? req.query.status : 'open';
+    const { rows } = await pool.query(`
+      SELECT r.id, r.target_type, r.target_id, r.reason, r.details, r.status, r.resolution,
+             r.created_at, r.resolved_at, u.handle AS reporter_handle
+      FROM reports r LEFT JOIN users u ON u.id = r.reporter_id
+      WHERE r.status = $1 ORDER BY r.created_at DESC LIMIT 100`, [status]);
+    // Enrich targets so moderators see what was reported without leaving the queue.
+    const byType = { listing: [], user: [], post: [] };
+    for (const r of rows) if (byType[r.target_type]) byType[r.target_type].push(r.target_id);
+    const labels = {};
+    if (byType.listing.length) {
+      const { rows: ls } = await pool.query(`
+        SELECT l.id::text, l.status::text, l.price, c.player, u.handle AS seller
+        FROM listings l JOIN cards c ON c.id = l.card_id JOIN users u ON u.id = l.seller_id
+        WHERE l.id::text = ANY($1)`, [byType.listing]).catch(() => ({ rows: [] }));
+      for (const l of ls) labels[`listing:${l.id}`] = { label: `${l.player} — $${Number(l.price).toLocaleString()} by @${l.seller}`, status: l.status, sellerHandle: l.seller };
+    }
+    if (byType.user.length) {
+      const { rows: us } = await pool.query(
+        'SELECT id::text, handle, suspended_at FROM users WHERE id::text = ANY($1)', [byType.user]).catch(() => ({ rows: [] }));
+      for (const u of us) labels[`user:${u.id}`] = { label: `@${u.handle}${u.suspended_at ? ' (suspended)' : ''}`, handle: u.handle, suspended: !!u.suspended_at };
+    }
+    if (byType.post.length) {
+      const { rows: ps } = await pool.query(`
+        SELECT p.id::text, LEFT(COALESCE(p.body, ''), 120) AS excerpt, u.handle, u.id AS author_id
+        FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id::text = ANY($1)`, [byType.post]).catch(() => ({ rows: [] }));
+      for (const p of ps) labels[`post:${p.id}`] = { label: `@${p.handle}: \u201C${p.excerpt}\u201D`, authorId: p.author_id, handle: p.handle };
+    }
+    res.json({
+      reports: rows.map(r => ({ ...r, target: labels[`${r.target_type}:${r.target_id}`] || { label: `${r.target_type} ${r.target_id} (deleted?)` } })),
+      status,
+    });
+  } catch (e) {
+    console.error('admin/reports error:', e.message);
+    res.status(500).json({ error: 'Report list failed' });
+  }
+});
+
+app.post('/api/admin/reports/:id/resolve', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const status = req.body?.status === 'dismissed' ? 'dismissed' : 'resolved';
+    const resolution = String(req.body?.resolution || '').trim().slice(0, 500) || null;
+    const { rows: [r] } = await pool.query(`
+      UPDATE reports SET status = $1, resolution = $2, resolved_at = NOW()
+      WHERE id = $3 AND status = 'open' RETURNING id, target_type, target_id`, [status, resolution, req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Open report not found' });
+    // Closing one report closes duplicates against the same target.
+    const { rowCount } = await pool.query(`
+      UPDATE reports SET status = $1, resolution = 'Duplicate — handled under report #' || $4, resolved_at = NOW()
+      WHERE status = 'open' AND target_type = $2 AND target_id = $3`, [status, r.target_type, r.target_id, r.id]);
+    res.json({ ok: true, status, alsoClosed: rowCount });
+  } catch (e) {
+    console.error('admin/report-resolve error:', e.message);
+    res.status(500).json({ error: 'Resolve failed' });
+  }
+});
+
+app.get('/api/admin/flags', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const { rows } = await pool.query('SELECT key, enabled, note, updated_at FROM feature_flags');
+    const set = new Map(rows.map(r => [r.key, r]));
+    const flags = [...new Set([...KNOWN_FLAGS, ...rows.map(r => r.key)])].map(key => ({
+      key,
+      enabled: set.has(key) ? !!set.get(key).enabled : true,
+      note: set.get(key)?.note || null,
+      updatedAt: set.get(key)?.updated_at || null,
+    }));
+    res.json({ flags });
+  } catch (e) { res.status(500).json({ error: 'Flags failed' }); }
+});
+
+app.post('/api/admin/flags', requireAdmin, async (req, res) => {
+  try {
+    const pool = req.adminPool;
+    const key = String(req.body?.key || '').trim().toLowerCase();
+    if (!/^[a-z0-9_.-]{2,40}$/.test(key)) return res.status(400).json({ error: 'Invalid flag key' });
+    const enabled = req.body?.enabled !== false;
+    const note = String(req.body?.note || '').trim().slice(0, 200) || null;
+    await pool.query(`
+      INSERT INTO feature_flags (key, enabled, note, updated_at) VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (key) DO UPDATE SET enabled = $2, note = COALESCE($3, feature_flags.note), updated_at = NOW()`,
+      [key, enabled, note]);
+    _flagCache = { at: 0, map: {} };
+    console.log(`[admin] ${req.userId} set flag ${key}=${enabled}`);
+    res.json({ ok: true, key, enabled });
+  } catch (e) { res.status(500).json({ error: 'Flag update failed' }); }
+});
+
+
 // ── AI Scout — Claude reasoning over catalog + Card Hedge search ─────────────
 app.post('/api/scout/search', async (req, res) => {
   try {
@@ -1145,6 +1484,107 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
   } catch (e) { res.json({ ok: true }); }
 });
 
+// ── Trust & safety: reports + blocks ───────────────────────────────────
+let _tsTablesReady = false;
+async function ensureTsTables(pool) {
+  if (_tsTablesReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id BIGSERIAL PRIMARY KEY,
+      reporter_id uuid NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      details TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolution TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status, created_at DESC)').catch(() => {});
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_blocks (
+      blocker_id uuid NOT NULL,
+      blocked_id uuid NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (blocker_id, blocked_id)
+    )`);
+  _tsTablesReady = true;
+}
+
+const REPORT_TYPES = ['listing', 'user', 'post'];
+const REPORT_REASONS = ['counterfeit', 'scam', 'spam', 'harassment', 'inappropriate', 'stolen_photos', 'price_manipulation', 'other'];
+
+app.post('/api/report', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureTsTables(pool);
+    const targetType = String(req.body?.targetType || '');
+    const targetId = String(req.body?.targetId || '').slice(0, 80);
+    const reason = String(req.body?.reason || '');
+    const details = String(req.body?.details || '').trim().slice(0, 1000) || null;
+    if (!REPORT_TYPES.includes(targetType)) return res.status(400).json({ error: 'Invalid target type' });
+    if (!targetId) return res.status(400).json({ error: 'targetId required' });
+    if (!REPORT_REASONS.includes(reason)) return res.status(400).json({ error: 'Invalid reason' });
+    const { rows: [dupe] } = await pool.query(
+      "SELECT id FROM reports WHERE reporter_id = $1 AND target_type = $2 AND target_id = $3 AND status = 'open' LIMIT 1",
+      [req.userId, targetType, targetId]);
+    if (dupe) return res.json({ ok: true, already: true });
+    await pool.query(
+      'INSERT INTO reports (reporter_id, target_type, target_id, reason, details) VALUES ($1, $2, $3, $4, $5)',
+      [req.userId, targetType, targetId, reason, details]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('report error:', e.message);
+    res.status(500).json({ error: 'Report failed' });
+  }
+});
+
+app.post('/api/users/:userId/block', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureTsTables(pool);
+    const target = req.params.userId;
+    if (target === req.userId) return res.status(400).json({ error: 'You can\u2019t block yourself' });
+    if (req.body?.block === false) {
+      await pool.query('DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2', [req.userId, target]);
+      return res.json({ ok: true, blocked: false });
+    }
+    await pool.query('INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.userId, target]);
+    // Blocking also unfollows both directions.
+    await pool.query('DELETE FROM follows WHERE (follower_id = $1 AND following_id = $2) OR (follower_id = $2 AND following_id = $1)', [req.userId, target]).catch(() => {});
+    res.json({ ok: true, blocked: true });
+  } catch (e) {
+    console.error('block error:', e.message);
+    res.status(500).json({ error: 'Block failed' });
+  }
+});
+
+app.get('/api/users/blocked', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ blocked: [] });
+    await ensureTsTables(pool);
+    const { rows } = await pool.query(`
+      SELECT b.blocked_id, u.handle, b.created_at FROM user_blocks b
+      LEFT JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = $1 ORDER BY b.created_at DESC`, [req.userId]);
+    res.json({ blocked: rows.map(x => ({ userId: x.blocked_id, handle: x.handle, at: x.created_at })) });
+  } catch (e) { res.json({ blocked: [] }); }
+});
+
+// True when either side has blocked the other (blocks are mutual walls).
+async function isBlockedEitherWay(pool, a, b) {
+  await ensureTsTables(pool);
+  const { rows } = await pool.query(
+    'SELECT 1 FROM user_blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1', [a, b]);
+  return rows.length > 0;
+}
+
 // ── Watchlist + price alerts ───────────────────────────────────────────
 // Watch a card (family display tier or any grade tier). Alerts fire on:
 //  • new active listing in the watched card's family (immediate, in listing POST)
@@ -1427,6 +1867,8 @@ app.post('/api/auctions/create', requireAuth, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(500).json({ error: 'No database' });
 
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'auctions'))) return res.status(503).json({ error: 'New auctions are temporarily disabled' });
     const { cardId, startingBid, reservePrice, durationHours = 24 } = req.body;
     if (!cardId) return res.status(400).json({ error: 'cardId required' });
     if (!startingBid || Number(startingBid) < 0.01) return res.status(400).json({ error: 'Starting bid must be at least $0.01' });
@@ -1858,6 +2300,7 @@ app.post('/api/listings', requireAuth, async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
     const { cardId, price, listingType, openToOffers, description, photos } = req.body || {};
     if (!cardId) return res.status(400).json({ error: 'cardId required' });
     const dollars = Number(price);
@@ -2046,6 +2489,7 @@ app.post('/api/listings/:id/buy', requireAuth, limitMoney, async (req, res) => {
     let l = await r.listings.get(req.params.id);
     if (!l) return res.status(404).json({ error: 'Listing not found' });
     if (l.seller_id === req.userId) return res.status(400).json({ error: 'Cannot buy your own listing' });
+    if (pool && !(await assertActiveAccount(pool, req.userId, res))) return;
 
     // If the listing is locked by an expired pending-payment order, free it now.
     if (l.status !== 'active' && pool) {
@@ -2193,6 +2637,8 @@ app.post('/api/listings/:id/offer', requireAuth, limitMoney, async (req, res) =>
     const { rows: [l] } = await pool.query("SELECT * FROM listings WHERE id = $1 AND status = 'active'", [req.params.id]);
     if (!l) return res.status(404).json({ error: 'Listing not found' });
     if (l.seller_id === req.userId) return res.status(400).json({ error: 'Cannot offer on your own listing' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (await isBlockedEitherWay(pool, req.userId, l.seller_id)) return res.status(403).json({ error: 'You can\u2019t make offers on this seller\u2019s listings' });
     await pool.query(`
       CREATE TABLE IF NOT EXISTS listing_offers (
         id SERIAL PRIMARY KEY,
@@ -2519,6 +2965,7 @@ app.post('/api/orders/:id/messages', requireAuth, limitWrites, async (req, res) 
     if (!body) return res.status(400).json({ error: 'Message required' });
     const p = await orderParty(pool, req.params.id, req.userId);
     if (p.error) return res.status(p.error).json({ error: p.error === 404 ? 'Order not found' : 'Not your order' });
+    // Open orders still allow messages even between blocked users — but flag nothing; blocks only stop NEW interactions.
     const { rows: [msg] } = await pool.query(
       'INSERT INTO order_messages (order_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, created_at',
       [req.params.id, req.userId, body]);
@@ -2899,6 +3346,7 @@ app.post('/api/packs/rip', requireAuth, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(500).json({ error: 'No database' });
 
+    if (!(await flagEnabled(pool, 'packs'))) return res.status(503).json({ error: 'Pack rips are temporarily disabled' });
     const { packType = 'standard' } = req.body;
     const cost = PACK_COSTS[packType];
     if (!cost) return res.status(400).json({ error: 'Invalid pack type' });
@@ -3148,6 +3596,7 @@ app.post('/api/users/:userId/follow', requireAuth, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(500).json({ error: 'No database' });
     if (req.params.userId === req.userId) return res.status(400).json({ error: 'Cannot follow yourself' });
+    if (await isBlockedEitherWay(pool, req.userId, req.params.userId)) return res.status(403).json({ error: 'Unavailable' });
     await pool.query(
       'INSERT INTO follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [req.userId, req.params.userId]
@@ -3277,6 +3726,9 @@ app.post('/api/trades/propose', requireAuth, limitWrites, async (req, res) => {
     if (!toUserId) return res.status(400).json({ error: 'toUserId required' });
     if (!offeredCardIds?.length && !requestedCardIds?.length) return res.status(400).json({ error: 'Must offer or request at least one card' });
     if (toUserId === req.userId) return res.status(400).json({ error: 'Cannot trade with yourself' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'trades'))) return res.status(503).json({ error: 'Trades are temporarily disabled' });
+    if (await isBlockedEitherWay(pool, req.userId, toUserId)) return res.status(403).json({ error: 'You can\u2019t trade with this user' });
     // Verify offered cards are in our portfolio
     if (offeredCardIds?.length) {
       const { rows } = await pool.query(
@@ -3428,6 +3880,7 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = 20;
     const offset = (page - 1) * limit;
+    if (req.userId) await ensureTsTables(pool);
     const { rows } = await pool.query(`
       SELECT p.id, p.type, p.body, p.likes, p.created_at, p.card_id,
              u.id as user_id, u.handle, u.avatar_url,
@@ -3436,6 +3889,7 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
       FROM posts p
       JOIN users u ON u.id = p.user_id
       LEFT JOIN cards c ON c.id = p.card_id
+      ${req.userId ? `WHERE NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.blocker_id = $3 AND b.blocked_id = p.user_id) OR (b.blocker_id = p.user_id AND b.blocked_id = $3))` : ''}
       ORDER BY p.created_at DESC
       LIMIT $1 OFFSET $2
     `, req.userId ? [limit + 1, offset, req.userId] : [limit + 1, offset]);
@@ -3464,6 +3918,8 @@ app.post('/api/posts', requireAuth, limitWrites, async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.status(500).json({ error: 'No database' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'community_posts'))) return res.status(503).json({ error: 'Posting is temporarily disabled' });
     const { body, type = 'general', cardId } = req.body;
     if (!body || !body.trim()) return res.status(400).json({ error: 'Post body required' });
     if (body.length > 500) return res.status(400).json({ error: 'Post too long (max 500 chars)' });
@@ -3774,6 +4230,7 @@ app.post('/api/mystery/pools/:id/pull', requireAuth, async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.status(500).json({ error: 'DB unavailable' });
+    if (!(await flagEnabled(pool, 'mystery_packs'))) return res.status(503).json({ error: 'Mystery packs are temporarily disabled' });
     const poolId = parseInt(req.params.id);
     // Get pool info
     const { rows: [mysteryPool] } = await pool.query(

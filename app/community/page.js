@@ -6,6 +6,7 @@ import AuthModal from '../components/AuthModal';
 import { fmt } from '../lib/data';
 import useDarkPage from '../lib/useDarkPage';
 import ProGate, { hasCapability } from '../components/ProGate';
+import ReportModal from '../components/ReportModal';
 
 function UserCard({ user, currentUserId, onToggleFollow, followingSet, onRequireAuth }) {
   const isFollowing = followingSet.has(user.id);
@@ -249,7 +250,8 @@ const TYPE_META = {
 const SPORT_EMOJI = { basketball: '🏀', baseball: '⚾', football: '🏈', hockey: '🏒', soccer: '⚽', pokemon: '🃏', 'trading card': '🃏' };
 function sportEmoji(sport) { return SPORT_EMOJI[(sport||'').toLowerCase()] || '🃏'; }
 
-function FeedPost({ post, authFetch, token, onLiked, onRequireAuth }) {
+function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) {
+  const [showReport, setShowReport] = useState(false);
   const [liked, setLiked] = useState(post.userLiked || false);
   const [likeCount, setLikeCount] = useState(post.likes || 0);
   const [liking, setLiking] = useState(false);
@@ -336,7 +338,19 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth }) {
             <path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .9-4 2-1-1.1-2.3-2-4-2A5.5 5.5 0 0 0 3 8.5c0 2.3 1.5 4 3 5.5l6 6Z" />
           </svg> {likeCount}
         </button>
+        {token && meHandle !== handle && (
+          <button
+            onClick={() => setShowReport(true)}
+            title="Report this post"
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)', padding: '4px 6px', minHeight: 32 }}>
+            ⚑ Report
+          </button>
+        )}
       </div>
+      {showReport && (
+        <ReportModal targetType="post" targetId={post.id} targetLabel={`@${handle}: “${(post.body || '').slice(0, 60)}…”`} onClose={() => setShowReport(false)} />
+      )}
     </div>
   );
 }
@@ -356,7 +370,10 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
   const loadFeed = useCallback(async (p = 1) => {
     if (p === 1) setLoading(true); else setLoadingMore(true);
     try {
-      const res = await fetch(`/api/posts/feed?page=${p}`);
+      // Signed-in: send the token so the server can filter blocked users out of the feed.
+      const res = token
+        ? await authFetch(`/api/posts/feed?page=${p}`)
+        : await fetch(`/api/posts/feed?page=${p}`);
       if (res.ok) {
         const data = await res.json();
         if (p === 1) setPosts(data.posts || []);
@@ -366,7 +383,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
       }
     } catch (_) {}
     finally { setLoading(false); setLoadingMore(false); }
-  }, []);
+  }, [token, authFetch]);
 
   useEffect(() => { loadFeed(1); }, [loadFeed]);
 
@@ -479,7 +496,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
       ) : (
         <>
           {posts.map(p => (
-            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} onRequireAuth={onRequireAuth} />
+            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} onRequireAuth={onRequireAuth} meHandle={user?.handle} />
           ))}
           {hasMore && (
             <button onClick={() => loadFeed(page + 1)} disabled={loadingMore} style={{

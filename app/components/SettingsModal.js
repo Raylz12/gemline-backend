@@ -29,6 +29,44 @@ const IconStar = ({ size = 13 }) => (
 const BADGE_TIER_ORDER = { diamond: 0, gold: 1, emerald: 2, silver: 3, bronze: 4 };
 
 // ── Shipping address book section ─────────────────────────────────────────────
+function BlockedSection({ authFetch }) {
+  const [blocked, setBlocked] = useState(null);
+  const load = useCallback(() => {
+    authFetch('/api/users/blocked')
+      .then(r => r.json())
+      .then(d => setBlocked(d.blocked || []))
+      .catch(() => setBlocked([]));
+  }, [authFetch]);
+  useEffect(load, [load]);
+
+  const unblock = async (b) => {
+    try {
+      const res = await authFetch(`/api/users/${b.userId}/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block: false }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      toast(`Unblocked @${b.handle}`);
+      load();
+    } catch (e) { toast('Unblock failed', true); }
+  };
+
+  if (blocked === null) return <div style={{ fontSize: 12, color: 'var(--muted)' }}>Loading…</div>;
+  if (blocked.length === 0) return <div style={{ fontSize: 12, color: 'var(--muted)' }}>You haven’t blocked anyone. Blocked users can’t offer on your listings, trade with you, or appear in your feed.</div>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {blocked.map(b => (
+        <div key={b.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--panel-2, #1a1d28)', border: '1px solid var(--line)', borderRadius: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>@{b.handle || 'deleted user'}</span>
+          <span style={{ fontSize: 10.5, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>{new Date(b.at).toLocaleDateString()}</span>
+          <button onClick={() => unblock(b)} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)' }}>Unblock</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ShippingSection({ authFetch }) {
   const [addresses, setAddresses] = useState(null); // null = loading
   const [formMode, setFormMode] = useState(null);   // null | 'add' | address obj (edit)
@@ -579,6 +617,11 @@ export default function SettingsModal({ onClose }) {
           <div style={sectionWrap}>
             <SectionLabel icon={IconShield}>Security</SectionLabel>
             <SecuritySection authFetch={authFetch} />
+          </div>
+
+          <div style={sectionWrap}>
+            <SectionLabel icon={IconShield}>Blocked Users</SectionLabel>
+            <BlockedSection authFetch={authFetch} />
           </div>
 
           {/* NOTIFICATIONS */}

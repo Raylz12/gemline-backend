@@ -7,6 +7,7 @@ import { toast } from '../lib/toast';
 import PaymentModal from './PaymentModal';
 import AuthModal from './AuthModal';
 import ProGate, { hasCapability } from './ProGate';
+import ReportModal from './ReportModal';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -438,6 +439,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
   const [payModal, setPayModal] = useState(null); // { orderId, clientSecret, amount, fee }
   const [addingToPortfolio, setAddingToPortfolio] = useState(false);
   const [listings, setListings] = useState([]);
+  const [reportListing, setReportListing] = useState(null);
   const [loadingListings, setLoadingListings] = useState(false);
   const [showOfferModal, setShowOfferModal] = useState(null);
   const [offerAmount, setOfferAmount] = useState('');
@@ -600,6 +602,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
 
   const w = watch.has(String(c.id));
   const lowestListing = listings.length > 0 ? listings.reduce((min, l) => Number(l.price) < Number(min.price) ? l : min, listings[0]) : null;
+  // (report modal rendered near the other modals below)
   const hasPrice = c.market > 0;
   const hasRange = c.lo > 0 && c.hi > 0;
 
@@ -1049,6 +1052,12 @@ export default function CardDetail({ card: cardProp, onClose }) {
                           @{l.seller_handle || 'Seller'}
                           {l.verified && <span title="Seller verified this card by scan or cert" style={{ color: 'var(--gold)', fontFamily: 'var(--mono)', fontSize: 10, marginLeft: 6 }}>✓ VERIFIED</span>}
                           {hasPrice && <span> · Market {fmtDisplay(c.market)}</span>}
+                          {token && (
+                            <button onClick={() => setReportListing(l)} title="Report this listing" style={{
+                              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dim)',
+                              fontSize: 10, fontFamily: 'var(--mono)', marginLeft: 6, padding: 0,
+                            }}>⚑ Report</button>
+                          )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
@@ -1151,6 +1160,11 @@ export default function CardDetail({ card: cardProp, onClose }) {
       )}
 
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {reportListing && (
+        <ReportModal targetType="listing" targetId={reportListing.id}
+          targetLabel={`${c.player} — ${fmtDisplay(Number(reportListing.price))} by @${reportListing.seller_handle || 'seller'}`}
+          onClose={() => setReportListing(null)} />
+      )}
 
       {payModal && (
         <PaymentModal

@@ -200,7 +200,7 @@ export function CardStoreProvider({ children }) {
     if (!t) { setWatch(new Set()); return; }
     fetch('/api/user/credits', { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && d.credits !== undefined) setWallet(w => ({ ...w, credits: d.credits })); })
+      .then(d => { if (d && d.credits !== undefined) setWallet(w => ({ ...w, credits: d.credits, isAdmin: !!d.isAdmin })); })
       .catch(() => {});
     fetch('/api/watchlist', { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.ok ? r.json() : null)
