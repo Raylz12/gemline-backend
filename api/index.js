@@ -3597,6 +3597,8 @@ app.get('/api/users/search', async (req, res) => {
         SELECT u.id, u.handle
         FROM users u
         WHERE LOWER(u.handle) LIKE LOWER($1)
+          AND u.handle NOT ILIKE 'queefus%' AND u.handle NOT ILIKE '%test%'
+          AND u.suspended_at IS NULL
         LIMIT 20
       )
       SELECT b.id, b.handle,
@@ -3872,6 +3874,8 @@ app.get('/api/users/suggested', async (req, res) => {
         (SELECT COUNT(*) FROM follows WHERE following_id = u.id) as follower_count,
         (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) as following_count
       FROM users u
+      WHERE u.handle NOT ILIKE 'queefus%' AND u.handle NOT ILIKE '%test%'
+        AND u.suspended_at IS NULL
       ORDER BY card_count DESC
       LIMIT 20
     `);
@@ -3933,6 +3937,60 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
         thumbnail: p.ebay_thumb || p.image_url || null,
       } : null,
     }));
+
+    // ── Show-floor auto-events (page 1 only) ──
+    // The feed should never look dead: synthesize activity items from real
+    // marketplace events (new listings, sales, new members) — read-only, no
+    // rows written, test accounts filtered. Rendered read-only client-side.
+    if (page === 1) {
+      const notTest = `u.handle NOT ILIKE 'queefus%' AND u.handle NOT ILIKE '%test%'`;
+      const [lst, sold, joined] = await Promise.allSettled([
+        pool.query(`
+          SELECT l.id, l.price, l.created_at, u.handle, c.id AS card_id, c.player,
+                 c.grader, c.grade, c.sport, c.catalog_price, c.ebay_thumb, c.image_url
+          FROM listings l JOIN users u ON u.id = l.seller_id JOIN cards c ON c.id = l.card_id
+          WHERE l.status = 'active' AND l.created_at > now() - interval '30 days' AND ${notTest}
+          ORDER BY l.created_at DESC LIMIT 6`),
+        pool.query(`
+          SELECT o.id, o.amount, o.created_at, u.handle, c.id AS card_id, c.player,
+                 c.grader, c.grade, c.sport, c.catalog_price, c.ebay_thumb, c.image_url
+          FROM orders o JOIN users u ON u.id = o.seller_id JOIN cards c ON c.id = o.card_id
+          WHERE o.status IN ('escrow_held','awaiting_shipment','shipped','delivered','inspection','settled')
+            AND o.created_at > now() - interval '30 days' AND ${notTest}
+          ORDER BY o.created_at DESC LIMIT 4`),
+        pool.query(`
+          SELECT u.id, u.handle, u.created_at FROM users u
+          WHERE u.created_at > now() - interval '30 days' AND ${notTest} AND u.suspended_at IS NULL
+          ORDER BY u.created_at DESC LIMIT 3`),
+      ]);
+      const cardOf = (r) => ({
+        id: r.card_id, player: r.player, grader: r.grader, grade: r.grade,
+        value: Number(r.catalog_price) || 0, sport: r.sport,
+        thumbnail: r.ebay_thumb || r.image_url || null,
+      });
+      const usd = (n) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+      const events = [];
+      if (lst.status === 'fulfilled') for (const r of lst.value.rows) events.push({
+        id: `evt-listing-${r.id}`, type: 'listing', activity: true, likes: 0,
+        body: `Fresh to the floor — ${r.player} ${`${r.grader || 'RAW'} ${r.grade || ''}`.trim()} listed at ${usd(Number(r.price) / 100)}.`,
+        createdAt: r.created_at, user: { handle: r.handle }, card: cardOf(r),
+      });
+      if (sold.status === 'fulfilled') for (const r of sold.value.rows) events.push({
+        id: `evt-sale-${r.id}`, type: 'sale', activity: true, likes: 0,
+        body: `SOLD — ${r.player} ${`${r.grader || 'RAW'} ${r.grade || ''}`.trim()} went for ${usd(Number(r.amount) / 100)}.`,
+        createdAt: r.created_at, user: { handle: r.handle }, card: cardOf(r),
+      });
+      if (joined.status === 'fulfilled') for (const r of joined.value.rows) events.push({
+        id: `evt-join-${r.id}`, type: 'joined', activity: true, likes: 0,
+        body: `@${r.handle} just pulled up a table. Welcome to the show.`,
+        createdAt: r.created_at, user: { handle: r.handle }, card: null,
+      });
+      if (events.length) {
+        const merged = [...posts, ...events].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return res.json({ posts: merged, hasMore, page });
+      }
+    }
+
     res.json({ posts, hasMore, page });
   } catch (e) { console.error('posts/feed:', e.message); res.json({ posts: [], hasMore: false }); }
 });

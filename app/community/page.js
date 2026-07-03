@@ -5,7 +5,6 @@ import { useAuth } from '../components/AuthContext';
 import AuthModal from '../components/AuthModal';
 import { fmt } from '../lib/data';
 import useDarkPage from '../lib/useDarkPage';
-import ProGate, { hasCapability } from '../components/ProGate';
 import ReportModal from '../components/ReportModal';
 
 function UserCard({ user, currentUserId, onToggleFollow, followingSet, onRequireAuth }) {
@@ -245,6 +244,9 @@ const TYPE_META = {
   trade:   { label: 'Trade',     color: 'var(--blue)', icon: '🔄' },
   sale:    { label: 'Sale',      color: 'var(--up)',   icon: '💰' },
   general: { label: 'Post',      color: 'var(--muted)','icon': '💬' },
+  // Show-floor auto-events (server-synthesized, read-only)
+  listing: { label: 'New Listing', color: 'var(--gold)', icon: '🏷️' },
+  joined:  { label: 'New Collector', color: 'var(--blue)', icon: '👋' },
 };
 
 const SPORT_EMOJI = { basketball: '🏀', baseball: '⚾', football: '🏈', hockey: '🏒', soccer: '⚽', pokemon: '🃏', 'trading card': '🃏' };
@@ -327,7 +329,8 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
         </div>
       )}
 
-      {/* Actions */}
+      {/* Actions — auto-events are read-only (no like/report; synthetic ids) */}
+      {!post.activity && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <button
           onClick={toggleLike}
@@ -348,6 +351,7 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
           </button>
         )}
       </div>
+      )}
       {showReport && (
         <ReportModal targetType="post" targetId={post.id} targetLabel={`@${handle}: “${(post.body || '').slice(0, 60)}…”`} onClose={() => setShowReport(false)} />
       )}
@@ -590,14 +594,8 @@ export default function CommunityPage() {
       <h1 className="page">Community</h1>
       <p className="sub">Pulls, trades, and collectors all in one place. Show off your hits and follow the collectors you rate.</p>
 
-      <ProGate
-        page
-        allowed={hasCapability(user, 'community')}
-        title="Create a free account to join the Community"
-        sub="The live feed, collector profiles, and follows — free with a GEMLINE account."
-        cta="Create a free account"
-        onUnlock={requireAuth}
-      >
+      {/* Community is READABLE signed-out — the gate moved to actions
+          (posting, likes, follows) which each prompt AuthModal. */}
 
       {/* Search bar */}
       <div style={{ marginTop: 20, marginBottom: 20 }}>
@@ -729,8 +727,6 @@ export default function CommunityPage() {
           )}
         </div>
       )}
-
-      </ProGate>
 
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </>
