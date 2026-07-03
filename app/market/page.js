@@ -17,7 +17,12 @@ function ListRow({ card: c, onClick }) {
                (c.set || '').toLowerCase().includes('rookie');
 
   return (
-    <div className="list-row" onClick={() => onClick?.(c)}>
+    <a className="list-row" href={`/card/${c.id}`}
+      onClick={e => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
+        e.preventDefault();
+        onClick?.(c);
+      }}>
       <div className="list-thumb">
         {c.thumbnail ? (
           <img src={c.thumbnail} alt={c.player} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 }}
@@ -57,7 +62,7 @@ function ListRow({ card: c, onClick }) {
       <div className="list-action">
         <button className="btn-ghost" style={{ padding: '5px 12px', fontSize: 11 }}>View</button>
       </div>
-    </div>
+    </a>
   );
 }
 
@@ -75,6 +80,26 @@ export default function MarketplacePage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => { setPage(1); }, [filters, searchQuery]);
+
+  // Deep link from SEO card pages and shares: /market?card=<uuid> auto-opens
+  // the interactive CardDetail overlay for that card (it self-hydrates from id).
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  useEffect(() => {
+    try {
+      const cid = new URLSearchParams(window.location.search).get('card');
+      if (cid && UUID_RE.test(cid)) setSelectedCard({ id: cid });
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the URL shareable: reflect the open card in ?card= without navigation.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (selectedCard?.id && UUID_RE.test(String(selectedCard.id))) url.searchParams.set('card', selectedCard.id);
+      else url.searchParams.delete('card');
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+  }, [selectedCard]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Always show fresh market data on every visit — no stale in-memory feed
   // between navigations (server CDN cache still applies and is fine).

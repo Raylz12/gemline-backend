@@ -51,7 +51,7 @@ export async function generateMetadata({ params }) {
   const title = `${name} Price & Market Value | GEMLINE`;
   const description = price
     ? `${name} current market value: ${usd(price)}. ${Number(card.sales_30d) > 0 ? `${card.sales_30d} sales in the last 30 days. ` : ''}Live price tracking, listings, and market data on GEMLINE.`
-    : `${name} — live price tracking, listings, and market data on GEMLINE, the card exchange.`;
+    : `${name} — live price tracking, listings, and market data on GEMLINE, the card show online.`;
   const img = card.ebay_thumb || card.image_url || 'https://gemlinecards.com/og-image.png';
   return {
     title,
@@ -131,7 +131,7 @@ export default async function CardPage({ params }) {
             <div className="eyebrow">{card.sport || 'Trading Card'}{card.rookie ? ' · Rookie' : ''}</div>
             <h1 className="page" style={{ fontSize: 30, lineHeight: 1.15, marginBottom: 8 }}>{name}</h1>
             <p className="sub" style={{ marginBottom: 18 }}>
-              Live market value, sales volume, and listings for this card on GEMLINE — the card exchange.
+              Live market value, sales volume, and listings for this card on GEMLINE — the card show, online.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
@@ -142,12 +142,14 @@ export default async function CardPage({ params }) {
               {Number(card.psa_pop_10) > 0 && stat('PSA 10 Pop', Number(card.psa_pop_10).toLocaleString())}
             </div>
 
+            {/* Deep-link into the interactive app view of THIS card — a Google
+                visitor can buy/offer/watch it, not just land on a generic page. */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <Link href="/market" className="buy" style={{ padding: '11px 22px', fontSize: 13, borderRadius: 9, textDecoration: 'none', display: 'inline-block' }}>
-                Trade on GEMLINE
+              <Link href={`/market?card=${card.id}`} className="buy" style={{ padding: '11px 22px', fontSize: 13, borderRadius: 9, textDecoration: 'none', display: 'inline-block' }}>
+                {listings.length > 0 ? `Buy from ${usd(Number(listings[0].price) / 100)}` : 'Buy · Offer · Watch'}
               </Link>
-              <Link href="/live" className="offer" style={{ padding: '11px 22px', fontSize: 13, borderRadius: 9, textDecoration: 'none', display: 'inline-block' }}>
-                Live Auctions
+              <Link href={`/market?card=${card.id}`} className="offer" style={{ padding: '11px 22px', fontSize: 13, borderRadius: 9, textDecoration: 'none', display: 'inline-block' }}>
+                Price History &amp; Comps
               </Link>
             </div>
           </div>
@@ -158,10 +160,10 @@ export default async function CardPage({ params }) {
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Live Listings</h2>
             <div style={{ display: 'grid', gap: 8 }}>
               {listings.map(l => (
-                <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
+                <Link key={l.id} href={`/market?card=${card.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, textDecoration: 'none' }}>
                   <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', textTransform: 'uppercase' }}>{l.kind === 'auction' ? 'Auction' : 'Buy Now'}</span>
-                  <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>{usd(Number(l.price) / 100)}</span>
-                </div>
+                  <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>{usd(Number(l.price) / 100)} →</span>
+                </Link>
               ))}
             </div>
           </div>

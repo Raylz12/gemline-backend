@@ -29,9 +29,17 @@ export default function CardItem({ card: c, onClick }) {
                (c.variant || '').toLowerCase().includes('rookie') ||
                (c.set || '').toLowerCase().includes('rookie');
 
+  // Real <a> link: crawlable internal link equity to /card/[id] + open-in-new-tab,
+  // while a plain click keeps the in-app CardDetail overlay UX.
   return (
-    <article className="card" data-id={c.id} onClick={() => onClick?.(c)}>
+    <a className="card" data-id={c.id} href={`/card/${c.id}`}
+      onClick={e => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return; // let the browser handle new-tab/window
+        e.preventDefault();
+        onClick?.(c);
+      }}>
       <button className={`watch ${w ? 'on' : ''}`} onClick={e => {
+        e.preventDefault();
         e.stopPropagation();
         const ok = toggleWatch(c.id);
         if (!ok) toast('Sign in to watch cards and get price alerts');
@@ -125,6 +133,6 @@ export default function CardItem({ card: c, onClick }) {
           <div className="price-range mono">{fmtRange(c.lo, c.hi)}</div>
         )}
       </div>
-    </article>
+    </a>
   );
 }
