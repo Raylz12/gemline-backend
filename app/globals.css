@@ -56,6 +56,9 @@ header{position:sticky;top:0;z-index:40;background:#0f1117;border-bottom:1px sol
 .navlinks a.navbtn:hover{color:#fff;background:rgba(255,255,255,.08)}
 .navlinks a.navbtn.on{color:#000;background:var(--gold);font-weight:600}
 .navlinks .dot{width:6px;height:6px;border-radius:50%;background:var(--down);box-shadow:0 0 7px var(--down);animation:pulse 1.4s infinite}
+/* 7-item nav: tighten at laptop widths, shed low-priority links before clipping */
+@media(max-width:1200px){.navlinks a.navbtn{font-size:11.5px;padding:6px 8px}}
+@media(max-width:1000px){.navlinks a.navbtn.nav-low{display:none}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 .nav-right{display:flex;align-items:center;gap:12px;flex:0 0 auto}
 .iconbtn{width:36px;height:36px;border-radius:var(--r-sm);border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;color:rgba(255,255,255,.5);position:relative;transition:.15s}

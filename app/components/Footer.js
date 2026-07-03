@@ -3,22 +3,24 @@ import Link from 'next/link';
 
 const COLUMNS = [
   {
-    title: 'Marketplace',
-    blurb: 'Browse, bid, and buy from sellers across the exchange.',
+    title: 'The Floor',
+    blurb: 'Buy, sell, bid, and trade with collectors who get it.',
     links: [
       { href: '/market', label: 'Market' },
-      { href: '/live', label: 'Live' },
+      { href: '/live', label: 'Live Auctions' },
+      { href: '/sell', label: 'Sell a Card' },
+      { href: '/trades', label: 'Trades' },
       { href: '/stores', label: 'Stores' },
     ],
   },
   {
-    title: 'Tools',
-    blurb: 'Track your value and spot the edge with live data.',
+    title: 'Toolkit',
+    blurb: 'Know what your cards are worth — live data, every grade.',
     links: [
-      { href: '/analytics', label: 'Analytics' },
-      { href: '/heatmap', label: 'Heatmap' },
-      { href: '/arbitrage', label: 'Arbitrage' },
-      { href: '/portfolio', label: 'Portfolio' },
+      { href: '/analytics', label: 'Price Guide' },
+      { href: '/arbitrage', label: 'Deals' },
+      { href: '/portfolio', label: 'My Collection' },
+      { href: '/community', label: 'Community' },
     ],
   },
   {
@@ -42,8 +44,9 @@ export default function Footer() {
             <div className="wordmark">GEM<span>LINE</span></div>
           </div>
           <p className="ft-dis">
-            GEMLINE is a trading card exchange. Prices sourced from Card Hedge.
-            Trading collectibles carries risk.
+            GEMLINE is the card show, online — by collectors, for collectors.
+            Prices sourced from Card Hedge. Collectibles carry risk; prices are
+            estimates, not guarantees.
           </p>
         </div>
         <div className="ft-cols">
@@ -60,7 +63,7 @@ export default function Footer() {
           ))}
         </div>
       </div>
-      <div className="ft-base">© {new Date().getFullYear()} GEMLINE — The Card Exchange. Prices powered by Card Hedge.</div>
+      <div className="ft-base">© {new Date().getFullYear()} GEMLINE — The Card Show, Online. Prices powered by Card Hedge.</div>
     </footer>
   );
 }

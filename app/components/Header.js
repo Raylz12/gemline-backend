@@ -109,13 +109,17 @@ function NotificationBell() {
   );
 }
 
+// Display-layer nav: Sell + Trades promoted to top level (supply funnel);
+// Portfolio reads as "Collection", Analytics as "Price Guide" (routes unchanged).
+// `low: true` items hide first on narrow desktop widths (see globals.css).
 const NAV_ITEMS = [
   { href: '/market', label: 'Market', key: 'market', public: true },
-  { href: '/live', label: 'Live', key: 'live', dot: true, public: true },
-  { href: '/analytics', label: 'Analytics', key: 'analytics', public: true },
-  { href: '/portfolio', label: 'Portfolio', key: 'portfolio', public: true },
-  { href: '/community', label: 'Community', key: 'community', public: true },
-  { href: '/stores', label: 'Stores', key: 'stores', public: true },
+  { href: '/live', label: 'Live', key: 'live', public: true },
+  { href: '/sell', label: 'Sell', key: 'sell', public: true },
+  { href: '/trades', label: 'Trades', key: 'trades', public: true },
+  { href: '/portfolio', label: 'Collection', key: 'portfolio', public: true },
+  { href: '/analytics', label: 'Price Guide', key: 'analytics', public: true, low: true },
+  { href: '/community', label: 'Community', key: 'community', public: true, low: true },
 ];
 
 export default function Header() {
@@ -236,7 +240,7 @@ export default function Header() {
         <div className="nav">
           <Link href="/" className="brand">
             <div className="logo">G</div>
-            <div><div className="wordmark">GEM<span>LINE</span></div><div className="tagline">THE CARD EXCHANGE</div></div>
+            <div><div className="wordmark">GEM<span>LINE</span></div><div className="tagline">THE CARD SHOW, ONLINE</div></div>
           </Link>
 
           <div className="search" ref={searchRef}>
@@ -277,11 +281,10 @@ export default function Header() {
 
           <nav className="navlinks">
             {NAV_ITEMS.map(item => (
-              <Link key={item.key} href={item.href} className={`navbtn ${pathname === item.href ? 'on' : ''}`}
+              <Link key={item.key} href={item.href} className={`navbtn ${item.low ? 'nav-low' : ''} ${pathname === item.href ? 'on' : ''}`}
                 onClick={e => handleNavClick(e, item)}>
-                {item.dot && <span className="dot" />}
                 {item.label}
-                {item.badge && user && trades.incoming.length > 0 && <span className="ncount">{trades.incoming.length}</span>}
+                {item.key === 'trades' && user && trades.incoming.length > 0 && <span className="ncount">{trades.incoming.length}</span>}
               </Link>
             ))}
           </nav>
@@ -334,7 +337,7 @@ export default function Header() {
 
         {menuOpen && (
           <div style={{ padding: '8px 22px 14px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {NAV_ITEMS.map(item => (
+            {[...NAV_ITEMS, { href: '/stores', label: 'Stores', key: 'stores' }].map(item => (
               <Link key={item.key} href={item.href} onClick={e => { handleNavClick(e, item); setMenuOpen(false); }}
                 className={`navbtn ${pathname === item.href ? 'on' : ''}`} style={{ fontSize: 13, padding: '8px 14px' }}>
                 {item.label}

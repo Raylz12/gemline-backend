@@ -696,13 +696,16 @@ export default function CommunityPage() {
               </div>
             )}
 
-            {/* Community stats — live */}
+            {/* Show-floor stats — only stats that always look alive. Counts with
+                embarrassing floors (listings < 25, collectors < 100) stay hidden
+                until the numbers are social proof instead of anti-social-proof. */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>The Exchange</div>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>The Show Floor</div>
               {[
                 ['Cards priced live', liveStats?.totalCards ?? '—'],
-                ['Active listings', liveStats?.activeListings ?? '—'],
-                ['Collectors', liveStats?.users ?? '—'],
+                ['Prices refreshed', 'Daily'],
+                ...(Number(liveStats?.activeListings) >= 25 ? [['Active listings', liveStats.activeListings]] : []),
+                ...(Number(liveStats?.users) >= 100 ? [['Collectors', liveStats.users]] : []),
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
                   <span style={{ color: 'var(--muted)' }}>{k}</span>

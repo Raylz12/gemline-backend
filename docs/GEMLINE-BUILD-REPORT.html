@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gemline — Complete Build Report · July 2–3, 2026</title>
+<style>
+  :root{
+    --bg:#0b0e13; --panel:#12161f; --panel2:#171c27; --border:#232a38;
+    --text:#e8ecf3; --muted:#8b94a7; --green:#22c55e; --green-dim:#14532d;
+    --amber:#f59e0b; --red:#ef4444; --blue:#3b82f6; --purple:#a78bfa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.55;padding:0 0 80px}
+  .wrap{max-width:880px;margin:0 auto;padding:0 24px}
+  header{background:linear-gradient(180deg,#0e1420 0%,var(--bg) 100%);border-bottom:1px solid var(--border);padding:48px 0 32px;margin-bottom:40px}
+  h1{font-size:30px;letter-spacing:-.5px}
+  h1 .gem{color:var(--green)}
+  .sub{color:var(--muted);margin-top:8px;font-size:15px}
+  .statrow{display:flex;gap:14px;flex-wrap:wrap;margin-top:24px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 20px;min-width:130px}
+  .stat b{display:block;font-size:22px;color:var(--green)}
+  .stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  h2{font-size:20px;margin:44px 0 6px;padding-bottom:8px;border-bottom:1px solid var(--border);letter-spacing:-.3px}
+  h2 .tag{font-size:11px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:3px 10px;vertical-align:middle;margin-left:10px;letter-spacing:.5px}
+  h3{font-size:15px;margin:22px 0 6px;color:var(--green)}
+  p{margin:8px 0;color:#c9d1e0;font-size:14.5px}
+  ul{margin:8px 0 14px 20px}
+  li{margin:5px 0;font-size:14.5px;color:#c9d1e0}
+  li b{color:var(--text)}
+  .commit{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--purple);background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:1px 7px;white-space:nowrap}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin:16px 0}
+  .warn{border-left:3px solid var(--amber)}
+  .crit{border-left:3px solid var(--red)}
+  .good{border-left:3px solid var(--green)}
+  .muted{color:var(--muted);font-size:13px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:8px 10px;border-bottom:1px solid #1a2030;vertical-align:top}
+  .pill{display:inline-block;font-size:11px;border-radius:20px;padding:2px 9px;font-weight:600}
+  .pill.live{background:var(--green-dim);color:var(--green)}
+  .pill.blocked{background:#451a03;color:var(--amber)}
+  .pill.fix{background:#1e293b;color:#93c5fd}
+  .pill.sec{background:#3b0d0d;color:#fca5a5}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--panel2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:#a5f3c4}
+  .toc{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 22px;margin:0 0 8px}
+  .toc a{color:var(--green);text-decoration:none;font-size:14px}
+  .toc li{margin:4px 0}
+  footer{margin-top:60px;color:var(--muted);font-size:12.5px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1><span class="gem">GEMLINE</span> — Complete Build Report</h1>
+    <div class="sub">Everything pushed &amp; every feature added · July 2–3, 2026 sprint · gemlinecards.com · repo <code>Raylz12/gemline-backend</code></div>
+    <div class="statrow">
+      <div class="stat"><b>30+</b><span>commits deployed</span></div>
+      <div class="stat"><b>287K+</b><span>live cards intact</span></div>
+      <div class="stat"><b>374K</b><span>card families</span></div>
+      <div class="stat"><b>0</b><span>data lost</span></div>
+      <div class="stat"><b>3-layer</b><span>verification</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="toc">
+  <b>Contents</b>
+  <ul>
+    <li><a href="#money">1. Money Loop — Checkout, Escrow &amp; Payouts</a></li>
+    <li><a href="#orders">2. Orders &amp; Offers Lifecycle</a></li>
+    <li><a href="#watchlist">3. Watchlist &amp; Price Alerts</a></li>
+    <li><a href="#discovery">4. Search, Discovery &amp; Onboarding</a></li>
+    <li><a href="#market">5. Market Data &amp; Analytics</a></li>
+    <li><a href="#trust">6. Trust &amp; Safety + Admin Panel</a></li>
+    <li><a href="#security">7. Security Hardening</a></li>
+    <li><a href="#design">8. Design, Landing &amp; Mobile</a></li>
+    <li><a href="#brand">9. Brand, SEO &amp; Promotion Assets</a></li>
+    <li><a href="#platform">10. Platform: Addresses, Settings, Profiles</a></li>
+    <li><a href="#fixes">11. Notable Bug Fixes</a></li>
+    <li><a href="#verification">12. How Everything Was Verified</a></li>
+    <li><a href="#pending">13. What Still Needs Rhett</a></li>
+  </ul>
+</div>
+
+<h2 id="money">1. Money Loop — Checkout, Escrow &amp; Payouts <span class="tag">LIVE</span></h2>
+<div class="card good">
+  <p><b>The full buy→ship→deliver→payout money loop is built.</b> Buys create real Stripe <b>manual-capture</b> PaymentIntents — funds are authorized at purchase but only captured when the card is delivered. Sellers can't get paid for cards that never arrive; buyers can't be charged for cancelled orders.</p>
+</div>
+<ul>
+  <li><b>Manual-capture checkout</b> — buy creates a <code>pending_payment</code> order + uncaptured PaymentIntent; Payment Element modal collects card details <span class="commit">e33de65</span></li>
+  <li><b>Escrow states</b> — authorized → captured-on-delivery → payout release; cancel = auth release, <b>no money ever moves</b></li>
+  <li><b>Expiry sweep</b> — abandoned pending-payment orders auto-expire and relist (<code>/api/checkout/sweep</code>)</li>
+  <li><b>Payout-on-delivery</b> — closes the loop; disputes freeze payout (see §2)</li>
+  <li><b>Address-gated checkout</b> — buyers must have a shipping address; sellers get a SHIP TO panel per sold order <span class="commit">1783c8f</span></li>
+</ul>
+<p class="muted">⏳ Final live proof blocked only on the Stripe publishable key + webhook (see §13). All server-side logic verified against live Stripe with cancelled/expired test intents — zero real charges.</p>
+
+<h2 id="orders">2. Orders &amp; Offers Lifecycle <span class="tag">LIVE</span></h2>
+<h3>Offers &amp; Counteroffers <span class="commit">93e1da9</span></h3>
+<ul>
+  <li>Buyers make offers on listings; sellers <b>accept, decline, or counter</b> (counter must beat buyer's number; midpoint pre-filled)</li>
+  <li>Buyer sees a COUNTERED pill with Accept $X / Decline — accept creates a pending-payment order at the counter price through the same escrow checkout</li>
+</ul>
+<h3>Order Messaging</h3>
+<ul>
+  <li>Private buyer↔seller <b>message thread on every order</b> — bubbles, enter-to-send, read receipts, unread badges, deduped notifications</li>
+</ul>
+<h3>Cancel / Refund / Dispute</h3>
+<ul>
+  <li>Buyer requests cancel → seller approves/declines; seller can cancel immediately. Cancel releases the payment auth (no money moved) and <b>auto-relists the card</b></li>
+  <li>Buyer can <b>dispute post-shipment</b> ("cracked slab" etc.) → payout frozen, both parties notified, admin resolves</li>
+</ul>
+<h3>Status Timeline</h3>
+<ul>
+  <li>Visual <b>Placed → Paid → Shipped → Delivered → Complete</b> strip with real dates on every order; cancelled/refunded/disputed states styled; tracking-number entry + tracking link on shipment</li>
+</ul>
+<h3>Seller Stats <span class="commit">2272cbf</span></h3>
+<ul>
+  <li>Sell page stat cards: <b>For Sale</b> (count + value), <b>Open Offers</b>, <b>Sold</b> (count + gross)</li>
+</ul>
+
+<h2 id="watchlist">3. Watchlist &amp; Price Alerts <span class="tag">LIVE</span></h2>
+<p class="muted">Before: hearts were client-side only — lost on every refresh. Now a real retention engine. <span class="commit">2cc1839</span></p>
+<ul>
+  <li><b>Server-backed watchlist</b> (200-card cap) with optimistic heart toggles, hydrated on login across devices</li>
+  <li><b>Price-move alerts</b> — pick ±2 / 5 / 10 / 20% per card; daily sweep fires notifications ("Honus Wagner PSA 1 ▲ up 25.0%") with 20h cooldown</li>
+  <li><b>New-listing alerts</b> — instant notification when anyone lists a card you watch (family-matched, skips your own listings)</li>
+  <li><b>Watchlist tab in Portfolio</b> — thumb, grade chip, live-listing count, price, Δ since you watched, alert-% selector</li>
+  <li><b>Clickable notifications</b> — every bell item now deep-links to its order / offer / card / watchlist</li>
+</ul>
+
+<h2 id="discovery">4. Search, Discovery &amp; Onboarding <span class="tag">LIVE</span></h2>
+<h3>Header Search <span class="commit">88e3ebc</span></h3>
+<ul>
+  <li>Typeahead now searches the <b>entire 287K-card catalog</b> (tokenized AND matching, family-grouped) — was previously limited to the priced display feed. "jordan fleer 1986" → the actual '86 Fleer MJ family with grade counts and top price</li>
+  <li><b>Recently viewed</b> — last 8 cards you opened appear when you focus the empty search box</li>
+</ul>
+<h3>Post-Signup Onboarding</h3>
+<ul>
+  <li>One-time flow: <b>pick your sports → pick up to 8 most-traded players</b> → their top cards auto-seed your watchlist → you land on the watchlist tab with alerts already working. Skippable at every step</li>
+</ul>
+<h3>Arbitrage Search <span class="commit">fcf2f61</span></h3>
+<ul>
+  <li>Arb page search — client filter plus a server <code>?q=</code> <b>full-market sweep</b> so you can hunt spreads on any player, not just the top pool</li>
+</ul>
+
+<h2 id="market">5. Market Data &amp; Analytics <span class="tag">LIVE</span></h2>
+<ul>
+  <li><b>Market consolidation</b> — one tile per card <i>family</i> (374,342 families keyed player+set+variant+number+sport) with a <b>grade-ladder tier switcher</b> (PSA 10 / 9 / 8 / BGS / SGC in one place) instead of duplicate tiles per grade <span class="commit">1783c8f</span></li>
+  <li><b>Finance-style heatmap</b> — trusted volume-validated pool, sport tabs, sorts; no more +500% thin-sale junk</li>
+  <li><b>Landing movers &amp; ticker</b> — high-volume feed (recognizable names, believable moves); ticker rides the trusted pool</li>
+  <li><b>Access tiers</b> — analytics / heatmap / arbitrage / community require a free account (blurred teaser + signup prompt for visitors); market/cards/landing/stores stay public for SEO. One-line <code>CAPABILITY_PLAN</code> flip converts any capability to paid Pro later <span class="commit">fcf2f61</span></li>
+  <li><b>Market Insight paywall</b> — blurred for logged-out users; future Pro anchor</li>
+</ul>
+
+<h2 id="trust">6. Trust &amp; Safety + Admin Panel <span class="tag">LIVE</span></h2>
+<p class="muted">Commit <span class="commit">3224bdc</span> — 1,076 lines. The ops layer needed before promoting to strangers.</p>
+<h3>Reports &amp; Blocks</h3>
+<ul>
+  <li><b>Report</b> any listing, user, or community post — 8 reasons (counterfeit, scam, spam, harassment, stolen photos, price manipulation…), deduped per reporter</li>
+  <li><b>Block users</b> — enforced server-side on offers, trades, follows, and the community feed; Blocked Users manager in Settings</li>
+</ul>
+<h3>Admin Panel — <code>/admin</code></h3>
+<ul>
+  <li>Server-side gated on <code>role='admin'</code> (currently @rhett + @Packshark6903); link appears in the avatar menu for admins</li>
+  <li><b>Overview</b> — live user / listing / order / GMV stats</li>
+  <li><b>Moderation queue</b> — open reports with one-click remove-listing / suspend-user, resolve/dismiss</li>
+  <li><b>Users</b> — search, suspend / reinstate (suspension blocks login + all writes and pulls active listings; admins can't be suspended)</li>
+  <li><b>Listings</b> — takedown tool · <b>Orders</b> — full order view</li>
+  <li><b>Feature-flag kill switches</b> — instantly disable packs, mystery packs, community posts, trades, auctions, or AI scout site-wide (<code>/api/flags</code>)</li>
+</ul>
+
+<h2 id="security">7. Security Hardening <span class="tag">LIVE</span></h2>
+<div class="card crit">
+  <p><span class="pill sec">CRITICAL FIND</span> <b>JWT_SECRET had a hardcoded fallback in production</b> — anyone reading the repo could forge session tokens. Rotated to a proper secret. <span class="commit">114a9fa</span></p>
+</div>
+<ul>
+  <li><b>bcrypt password hashing</b> (migrated from weaker scheme), transparent upgrade on login</li>
+  <li><b>Postgres-backed rate limits</b> — survive serverless cold starts, cross-instance; auth breaches logged to events table <span class="commit">a7eb91b</span></li>
+  <li><b>Disposable-email blocking</b> on signup</li>
+  <li><b>Portfolio verification (scan-to-verify)</b> — you must scan the physical card to list it; graded items must scan as the matching slab (<b>grade-fraud guard</b>: a raw copy can't "verify" a PSA 10 claim) <span class="commit">af3437d</span></li>
+  <li><b>CDN caching</b> on hot public endpoints; abuse guards on write paths</li>
+  <li>CAPTCHA (Turnstile) fully wired, no-ops until keys are set — flips on with env vars only</li>
+</ul>
+
+<h2 id="design">8. Design, Landing &amp; Mobile <span class="tag">LIVE</span></h2>
+<ul>
+  <li><b>Landing page redesign</b> — decluttered 9→5 sections, dark trading-floor aesthetic, <b>live market data in the hero</b> (no mock content) <span class="commit">d8e8a7d</span></li>
+  <li><b>Full dark theme site-wide</b> — root tokens flipped, zero white pages left <span class="commit">fcf2f61</span></li>
+  <li><b>iOS/mobile polish</b> — card-detail scroll fix (dvh), 44px tap targets, portfolio two-row grid at ≤600px, arbitrage mobile play-cards, community dark feed <span class="commit">c49306b</span></li>
+  <li><b>Card detail hydration</b> — typeahead used to open cards with no chart/comps/grade ladder; now self-hydrates every time <span class="commit">76ff0d5</span></li>
+  <li><b>Badges cleanup</b> — pack-era badges purged from DB, auction/trade badges added, earned-state logic fixed</li>
+  <li><b>QA crawl rounds</b> — unreadable text tokens, grade normalization ("RAW Ungraded"), arb dedupe (Wemby ×4), chip ordering, modal dark-sheet theming <span class="commit">77c7217</span> <span class="commit">9dc95b0</span></li>
+</ul>
+
+<h2 id="brand">9. Brand, SEO &amp; Promotion Assets <span class="tag">LIVE</span></h2>
+<div class="card warn">
+  <p><span class="pill fix">FOUND &amp; FIXED</span> <b>og-image.png was 404 on every page of the site</b> — every link shared to Twitter/Discord/iMessage had a broken preview. Promotion would have looked broken from day one. <span class="commit">b1b1eb6</span></p>
+</div>
+<ul>
+  <li><b>OG image</b> — 1200×630 branded dark+green card with chart sweep + ticker footer (generated via reusable <code>scripts/gen-brand-assets.mjs</code>)</li>
+  <li><b>Favicon</b> (.ico + 16/32) + <b>PWA icons</b> (192/512/maskable) + apple-touch-icon</li>
+  <li><b>PWA manifest</b> — installable, standalone mode, shortcuts to Market / Portfolio / Sell</li>
+  <li><b>SEO layer</b> (pre-existing, verified live): per-card meta + OG tags + Product JSON-LD, <b>chunked sitemap (16 chunks)</b> covering the catalog, robots.txt</li>
+</ul>
+
+<h2 id="platform">10. Platform: Addresses, Settings, Profiles <span class="tag">LIVE</span></h2>
+<ul>
+  <li><b>Shipping addresses</b> — <code>user_addresses</code> CRUD, default handling, checkout gating, seller SHIP TO panel <span class="commit">1783c8f</span></li>
+  <li><b>Settings build-out</b> — profile / addresses / payments / security / showcase sections, dark-sheet modals</li>
+  <li><b>Profile showcase</b> — top-5 cards + top-3 badges on public profiles</li>
+  <li><b>Stores</b> — stores list + store pages restored (API was querying phantom columns; list was silently empty and pages 500'd — dead since launch) <span class="commit">6354739</span></li>
+</ul>
+
+<h2 id="fixes">11. Notable Bug Fixes</h2>
+<table>
+  <tr><th>Fix</th><th>Impact</th><th>Commit</th></tr>
+  <tr><td>og-image 404 site-wide</td><td>Every shared link had a broken preview</td><td><span class="commit">b1b1eb6</span></td></tr>
+  <tr><td>Stores API phantom columns</td><td>Stores feature was dead since launch (empty list, 500s)</td><td><span class="commit">6354739</span></td></tr>
+  <tr><td>JWT secret hardcoded fallback</td><td>Token forgery possible — rotated</td><td><span class="commit">114a9fa</span></td></tr>
+  <tr><td>Admin prices ×100 (cents rendered as dollars)</td><td>Admin panel showed $1,200 listings as $120,000</td><td><span class="commit">2272cbf</span></td></tr>
+  <tr><td>CardHedge comps 400 on every card</td><td>No comps rendered anywhere</td><td><span class="commit">aac0a5b</span></td></tr>
+  <tr><td>Typeahead dropped card identity fields</td><td>Search results opened blank card pages</td><td><span class="commit">76ff0d5</span></td></tr>
+  <tr><td>Heatmap +500% thin-sale junk</td><td>Landing movers were unbelievable garbage</td><td><span class="commit">a228bb7</span></td></tr>
+  <tr><td>PaymentModal light-theme address step</td><td>Unreadable low-contrast checkout</td><td><span class="commit">4ae0413</span></td></tr>
+  <tr><td>verify-scan 413 (photo &gt; 100kb body cap)</td><td>Scan verification always failed</td><td><span class="commit">87a02f9</span></td></tr>
+  <tr><td>z-index trap under header/bottom-nav</td><td>Fixed overlays unusable on mobile</td><td><span class="commit">3a5ef9d</span></td></tr>
+  <tr><td>"1986 1986 Fleer" year duplication</td><td>Search + watchlist meta lines</td><td><span class="commit">2272cbf</span></td></tr>
+</table>
+
+<h2 id="verification">12. How Everything Was Verified</h2>
+<div class="card good">
+  <p>Every claimed feature passed <b>three mandatory layers</b>:</p>
+  <ul>
+    <li><b>1. Source</b> — code grep confirming the implementation is committed and built</li>
+    <li><b>2. Prod probe</b> — live API/DB calls exercising the real flow on gemlinecards.com (e.g., offer $30 → counter $40 → accept → order → message → cancel → relist; report → dedupe → 400 on bad reason; suspend → login 403 → reinstate; flag off → 503 → flag on)</li>
+    <li><b>3. Rendered DOM</b> — screenshots of the live UI (admin panel, watchlist rows, notification bell, timeline strip, typeahead results, onboarding steps)</li>
+  </ul>
+  <p class="muted">All test data scrubbed after each batch: orders, escrow rows, messages, disputes, reports, blocks, watches, notifications, throwaway users. Stripe test intents cancelled or left unconfirmed (auto-expire) — <b>zero real charges</b>. The 287K-card catalog, real users, and portfolios were never modified — all migrations additive.</p>
+</div>
+
+<h2 id="pending">13. What Still Needs Rhett</h2>
+<h3>Keys (~5 min each — everything is wired and waiting)</h3>
+<table>
+  <tr><th>Item</th><th>Unlocks</th><th>Status</th></tr>
+  <tr><td><code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> in Vercel</td><td>Live payment modal → real checkout</td><td><span class="pill blocked">BLOCKED</span></td></tr>
+  <tr><td>Stripe webhook → <code>/api/webhook/stripe</code> + secret</td><td>Payment event sync (capture/fail/cancel)</td><td><span class="pill blocked">BLOCKED</span></td></tr>
+  <tr><td>Turnstile site + secret keys</td><td>CAPTCHA on signup/auth (already wired, no-op)</td><td><span class="pill blocked">BLOCKED</span></td></tr>
+  <tr><td><code>PSA_API_TOKEN</code></td><td>Cert verification on graded cards</td><td><span class="pill blocked">BLOCKED</span></td></tr>
+  <tr><td>EasyPost/Shippo key</td><td>Shipping label purchase</td><td><span class="pill blocked">BLOCKED</span></td></tr>
+  <tr><td>SMTP credentials</td><td>Email notifications (code ready)</td><td><span class="pill blocked">BLOCKED</span></td></tr>
+</table>
+<h3>Product decisions</h3>
+<ul>
+  <li><b>Dispute resolution policy</b> — refund buyer vs release to seller (disputes currently freeze payout until an admin decides)</li>
+  <li><b>Catalog expansion</b> — we hold ~12% of CardHedge's 3.56M cards; bulk export needs a tier upgrade vs building a crawler</li>
+  <li><b>Virtual pack IP risk</b> — branded packs (Topps/Panini) vs mystery boxes / community packs / original designs</li>
+  <li><b>$1 real-card test</b> — final end-to-end capture proof once Stripe keys land</li>
+  <li><b>Vercel cron</b> → <code>POST /api/checkout/sweep</code> every ~10 min (sweep is lazy today)</li>
+  <li><b>Image migration</b> — card images still on the old Bubble CDN (separate infra project)</li>
+</ul>
+
+<footer>
+  Gemline Build Report · generated 2026-07-03 · main @ <span class="commit">2272cbf</span> deployed to gemlinecards.com<br>
+  Build logs: memory/gemline-ship-ready-2026-07-03.md · Deep product audit in progress (separate report)
+</footer>
+
+</div>
+</body>
+</html>
