@@ -331,8 +331,8 @@ export default function PortfolioPage() {
     return (
       <>
         <div className="eyebrow">Your Collection</div>
-        <h1 className="page">Portfolio</h1>
-        <p className="sub">Every slab you own, marked to the live market. Cost basis, unrealized gains, and where the value sits.</p>
+        <h1 className="page">My Collection</h1>
+        <p className="sub">Every card you own, valued live — what it’s worth, what you paid, and where the value sits.</p>
         {subTabBar}
         {subTab === 'trades' && <TradesContent />}
         {subTab === 'sell' && <SellContent />}
@@ -354,8 +354,8 @@ export default function PortfolioPage() {
   return (
     <>
       <div className="eyebrow">Your Collection</div>
-      <h1 className="page">Portfolio</h1>
-      <p className="sub">Every slab you own, marked to the live market. Cost basis, unrealized gains, and where the value sits.</p>
+      <h1 className="page">My Collection</h1>
+      <p className="sub">Every card you own, valued live — what it’s worth, what you paid, and where the value sits.</p>
 
       {subTabBar}
 

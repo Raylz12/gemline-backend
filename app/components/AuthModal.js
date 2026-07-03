@@ -89,7 +89,7 @@ export default function AuthModal({ onClose }) {
 
           <div className="auth-title">{tab === 'login' ? 'Welcome back' : 'Create account'}</div>
           <div className="auth-sub">
-            {tab === 'login' ? 'Sign in to your GEMLINE account' : 'Join the card exchange'}
+            {tab === 'login' ? 'Sign in to your GEMLINE account' : 'Join the show — free in 30 seconds'}
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>

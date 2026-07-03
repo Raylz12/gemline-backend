@@ -203,7 +203,7 @@ export default function Landing() {
         const seen2 = new Set();
         const pool = feed.filter(c => {
           const pct = Number(c.gain7d) || 0;
-          if (!c.thumbnail || Number(c.marketPrice) < 15 || pct === 0 || heroIds.has(c.cardId) || seen2.has(c.player)) return false;
+          if (!c.thumbnail || Number(c.marketPrice) < 25 || pct === 0 || heroIds.has(c.cardId) || seen2.has(c.player)) return false; // sub-$25 junk never headlines the landing page
           seen2.add(c.player);
           return true;
         }).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 8);
@@ -242,7 +242,7 @@ export default function Landing() {
             <div><div className="wordmark">GEM<span>LINE</span></div><div className="tagline">BY COLLECTORS, FOR COLLECTORS</div></div>
           </div>
           <button className="lp-enter-link" onClick={() => enter('/market')}>
-            Enter the exchange
+            Enter the show
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </button>
         </div>
@@ -257,8 +257,11 @@ export default function Landing() {
             <p className="lp-sub">Buy, sell, and trade real cards with collectors who get it — every deal backed by live market prices.</p>
             <div className="lp-cta">
               <button className="btn-xl primary" onClick={() => enter('/market')}>
-                Enter the exchange
+                Browse the floor
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </button>
+              <button className="btn-xl" onClick={() => enter('/portfolio')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,.18)', color: 'var(--txt,#fff)' }}>
+                Start your collection — free
               </button>
             </div>
             <div className="lp-trust">
@@ -286,7 +289,7 @@ export default function Landing() {
                 {movers.map((c, i) => <MoverTile key={c.cardId} c={c} onOpen={enter} delay={(i % 4) * 70} />)}
               </div>
               <div className="lp-pulse-more reveal">
-                <button onClick={() => enter('/heatmap')}>See the full heatmap →</button>
+                <button onClick={() => enter('/analytics')}>See the full price guide →</button>
               </div>
             </>
           ) : (
@@ -336,7 +339,7 @@ export default function Landing() {
           <h2>Pull up a table.</h2>
           <p>The floor never closes. Know what your cards are worth — and trade with people who love them as much as you do.</p>
           <button className="btn-xl primary" onClick={() => enter('/market')}>
-            Enter the exchange
+            Enter the show
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </button>
           <div className="lp-fine">Free account · 30 seconds · No credit card</div>
