@@ -9,6 +9,18 @@ export const metadata = {
   title: 'GEMLINE — The Card Exchange',
   description: 'Buy, sell, and trade sports cards and Pokémon. Real-time pricing, arbitrage engine, virtual pack rips, and AI-powered search across 500K+ cards.',
   robots: { index: true, follow: true },
+  manifest: '/manifest.webmanifest',
+  applicationName: 'GEMLINE',
+  appleWebApp: { capable: true, title: 'GEMLINE', statusBarStyle: 'black-translucent' },
+  icons: {
+    icon: [
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
   alternates: { canonical: './' },   // resolves per-page against metadataBase — do not hardcode the homepage
   openGraph: {
     title: 'GEMLINE — The Card Exchange',

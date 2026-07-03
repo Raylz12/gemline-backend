@@ -1,0 +1,21 @@
+{
+  "name": "GEMLINE — The Card Exchange",
+  "short_name": "GEMLINE",
+  "description": "Buy, sell, and trade sports cards and Pokémon. Live prices, listings, and market intelligence for 374,000+ cards.",
+  "start_url": "/market",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0d15",
+  "theme_color": "#0a0d15",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Market", "url": "/market", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Portfolio", "url": "/portfolio", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Sell", "url": "/sell", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
