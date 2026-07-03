@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { SPORT_THEME } from '../lib/data';
+import { useAuth } from './AuthContext';
 
 const CardStoreContext = createContext(null);
 
@@ -162,28 +163,50 @@ export function CardStoreProvider({ children }) {
     fetchFeed({ page: 1 });
   }).current;
 
+  // Server-backed watchlist: optimistic toggle + persist. Returns false when
+  // signed out so callers can open the auth modal instead.
   const toggleWatch = (id) => {
+    const t = typeof window !== 'undefined' && localStorage.getItem('gemline_token');
+    if (!t) return false;
+    const key = String(id);
+    const adding = !watch.has(key);
     setWatch(prev => {
       const next = new Set(prev);
-      if (next.has(String(id))) next.delete(String(id));
-      else next.add(String(id));
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
+    fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId: id, watch: adding }),
+    }).then(r => { if (!r.ok) throw new Error('watch failed'); })
+      .catch(() => setWatch(prev => {          // revert on failure
+        const next = new Set(prev);
+        if (adding) next.delete(key); else next.add(key);
+        return next;
+      }));
+    return true;
   };
 
   const updateCard = (id, updater) => {
     setCards(prev => prev.map(c => String(c.id) === String(id) ? { ...c, ...updater(c) } : c));
   };
 
-  // Fetch credits on mount (needs auth token)
+  // Fetch credits + watchlist whenever auth token appears (mount AND post-login)
+  const { token: authToken } = useAuth();
   useEffect(() => {
-    const t = typeof window !== 'undefined' && localStorage.getItem('gemline_token');
-    if (!t) return;
+    const t = authToken || (typeof window !== 'undefined' && localStorage.getItem('gemline_token'));
+    if (!t) { setWatch(new Set()); return; }
     fetch('/api/user/credits', { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && d.credits !== undefined) setWallet(w => ({ ...w, credits: d.credits })); })
       .catch(() => {});
-  }, []);
+    fetch('/api/watchlist', { headers: { Authorization: `Bearer ${t}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && Array.isArray(d.ids)) setWatch(new Set(d.ids.map(String))); })
+      .catch(() => {});
+  }, [authToken]);
 
   return (
     <CardStoreContext.Provider value={{ 

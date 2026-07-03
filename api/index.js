@@ -169,7 +169,8 @@ app.post('/api/admin/refresh-mv', async (req, res) => {
     app._brandCounts = null;
     app._arbCache = null;
     console.log(`[admin] mv_card_feed refreshed in ${Date.now()-t0}ms`);
-    res.json({ ok: true, refreshedMs: Date.now()-t0 });
+    const alerts = await sweepPriceAlerts(pool);
+    res.json({ ok: true, refreshedMs: Date.now()-t0, priceAlerts: alerts });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -1143,6 +1144,150 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
   } catch (e) { res.json({ ok: true }); }
 });
 
+// ── Watchlist + price alerts ───────────────────────────────────────────
+// Watch a card (family display tier or any grade tier). Alerts fire on:
+//  • new active listing in the watched card's family (immediate, in listing POST)
+//  • price move ≥ alert_pct vs last baseline (daily, piggybacks refresh-mv cron)
+let _watchTableReady = false;
+async function ensureWatchTable(pool) {
+  if (_watchTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS watchlist (
+      id BIGSERIAL PRIMARY KEY,
+      user_id uuid NOT NULL,
+      card_id uuid NOT NULL,
+      ref_price NUMERIC,
+      last_price NUMERIC,
+      alert_pct NUMERIC NOT NULL DEFAULT 5,
+      last_alert_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, card_id)
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_watch_card ON watchlist (card_id)').catch(() => {});
+  _watchTableReady = true;
+}
+
+app.get('/api/watchlist', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ items: [], ids: [] });
+    await ensureWatchTable(pool);
+    const { rows } = await pool.query(`
+      SELECT w.card_id, w.ref_price, w.alert_pct, w.created_at,
+             c.player, c.card_set, c.year, c.variant, c.number, c.sport,
+             c.grader, c.grade, c.catalog_price, c.gain_7d, c.sales_30d,
+             c.ebay_thumb, c.image_url,
+             (SELECT COUNT(*) FROM listings l WHERE l.card_id = w.card_id AND l.status = 'active') AS live_listings
+      FROM watchlist w JOIN cards c ON c.id = w.card_id
+      WHERE w.user_id = $1 ORDER BY w.created_at DESC LIMIT 200`, [req.userId]);
+    res.json({
+      ids: rows.map(x => x.card_id),
+      items: rows.map(x => ({
+        cardId: x.card_id, player: x.player, cardSet: x.card_set, year: x.year,
+        variant: x.variant, number: x.number, sport: x.sport, grader: x.grader, grade: x.grade,
+        thumbnail: x.ebay_thumb || x.image_url || null,
+        refPrice: x.ref_price != null ? Number(x.ref_price) : null,
+        price: x.catalog_price != null ? Number(x.catalog_price) : null,
+        gain7d: x.gain_7d != null ? Number(x.gain_7d) : null,
+        sales30d: Number(x.sales_30d) || 0,
+        liveListings: Number(x.live_listings) || 0,
+        alertPct: Number(x.alert_pct) || 5,
+        watchedAt: x.created_at,
+      })),
+    });
+  } catch (e) { res.json({ items: [], ids: [] }); }
+});
+
+app.post('/api/watchlist', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureWatchTable(pool);
+    const { cardId, watch } = req.body || {};
+    if (!cardId || !/^[0-9a-f-]{36}$/i.test(String(cardId))) return res.status(400).json({ error: 'cardId required' });
+    if (watch === false) {
+      await pool.query('DELETE FROM watchlist WHERE user_id = $1 AND card_id = $2', [req.userId, cardId]);
+      return res.json({ ok: true, watching: false });
+    }
+    const { rows: [card] } = await pool.query('SELECT id, catalog_price FROM cards WHERE id = $1', [cardId]);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) AS count FROM watchlist WHERE user_id = $1', [req.userId]);
+    if (Number(count) >= 200) return res.status(400).json({ error: 'Watchlist is full (200 max)' });
+    const px = Number(card.catalog_price) > 0 ? Number(card.catalog_price) : null;
+    await pool.query(`
+      INSERT INTO watchlist (user_id, card_id, ref_price, last_price)
+      VALUES ($1, $2, $3, $3) ON CONFLICT (user_id, card_id) DO NOTHING`,
+      [req.userId, cardId, px]);
+    res.json({ ok: true, watching: true });
+  } catch (e) {
+    console.error('watchlist error:', e.message);
+    res.status(500).json({ error: 'Failed to update watchlist' });
+  }
+});
+
+app.put('/api/watchlist/:cardId', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureWatchTable(pool);
+    const pct = Number(req.body?.alertPct);
+    if (![2, 5, 10, 20].includes(pct)) return res.status(400).json({ error: 'alertPct must be 2, 5, 10, or 20' });
+    await pool.query('UPDATE watchlist SET alert_pct = $1 WHERE user_id = $2 AND card_id = $3', [pct, req.userId, req.params.cardId]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to update alert' }); }
+});
+
+// Notify watchers of a card family when a new listing goes live (skips the seller).
+async function notifyWatchersOfListing(pool, listing, sellerId) {
+  try {
+    await ensureWatchTable(pool);
+    const { rows } = await pool.query(`
+      SELECT DISTINCT w.user_id, lc.player, lc.grader, lc.grade
+      FROM cards lc
+      JOIN cards wc ON wc.player = lc.player AND wc.card_set = lc.card_set
+        AND COALESCE(wc.variant,'') = COALESCE(lc.variant,'') AND COALESCE(wc.number,'') = COALESCE(lc.number,'')
+      JOIN watchlist w ON w.card_id = wc.id
+      WHERE lc.id = $1 AND w.user_id != $2 LIMIT 100`, [listing.card_id, sellerId]);
+    for (const row of rows) {
+      const gradeStr = row.grader && row.grade ? ` ${row.grader} ${row.grade}` : '';
+      await notify(pool, row.user_id, 'watch_listing',
+        `New listing: ${row.player}${gradeStr} — $${fromCents(listing.price).toLocaleString()}`,
+        'A card on your watchlist just hit the market.',
+        { listingId: listing.id, cardId: listing.card_id });
+    }
+  } catch (e) { console.error('watch-notify error:', e.message); }
+}
+
+// Daily price-move sweep — called from /api/admin/refresh-mv after the MV rebuild.
+async function sweepPriceAlerts(pool) {
+  try {
+    await ensureWatchTable(pool);
+    const { rows } = await pool.query(`
+      SELECT w.id, w.user_id, w.card_id, w.last_price, w.alert_pct,
+             c.catalog_price, c.player, c.grader, c.grade
+      FROM watchlist w JOIN cards c ON c.id = w.card_id
+      WHERE c.catalog_price > 0 AND w.last_price > 0
+        AND ABS(c.catalog_price - w.last_price) / w.last_price * 100 >= w.alert_pct
+        AND (w.last_alert_at IS NULL OR w.last_alert_at < NOW() - INTERVAL '20 hours')
+      LIMIT 500`);
+    for (const row of rows) {
+      const oldPx = Number(row.last_price), newPx = Number(row.catalog_price);
+      const pct = ((newPx - oldPx) / oldPx) * 100;
+      const dir = pct > 0 ? '▲ up' : '▼ down';
+      const gradeStr = row.grader && row.grade ? ` ${row.grader} ${row.grade}` : '';
+      await notify(pool, row.user_id, 'price_alert',
+        `${row.player}${gradeStr} ${dir} ${Math.abs(pct).toFixed(1)}%`,
+        `$${oldPx.toLocaleString()} → $${newPx.toLocaleString()} — a card on your watchlist moved.`,
+        { cardId: row.card_id });
+      await pool.query('UPDATE watchlist SET last_price = $1, last_alert_at = NOW() WHERE id = $2', [newPx, row.id]);
+    }
+    return rows.length;
+  } catch (e) { console.error('price-alert sweep error:', e.message); return 0; }
+}
+
 // ── Auction settlement engine ──────────────────────────────────────────
 // Runs lazily (throttled) from /api/auctions/live and on demand via POST /api/auctions/settle.
 // Ended auction w/ winning bid ≥ reserve → escrow order for winner, listing 'sold'.
@@ -1306,6 +1451,7 @@ app.post('/api/auctions/create', requireAuth, async (req, res) => {
       RETURNING id
     `, [cardId, req.userId, priceInCents, reserveInCents, endsAt]);
 
+    await notifyWatchersOfListing(pool, { id: listing.id, card_id: cardId, price: priceInCents }, req.userId);
     res.json({ success: true, listingId: listing.id, endsAt, player: card.player });
   } catch (e) {
     console.error('auctions/create error:', e.message);
@@ -1731,6 +1877,7 @@ app.post('/api/listings', requireAuth, async (req, res) => {
       RETURNING id, card_id, price, status, open_to_offers, listing_type, created_at
     `, [cardId, req.userId, cents, !!openToOffers, listingType || 'buy_now',
         description || null, JSON.stringify(photoUrls)]);
+    await notifyWatchersOfListing(pool, { ...listing, card_id: cardId }, req.userId);
     res.json({ ...listing, price: fromCents(listing.price) });
   } catch (e) {
     console.error('listings/create error:', e.message);

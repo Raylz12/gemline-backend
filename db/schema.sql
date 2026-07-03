@@ -319,3 +319,19 @@ CREATE TABLE IF NOT EXISTS user_addresses (
 );
 CREATE INDEX IF NOT EXISTS idx_user_addresses_user ON user_addresses(user_id);
 -- ALTER TABLE orders ADD COLUMN shipping_address jsonb;  (applied 2026-07-02)
+
+-- ── Watchlist (added 2026-07-03) ─────────────────────────────────────────
+-- Server-backed card watches. Alerts: new family listing (instant, in listing
+-- POST) + price move ≥ alert_pct (daily sweep piggybacked on refresh-mv cron).
+CREATE TABLE IF NOT EXISTS watchlist (
+  id            BIGSERIAL PRIMARY KEY,
+  user_id       uuid NOT NULL,
+  card_id       uuid NOT NULL,
+  ref_price     numeric,           -- price when the watch was set (Δ display)
+  last_price    numeric,           -- baseline for the next price alert
+  alert_pct     numeric NOT NULL DEFAULT 5,
+  last_alert_at timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, card_id)
+);
+CREATE INDEX IF NOT EXISTS idx_watch_card ON watchlist (card_id);

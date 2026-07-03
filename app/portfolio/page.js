@@ -12,6 +12,7 @@ import TradesContent from '../components/TradesContent';
 import SellContent from '../components/SellContent';
 import OffersContent from '../components/OffersContent';
 import OrdersContent from '../components/OrdersContent';
+import WatchlistContent from '../components/WatchlistContent';
 
 export default function PortfolioPage() {
   const { token, authFetch, user } = useAuth();
@@ -33,8 +34,12 @@ export default function PortfolioPage() {
   // Recently added (bulk-add UX)
   const [addedIds, setAddedIds] = useState(new Set());
 
-  // Modal states
+  // Modal states — ?tab= deep-links (notification clicks land on the right tab)
   const [subTab, setSubTab] = useState('cards');
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (['trades', 'sell', 'offers', 'orders', 'watchlist'].includes(t)) setSubTab(t);
+  }, []);
   const [showSearch, setShowSearch] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [listingItem, setListingItem] = useState(null); // item to list for sale
@@ -316,6 +321,9 @@ export default function PortfolioPage() {
       <button className={`live-tab ${subTab === 'orders' ? 'on' : ''}`} onClick={() => setSubTab('orders')}>
         Orders
       </button>
+      <button className={`live-tab ${subTab === 'watchlist' ? 'on' : ''}`} onClick={() => setSubTab('watchlist')}>
+        Watchlist
+      </button>
     </div>
   );
 
@@ -330,6 +338,7 @@ export default function PortfolioPage() {
         {subTab === 'sell' && <SellContent />}
         {subTab === 'offers' && <OffersContent />}
         {subTab === 'orders' && <OrdersContent />}
+        {subTab === 'watchlist' && <WatchlistContent />}
         {subTab === 'cards' && (
           <PreviewGate
             icon="📂"
@@ -354,6 +363,7 @@ export default function PortfolioPage() {
       {subTab === 'sell' && <SellContent />}
       {subTab === 'offers' && <OffersContent />}
       {subTab === 'orders' && <OrdersContent />}
+      {subTab === 'watchlist' && <WatchlistContent />}
 
       {subTab === 'cards' && <>
       {/* Action buttons */}

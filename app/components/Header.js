@@ -22,7 +22,20 @@ function timeAgo(d) {
 const NOTIF_ICONS = {
   outbid: IconZap, auction_won: IconTrophy, auction_sold: IconDollar, auction_ended: IconBell, auction_lost: IconBell,
   offer_received: IconGavel, offer_accepted: IconCheck, offer_declined: IconBell,
+  price_alert: IconZap, watch_listing: IconDollar, offer_countered: IconGavel, order_message: IconBell,
 };
+
+// Where a notification should take you when clicked.
+function notifHref(n) {
+  const d = n.data || {};
+  const t = n.type || '';
+  if (t.startsWith('order') || t === 'payment_confirmed' || d.action === 'complete_payment' || d.orderId) return '/portfolio?tab=orders';
+  if (t.startsWith('offer')) return '/portfolio?tab=offers';
+  if (t === 'price_alert' || t === 'watch_listing') return d.cardId ? `/card/${d.cardId}` : '/portfolio?tab=watchlist';
+  if (t.startsWith('auction') || t === 'outbid') return d.cardId ? `/card/${d.cardId}` : '/live';
+  if (d.cardId) return `/card/${d.cardId}`;
+  return null;
+}
 
 function NotificationBell() {
   const { token, authFetch } = useAuth();
@@ -76,7 +89,9 @@ function NotificationBell() {
           {items.length === 0 ? (
             <div className="notif-empty">Nothing yet — bids, offers, and wins land here.</div>
           ) : items.map(n => (
-            <div key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`}>
+            <div key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`}
+                 style={{ cursor: notifHref(n) ? 'pointer' : 'default' }}
+                 onClick={() => { const h = notifHref(n); if (h) { setOpen(false); window.location.href = h; } }}>
               <span className="notif-ico" style={{ color: 'var(--gold)' }}>
                 {(() => { const Ic = NOTIF_ICONS[n.type] || IconBell; return <Ic size={15} />; })()}
               </span>
