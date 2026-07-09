@@ -91,9 +91,14 @@ export function AuthProvider({ children }) {
     const headers = { ...opts.headers };
     if (tokenRef.current) headers.Authorization = `Bearer ${tokenRef.current}`;
     const res = await fetch(url, { ...opts, headers });
-    if (res.status === 401) {
-      // Auto-logout on expired token
-      logout();
+    if (res.status === 401 && tokenRef.current) {
+      // Don't nuke the session on a single stray 401 (deploy swap, one flaky
+      // endpoint) — confirm the token is actually dead against /api/state
+      // before logging the user out. Transient 401s were logging people out.
+      try {
+        const check = await fetch('/api/state', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
+        if (check.status === 401) logout();
+      } catch { /* network blip — keep the session */ }
     }
     return res;
   }, [logout]);
