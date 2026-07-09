@@ -76,6 +76,9 @@ export default function MarketplacePage() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const q = (searchQuery || filters.q || '').toLowerCase();
   const [selectedCard, setSelectedCard] = useState(null);
+  // Mobile collapses Scout behind a toggle — the header typeahead is the one
+  // always-visible search box on small screens (audit: two stacked inputs).
+  const [scoutOpen, setScoutOpen] = useState(false);
   const [activeListings, setActiveListings] = useState([]);
   const [viewMode, setViewMode] = useState('grid'); // grid | list
   const [page, setPage] = useState(1);
@@ -225,8 +228,13 @@ export default function MarketplacePage() {
         <p className="sub">Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence — every price is verified against live market data.</p>
       </div>
 
-      {/* Scout — AI Card Search */}
-      <div style={{ marginBottom: 24 }}>
+      {/* Scout — AI Card Search (collapsed behind a toggle on mobile) */}
+      <div className={`scout-wrap ${scoutOpen ? 'open' : ''}`} style={{ marginBottom: 24 }}>
+        <button className="scout-toggle" onClick={() => setScoutOpen(o => !o)}>
+          <span>✨ Scout — AI search: describe any card</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: scoutOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div className="scout-body">
         <Scout onSelect={c => {
           setSelectedCard({
             id: c.card_id,
@@ -248,6 +256,7 @@ export default function MarketplacePage() {
             gain7d: c.gain || 0,
           });
         }} />
+        </div>
       </div>
 
       {/* Mobile sport filter strip */}
