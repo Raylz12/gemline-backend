@@ -675,7 +675,7 @@ export default function PortfolioPage() {
                       <div style={{ padding: '2px 12px 10px 60px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {tiers.map(t => (
                           <div key={t.id} style={{
-                            display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minHeight: 44,
                             borderRadius: 6, cursor: addedIds.has(t.id) ? 'default' : 'pointer',
                             border: '1px solid var(--line)', background: 'var(--ink)', transition: '.15s',
                           }}

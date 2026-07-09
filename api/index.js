@@ -1158,19 +1158,30 @@ app.post('/api/catalog/search', async (req, res) => {
       return `${SEARCH_EXPR} ILIKE $${params.length}`;
     });
 
+    // Relevance score: exact player name > player prefix > player contains the
+    // query, plus trigram similarity and capped liquidity so famous, actively-
+    // traded cards float up (was pure trigram, which buried e.g. Michael Jordan
+    // under shorter "…Jordan" names on a one-word query).
+    const REL = `(
+         (CASE WHEN lower(coalesce(player,'')) = lower($1) THEN 5 ELSE 0 END)
+       + (CASE WHEN lower(coalesce(player,'')) LIKE lower($1) || '%' THEN 3 ELSE 0 END)
+       + (CASE WHEN coalesce(player,'') ILIKE '%' || $1 || '%' THEN 1.5 ELSE 0 END)
+       + similarity(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,''), $1)
+       + LEAST(coalesce(sales_30d,0)::float / 50.0, 2.0)
+      )`;
     const { rows: famRows } = await pool.query(
       `WITH m AS (
          SELECT id, player, card_set, year, variant, number, sport, grader, grade,
                 catalog_price, ebay_thumb, image_url, sales_30d,
-                similarity(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,''), $1) AS sim
+                ${REL} AS rel
          FROM cards
          WHERE ${conds.join(' AND ')}
-         ORDER BY sim DESC, sales_30d DESC NULLS LAST, catalog_price DESC NULLS LAST
+         ORDER BY rel DESC, sales_30d DESC NULLS LAST, catalog_price DESC NULLS LAST
          LIMIT 500
        )
        SELECT player, card_set, variant, number, sport,
               max(coalesce(year,'')) AS year,
-              max(sim) AS sim,
+              max(rel) AS rel,
               max(catalog_price) AS top_price,
               sum(coalesce(sales_30d,0)) AS liquidity,
               (array_agg(ebay_thumb) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS ebay_thumb,
@@ -1180,7 +1191,7 @@ app.post('/api/catalog/search', async (req, res) => {
                        ORDER BY catalog_price DESC NULLS LAST) AS tiers
        FROM m
        GROUP BY player, card_set, variant, number, sport
-       ORDER BY max(sim) DESC, sum(coalesce(sales_30d,0)) DESC NULLS LAST, max(catalog_price) DESC NULLS LAST
+       ORDER BY max(rel) DESC, sum(coalesce(sales_30d,0)) DESC NULLS LAST, max(catalog_price) DESC NULLS LAST
        LIMIT 15`,
       params
     );
