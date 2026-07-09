@@ -14,3 +14,5 @@ See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode de
 [refresh] 751,920 cards | 7,520 batches | ~81 min estimated
 
   [batch 1/7520] 100/751,920 (0.0%) | 35/s | ETA 02:33Z | written:84 err:16
+  [batch 10/7520] 1,000/751,920 (0.1%) | 23/s | ETA 05:34Z | written:895 err:105
+  [batch 20/7520] 2,000/751,920 (0.3%) | 24/s | ETA 05:20Z | written:1,826 err:174

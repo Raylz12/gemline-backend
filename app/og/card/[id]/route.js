@@ -69,7 +69,9 @@ export async function GET(req, { params }) {
     );
   }
 
-  const setLine = [card.year, card.card_set, card.variant && card.variant !== 'Base' ? card.variant : null, card.number ? `#${String(card.number).replace(/^#/, '')}` : null]
+  const setName = String(card.card_set || '').trim();
+  const yearBit = card.year && !setName.startsWith(String(card.year)) ? card.year : null;
+  const setLine = [yearBit, setName || null, card.variant && card.variant !== 'Base' ? card.variant : null, card.number ? `#${String(card.number).replace(/^#/, '')}` : null]
     .filter(Boolean).join(' · ');
   const gradeLabel = card.grader && card.grade ? `${card.grader} ${card.grade}` : (card.grader || 'RAW');
   const price = Number(card.catalog_price) > 0 ? usd(card.catalog_price) : null;
