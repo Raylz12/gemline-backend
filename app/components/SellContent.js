@@ -499,6 +499,12 @@ export default function SellContent() {
                   {submitting ? 'Listing...' : 'List it'}
                 </button>
               </div>
+
+              <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
+                By listing you agree to the{' '}
+                <a href="/seller-agreement" target="_blank" rel="noopener" style={{ color: 'var(--gold)' }}>Seller Agreement</a>
+                {' '}— accurate description, tracked shipping within 3 business days, payout via escrow.
+              </div>
             </div>
           )}
         </div>

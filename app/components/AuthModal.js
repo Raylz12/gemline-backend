@@ -156,6 +156,14 @@ export default function AuthModal({ onClose }) {
             <button className="auth-btn" type="submit" disabled={loading}>
               {loading ? 'Please wait…' : tab === 'login' ? 'Sign In' : 'Create Account'}
             </button>
+
+            {tab === 'signup' && (
+              <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5, textAlign: 'center' }}>
+                By creating an account you agree to the{' '}
+                <a href="/terms" target="_blank" rel="noopener" style={{ color: 'var(--gold)' }}>Terms of Service</a> and{' '}
+                <a href="/privacy" target="_blank" rel="noopener" style={{ color: 'var(--gold)' }}>Privacy Policy</a>.
+              </div>
+            )}
           </form>
 
           <div className="auth-toggle">

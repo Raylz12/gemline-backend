@@ -35,6 +35,12 @@ const COLUMNS = [
   },
 ];
 
+const LEGAL_LINKS = [
+  { href: '/terms', label: 'Terms of Service' },
+  { href: '/privacy', label: 'Privacy Policy' },
+  { href: '/seller-agreement', label: 'Seller Agreement' },
+];
+
 export default function Footer() {
   return (
     <footer className="site-footer">
@@ -64,7 +70,14 @@ export default function Footer() {
           ))}
         </div>
       </div>
-      <div className="ft-base">© {new Date().getFullYear()} GEMLINE — The Card Show, Online. Prices powered by Card Hedge.</div>
+      <div className="ft-base">
+        <span>© {new Date().getFullYear()} GEMLINE — The Card Show, Online. Prices powered by Card Hedge.</span>
+        <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 14, marginLeft: 14 }}>
+          {LEGAL_LINKS.map(l => (
+            <Link key={l.href} href={l.href} style={{ color: 'inherit' }}>{l.label}</Link>
+          ))}
+        </span>
+      </div>
     </footer>
   );
 }
