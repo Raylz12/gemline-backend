@@ -32,7 +32,7 @@ export default function FeesPage() {
         {ROWS.map(([k, v], i) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderBottom: i < ROWS.length - 1 ? '1px solid var(--line)' : 'none', fontSize: 14 }}>
             <span style={{ color: 'var(--muted)' }}>{k}</span>
-            <span style={{ fontWeight: 700, color: v === 'Free' ? 'var(--up)' : 'var(--gold)', whiteSpace: 'nowrap' }}>{v}</span>
+            <span style={{ fontWeight: 700, color: v === 'Free' ? 'var(--up)' : 'var(--gold)', textAlign: 'right', whiteSpace: v.length > 24 ? 'normal' : 'nowrap' }}>{v}</span>
           </div>
         ))}
       </div>
