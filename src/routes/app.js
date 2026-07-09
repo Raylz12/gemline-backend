@@ -149,8 +149,8 @@ export function appRouter(repo, stripe) {
   }));
 
   r.post('/portfolio/add', wrap(async (req) => {
-    const { cardId, customCard, purchasePrice, certNumber, notes } = req.body;
-    return portfolio.add(repo, { userId: req.userId, cardId, customCard, purchasePrice, certNumber, notes });
+    const { cardId, cardhedgeId, grader, grade, customCard, purchasePrice, certNumber, notes } = req.body;
+    return portfolio.add(repo, { userId: req.userId, cardId, cardhedgeId, grader, grade, customCard, purchasePrice, certNumber, notes });
   }));
 
   r.post('/portfolio/list', wrap(async (req) => {

@@ -2,6 +2,7 @@
 // Each portfolio item references a card in the shared catalog.
 // Users can list portfolio cards on the marketplace or offer them in trades.
 import { toCents } from '../store/repo.js';
+import { resolveCardId, UUID_RE } from './cardResolve.js';
 
 export async function list(repo, userId) {
   // Fast path: single JOIN query when Postgres is available
@@ -88,10 +89,21 @@ export async function list(repo, userId) {
   }));
 }
 
-export async function add(repo, { userId, cardId, customCard, purchasePrice, certNumber, notes }) {
+export async function add(repo, { userId, cardId, cardhedgeId, grader, grade, customCard, purchasePrice, certNumber, notes }) {
   let card;
-  if (cardId) {
-    card = await repo.cards.get(cardId);
+  if (cardId || cardhedgeId) {
+    // Entry points that flow through CardHedge search (Scout, passthrough
+    // surfaces) carry the CardHedge card_id in the id slot — resolve either
+    // form to our catalog uuid instead of exploding on the uuid cast.
+    let resolved = cardId;
+    if (repo.pool && !(cardId && UUID_RE.test(String(cardId)))) {
+      resolved = await resolveCardId(repo.pool, cardId || cardhedgeId, { grader, grade });
+    }
+    card = resolved ? await repo.cards.get(resolved) : null;
+    if (!card && repo.pool && cardhedgeId && cardId !== cardhedgeId) {
+      const viaCh = await resolveCardId(repo.pool, cardhedgeId, { grader, grade });
+      if (viaCh) card = await repo.cards.get(viaCh);
+    }
     if (!card) { const e = new Error('Card not found'); e.status = 404; throw e; }
   } else if (customCard) {
     // User is adding a card not in the shared catalog

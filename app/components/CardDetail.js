@@ -12,6 +12,7 @@ import SellerTrust from './SellerTrust';
 import ListingQA from './ListingQA';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CH_ID_RE = /^\d{6,}x[\d.]+$/; // CardHedge (Bubble) card_id — Scout passthrough
 
 // CardHedge grade string — raw cards have grader='RAW' + empty grade; the API
 // wants 'Raw' for them (falling back to 'PSA 10' returned nothing for raws,
@@ -378,7 +379,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
   useEffect(() => {
     setHydrated(null);
     const id = cardProp?.id;
-    if (!id || !UUID_RE.test(String(id))) return;
+    if (!id || !(UUID_RE.test(String(id)) || CH_ID_RE.test(String(id)))) return;
     let cancelled = false;
     fetch(`/api/cards/${id}`)
       .then(r => (r.ok ? r.json() : null))
@@ -386,6 +387,9 @@ export default function CardDetail({ card: cardProp, onClose }) {
         if (cancelled || !d?.card) return;
         const h = d.card;
         setHydrated({
+          // Scout entry points pass the CardHedge id in the id slot — adopt the
+          // resolved catalog uuid so portfolio/watchlist/sell actions work.
+          id: (h.cardId && !UUID_RE.test(String(id))) ? h.cardId : undefined,
           player: h.player, sport: h.sport, set: h.set, variant: h.variant, num: h.num,
           grader: h.grader, grade: h.grade, year: h.year,
           market: Number(h.marketPrice) || 0,
@@ -404,7 +408,10 @@ export default function CardDetail({ card: cardProp, onClose }) {
     if (!cardProp) return cardProp;
     const merged = { ...cardProp };
     if (hydrated) {
+      // A resolved catalog uuid always replaces a CardHedge passthrough id.
+      if (hydrated.id && !UUID_RE.test(String(merged.id || ''))) merged.id = hydrated.id;
       for (const [k, v] of Object.entries(hydrated)) {
+        if (k === 'id') continue;
         const cur = merged[k];
         const missing = cur === undefined || cur === null || cur === '' ||
           (Array.isArray(cur) && cur.length === 0) ||
@@ -777,7 +784,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
                       const res = await fetch('/api/portfolio/add', {
                         method: 'POST',
                         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ cardId: c.id, quantity: 1 }),
+                        body: JSON.stringify({ cardId: c.id, cardhedgeId: c.cardhedge_id || undefined, grader: c.grader || undefined, grade: c.grade || undefined, quantity: 1 }),
                       });
                       if (res.ok) toast('Added to portfolio ✓');
                       else { const d = await res.json().catch(() => ({})); toast(d.error || 'Failed to add', true); }

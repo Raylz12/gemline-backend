@@ -8,6 +8,7 @@ import { settlementRouter } from '../src/routes/settlement.js';
 import { appRouter } from '../src/routes/app.js';
 import { authRouter, requireAuth, optionalAuth } from '../src/routes/auth.js';
 import { rateLimit, pgRateLimit, getIp } from '../src/middleware/rateLimit.js';
+import { resolveCardId, CARDHEDGE_ID_RE } from '../src/domain/cardResolve.js';
 import * as ordersSvc from '../orders.js';
 import * as escrowSvc from '../escrow.js';
 import { transition } from '../machine.js';
@@ -822,12 +823,19 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
 const CARD_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 app.get('/api/cards/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!CARD_UUID_RE.test(id)) return res.status(404).json({ error: 'not found' });
+    let { id } = req.params;
+    const isCh = !CARD_UUID_RE.test(id) && CARDHEDGE_ID_RE.test(id);
+    if (!CARD_UUID_RE.test(id) && !isCh) return res.status(404).json({ error: 'not found' });
     res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    if (isCh) {
+      // CardHedge id passthrough (Scout results) — resolve to our catalog uuid
+      // so the modal self-hydrates with a real cards.id it can act on.
+      id = await resolveCardId(pool, id);
+      if (!id) return res.status(404).json({ error: 'not found' });
+    }
     let { rows: [card] } = await pool.query('SELECT * FROM mv_card_feed WHERE id = $1', [id]);
     if (!card) {
       // Not the family's display-tier row (or unpriced/new) — fall back to cards
@@ -1669,8 +1677,13 @@ app.post('/api/watchlist', requireAuth, limitWrites, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(503).json({ error: 'Database unavailable' });
     await ensureWatchTable(pool);
-    const { cardId, watch } = req.body || {};
-    if (!cardId || !/^[0-9a-f-]{36}$/i.test(String(cardId))) return res.status(400).json({ error: 'cardId required' });
+    let { cardId, watch } = req.body || {};
+    if (!cardId) return res.status(400).json({ error: 'cardId required' });
+    if (!/^[0-9a-f-]{36}$/i.test(String(cardId))) {
+      // CardHedge id passthrough (Scout → CardDetail) — resolve to catalog uuid
+      cardId = await resolveCardId(pool, cardId, { grader: req.body?.grader, grade: req.body?.grade });
+      if (!cardId) return res.status(404).json({ error: 'Card not found' });
+    }
     if (watch === false) {
       await pool.query('DELETE FROM watchlist WHERE user_id = $1 AND card_id = $2', [req.userId, cardId]);
       return res.json({ ok: true, watching: false });
@@ -2672,10 +2685,13 @@ app.post('/api/listings', requireAuth, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(503).json({ error: 'Database unavailable' });
     if (!(await assertActiveAccount(pool, req.userId, res))) return;
-    const { cardId, price, listingType, openToOffers, description, photos } = req.body || {};
+    let { cardId, price, listingType, openToOffers, description, photos } = req.body || {};
     if (!cardId) return res.status(400).json({ error: 'cardId required' });
     const dollars = Number(price);
     if (!isFinite(dollars) || dollars <= 0) return res.status(400).json({ error: 'Price must be greater than 0' });
+    // Accept CardHedge ids from passthrough surfaces — resolve to catalog uuid
+    cardId = await resolveCardId(pool, cardId, { grader: req.body?.grader, grade: req.body?.grade });
+    if (!cardId) return res.status(404).json({ error: 'Card not found' });
     const { rows: [card] } = await pool.query('SELECT id FROM cards WHERE id = $1', [cardId]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
     const cents = toCents(dollars);
