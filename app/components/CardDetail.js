@@ -8,6 +8,7 @@ import PaymentModal from './PaymentModal';
 import AuthModal from './AuthModal';
 import ProGate, { hasCapability } from './ProGate';
 import ReportModal from './ReportModal';
+import SellerTrust from './SellerTrust';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1076,6 +1077,11 @@ export default function CardDetail({ card: cardProp, onClose }) {
                             }}>⚑ Report</button>
                           )}
                         </div>
+                        {l.seller_id && (
+                          <div style={{ marginTop: 3 }}>
+                            <SellerTrust sellerId={l.seller_id} compact />
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button onClick={() => handleBuy(l)} disabled={buying === l.id} className="cd-mini-buy">

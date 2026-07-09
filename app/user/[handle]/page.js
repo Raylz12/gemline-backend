@@ -6,6 +6,7 @@ import { fmt } from '../../lib/data';
 import { toast } from '../../lib/toast';
 import TradeProposal from '../../components/TradeProposal';
 import ReportModal from '../../components/ReportModal';
+import SellerTrust from '../../components/SellerTrust';
 
 export default function UserPortfolioPage() {
   const params = useParams();
@@ -224,6 +225,7 @@ export default function UserPortfolioPage() {
               </>
             )}
           </div>
+          <SellerTrust sellerId={profileUser.id} />
         </div>
         <div className="user-profile-actions">
           {isSelf && (

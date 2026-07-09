@@ -2108,7 +2108,7 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.json({ listings: [] });
     const { rows } = await pool.query(`
-      SELECT l.id, l.price, l.kind, l.created_at, u.handle AS seller_handle,
+      SELECT l.id, l.price, l.kind, l.created_at, l.seller_id, u.handle AS seller_handle,
              EXISTS (SELECT 1 FROM portfolios p
                      WHERE p.user_id = l.seller_id AND p.card_id = l.card_id
                        AND p.verification_status = 'verified') AS verified
@@ -2123,6 +2123,7 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
         id: l.id,
         price: Number(l.price) / 100, // cents → dollars for display
         kind: l.kind,
+        seller_id: l.seller_id,
         seller_handle: l.seller_handle || 'seller',
         open_to_offers: true,
         verified: !!l.verified,
@@ -2132,6 +2133,56 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
   } catch (e) {
     console.error('listings/for-card error:', e.message);
     res.json({ listings: [] });
+  }
+});
+
+// ── Seller trust signals ─────────────────────────────────────────
+// Public per-seller stats: completed sales, avg ship time, dispute record.
+// Only surfaced when the seller has ≥1 completed sale (no zero-shaming).
+// Cached in-memory 10 min per seller — cheap and good enough.
+const _sellerStatsCache = new Map();
+app.get('/api/sellers/:id/stats', async (req, res) => {
+  try {
+    const sellerId = String(req.params.id);
+    if (!/^[0-9a-f-]{36}$/i.test(sellerId)) return res.status(400).json({ error: 'Invalid seller id' });
+    const hit = _sellerStatsCache.get(sellerId);
+    if (hit && hit.expires > Date.now()) return res.json(hit.data);
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ hasStats: false });
+    const { rows: [s] } = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM orders WHERE seller_id = $1 AND status = 'settled') AS completed_sales,
+        (SELECT AVG(EXTRACT(EPOCH FROM (sh.shipped_at - o.created_at)) / 3600.0)
+           FROM shipments sh JOIN orders o ON o.id = sh.order_id
+          WHERE o.seller_id = $1 AND sh.shipped_at IS NOT NULL) AS avg_ship_hours,
+        (SELECT COUNT(*) FROM disputes d JOIN orders o ON o.id = d.order_id
+          WHERE o.seller_id = $1) AS dispute_count`, [sellerId]);
+    const completedSales = Number(s?.completed_sales) || 0;
+    let data;
+    if (completedSales < 1) {
+      data = { hasStats: false };
+    } else {
+      const disputeCount = Number(s.dispute_count) || 0;
+      const avgShipHours = s.avg_ship_hours != null ? Math.round(Number(s.avg_ship_hours) * 10) / 10 : null;
+      data = {
+        hasStats: true,
+        completedSales,
+        avgShipHours,
+        avgShipLabel: avgShipHours == null ? null
+          : avgShipHours <= 24 ? 'Ships within a day'
+          : avgShipHours <= 48 ? 'Ships within 2 days'
+          : `Ships in ~${Math.round(avgShipHours / 24)} days`,
+        disputeCount,
+        disputeRate: Math.round((disputeCount / completedSales) * 1000) / 10, // percent, 1dp
+        disputeFree: disputeCount === 0,
+      };
+    }
+    _sellerStatsCache.set(sellerId, { data, expires: Date.now() + 10 * 60 * 1000 });
+    res.json(data);
+  } catch (e) {
+    console.error('seller stats error:', e.message);
+    res.json({ hasStats: false });
   }
 });
 
