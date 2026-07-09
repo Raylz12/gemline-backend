@@ -52,7 +52,9 @@ export async function generateMetadata({ params }) {
   const description = price
     ? `${name} current market value: ${usd(price)}. ${Number(card.sales_30d) > 0 ? `${card.sales_30d} sales in the last 30 days. ` : ''}Live price tracking, listings, and market data on GEMLINE.`
     : `${name} — live price tracking, listings, and market data on GEMLINE, the card show online.`;
-  const img = card.ebay_thumb || card.image_url || 'https://gemlinecards.com/og-image.png';
+  // Dynamic dark-brand OG composition (player/set/grade/price) — rendered
+  // by app/og/card/[id]/route.js with next/og.
+  const img = `https://gemlinecards.com/og/card/${card.id}`;
   return {
     title,
     description,
@@ -61,9 +63,9 @@ export async function generateMetadata({ params }) {
       title, description,
       url: `https://gemlinecards.com/card/${card.id}`,
       siteName: 'GEMLINE', type: 'website',
-      images: [{ url: img, alt: name }],
+      images: [{ url: img, width: 1200, height: 630, alt: name }],
     },
-    twitter: { card: 'summary', title, description, images: [img] },
+    twitter: { card: 'summary_large_image', title, description, images: [img] },
   };
 }
 
