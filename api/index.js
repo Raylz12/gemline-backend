@@ -1693,6 +1693,73 @@ app.put('/api/watchlist/:cardId', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Failed to update alert' }); }
 });
 
+// ── Saved searches ─────────────────────────────────────────────────────
+// Users save a market search (query + filters JSON) and re-run it later.
+let _savedSearchReady = false;
+async function ensureSavedSearchTable(pool) {
+  if (_savedSearchReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS saved_searches (
+      id BIGSERIAL PRIMARY KEY,
+      user_id uuid NOT NULL,
+      name TEXT NOT NULL,
+      params JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_saved_search_user ON saved_searches (user_id, created_at DESC)').catch(() => {});
+  _savedSearchReady = true;
+}
+
+app.get('/api/saved-searches', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ searches: [] });
+    await ensureSavedSearchTable(pool);
+    const { rows } = await pool.query(
+      'SELECT id, name, params, created_at FROM saved_searches WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [req.userId]);
+    res.json({ searches: rows });
+  } catch (e) { res.json({ searches: [] }); }
+});
+
+app.post('/api/saved-searches', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureSavedSearchTable(pool);
+    const name = String(req.body?.name || '').trim().slice(0, 60);
+    if (!name) return res.status(400).json({ error: 'Name required' });
+    let params = req.body?.params;
+    if (!params || typeof params !== 'object' || Array.isArray(params)) return res.status(400).json({ error: 'params object required' });
+    const json = JSON.stringify(params);
+    if (json.length > 2000) return res.status(400).json({ error: 'Search too large' });
+    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) AS count FROM saved_searches WHERE user_id = $1', [req.userId]);
+    if (Number(count) >= 25) return res.status(400).json({ error: 'Saved search limit reached (25 max) — delete one first' });
+    const { rows: [row] } = await pool.query(
+      'INSERT INTO saved_searches (user_id, name, params) VALUES ($1, $2, $3) RETURNING id, name, params, created_at',
+      [req.userId, name, json]);
+    res.json({ ok: true, search: row });
+  } catch (e) {
+    console.error('saved-search error:', e.message);
+    res.status(500).json({ error: 'Failed to save search' });
+  }
+});
+
+app.delete('/api/saved-searches/:id', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureSavedSearchTable(pool);
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    await pool.query('DELETE FROM saved_searches WHERE id = $1 AND user_id = $2', [id, req.userId]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to delete' }); }
+});
+
 // Notify watchers of a card family when a new listing goes live (skips the seller).
 async function notifyWatchersOfListing(pool, listing, sellerId) {
   try {

@@ -7,6 +7,7 @@ import FilterSidebar, { PRICE_RANGES, ERAS } from '../components/FilterSidebar';
 import CardItem from '../components/CardItem';
 import CardDetail from '../components/CardDetail';
 import Scout from '../components/Scout';
+import SavedSearches from '../components/SavedSearches';
 import { SkeletonCard } from '../components/Skeleton';
 
 const PAGE_SIZE = 50;
@@ -67,7 +68,7 @@ function ListRow({ card: c, onClick }) {
 }
 
 export default function MarketplacePage() {
-  const { cards, searchQuery, totalCards, sportCounts, brandCounts, loadMore, refreshFeed, loading, currentPage, totalPages, filterSport, setFilterSport, filterBrand, setFilterBrand, setSortBy } = useCardStore();
+  const { cards, searchQuery, setSearchQuery, totalCards, sportCounts, brandCounts, loadMore, refreshFeed, loading, currentPage, totalPages, filterSport, setFilterSport, filterBrand, setFilterBrand, setSortBy } = useCardStore();
   const DEFAULT_FILTERS = {
     sport: 'All', grade: 'All', type: 'All', cardType: 'all',
     priceRange: 'all', era: 'all', edge: 'all', sort: 'trending', q: '', brand: '',
@@ -325,6 +326,23 @@ export default function MarketplacePage() {
               </div>
             );
           })()}
+
+          {/* Saved searches (logged-in only — component renders null when logged out) */}
+          <div style={{ marginBottom: 12 }}>
+            <SavedSearches
+              filters={filters}
+              searchQuery={searchQuery}
+              onApply={(params) => {
+                const next = { ...DEFAULT_FILTERS, ...params };
+                setFilters(next);
+                setFilterSport(next.sport || 'All');
+                setFilterBrand(next.brand || '');
+                setSearchQuery(next.q || '');
+                const sortMap = { hi: 'price_desc', lo: 'price_asc', az: 'player', newest: 'newest', trending: 'trending', gain: 'gain', volume: 'sales' };
+                setSortBy(sortMap[next.sort] || 'trending');
+              }}
+            />
+          </div>
 
           {/* Toolbar */}
           <div className="toolbar">
