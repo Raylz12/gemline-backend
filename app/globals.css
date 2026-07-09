@@ -757,8 +757,10 @@ footer .wordmark span{color:var(--gold)}
   .grid { grid-template-columns: 1fr !important; }
   .card-img-box { height: 180px !important; }
   .eyebrow { font-size: 10px !important; }
-  /* Mobile: the stock-ticker tape is a 38px tax on every page — drop it */
-  .ticker { display: none !important; }
+  /* Mobile: keep the live tape (iOS users lost it entirely when this was
+     display:none) — just trim it to a slimmer strip. Tag is already hidden
+     ≤768px; 32px height + 12px type reads fine on a 390px phone. */
+  .ticker { height: 32px !important; }
   /* Market mobile: kill hero chrome + duplicate search chips so the first
      card row lands inside the first viewport */
   .market-hero { display: none !important; }
