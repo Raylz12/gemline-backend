@@ -936,7 +936,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
 
             {/* ── Tab: Market Insight (gated for visitors — free once signed in) ── */}
             {tab === 'insight' && (
-              <ProGate allowed={hasCapability(user, 'market_insight')} onUnlock={() => setShowAuth(true)}>
+              <ProGate allowed={hasCapability(user || (token ? {} : null), 'market_insight')} onUnlock={() => setShowAuth(true)}>
               <div className="cd-tabbody">
                 <div className="cd-tiles">
                   <div className="cd-tile big">

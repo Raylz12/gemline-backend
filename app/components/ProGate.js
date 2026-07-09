@@ -18,10 +18,13 @@ const CAPABILITY_PLAN = {
 
 export function hasCapability(user, capability) {
   const plan = CAPABILITY_PLAN[capability] || 'free';
-  // Gate ACTIONS, not information: free capabilities are readable signed-out
-  // (analytics, deal finder, card insight, community). Write paths (post, bid,
-  // buy, watch) each prompt sign-in at the point of action instead.
-  if (plan === 'free') return true;
+  // 'free' = free WITH AN ACCOUNT: signed-out visitors get the frosted
+  // blurred teaser + "create a free account" CTA (the whole signup funnel for
+  // analytics / deal finder / card insight). Any signed-in user unlocks it.
+  // Callers pass `user || token` style signals: user hydrates async via
+  // /api/state, so pages should treat a stored token as signed-in to avoid
+  // flashing the blur at logged-in users on load.
+  if (plan === 'free') return !!user;
   return !!user && user.plan === plan;   // future paid tiers
 }
 

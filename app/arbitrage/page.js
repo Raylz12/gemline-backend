@@ -588,7 +588,7 @@ export default function ArbitragePage() {
     <div style={{ background: '#080b12', minHeight: '100vh', padding: 0 }}>
       <ProGate
         page
-        allowed={hasCapability(user, 'arbitrage')}
+        allowed={hasCapability(user || (token ? {} : null), 'arbitrage')}
         title="Create a free account to unlock the Deal Finder"
         sub="Cards priced below fair value — fees already counted — plus movers and full-market search, free with a GEMLINE account."
         cta="Create a free account"

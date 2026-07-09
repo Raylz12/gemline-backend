@@ -355,7 +355,7 @@ function HeatGrid({ cards, onSelect, loading }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   useDarkPage();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [view, setView] = useState('movers'); // movers | heatmap | arbitrage
   // Deep links (incl. the retired /heatmap redirect): /analytics?view=heatmap
@@ -416,7 +416,7 @@ export default function AnalyticsPage() {
 
       <ProGate
         page
-        allowed={hasCapability(user, 'analytics')}
+        allowed={hasCapability(user || (token ? {} : null), 'analytics')}
         title="Create a free account to unlock the Price Guide"
         sub="Movers, the heat map, and the deal screener — live across 287K+ cards, free with a GEMLINE account."
         cta="Create a free account"
