@@ -8,9 +8,10 @@
 // transparently rehashed to bcrypt on their next successful login.
 // Scheme detection: bcrypt hashes start with "$2".
 import { Router } from 'express';
-import { createHash, createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual, randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { pgRateCheck, pgRateClear, logBreach, getIp } from '../middleware/rateLimit.js';
+import { sendEmail, templates as emailTpl } from '../../lib/email.js';
 
 const SECRET = process.env.JWT_SECRET || 'gemline_jwt_secret_v1_change_in_prod';
 const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days in seconds
@@ -191,10 +192,99 @@ export function authRouter(repo) {
         created_at: new Date().toISOString(),
       });
 
+      // Welcome email — best-effort, never blocks signup.
+      const welcome = emailTpl.welcome({ handle: user.handle });
+      await sendEmail({ to: user.email, subject: welcome.subject, html: welcome.html }).catch(() => {});
+
       const token = signToken(user.id);
       res.json({ token, user: { id: user.id, handle: user.handle, email: user.email } });
     } catch (e) {
       res.status(e.status || 500).json({ error: e.message });
+    }
+  });
+
+  // ── Password reset ────────────────────────────────────────────────────────────────
+  // Tokens are single-use, sha256-hashed at rest, 1-hour expiry. The forgot
+  // endpoint always answers ok — no account enumeration.
+  async function ensureResetTable(pool) {
+    await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  }
+
+  r.post('/forgot', async (req, res) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      // Uniform response regardless of outcome — no enumeration.
+      const done = () => res.json({ ok: true, message: 'If that email has an account, a reset link is on the way.' });
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return done();
+      if (!repo.pool) return done();
+
+      // 3/hour per IP and 3/hour per email — stops reset-spam.
+      const ip = getIp(req);
+      const lim1 = await checkLimit(repo, { bucket: 'pw_forgot_ip', identifier: ip, max: 3, windowSec: 3600 });
+      const lim2 = await checkLimit(repo, { bucket: 'pw_forgot_email', identifier: email, max: 3, windowSec: 3600 });
+      if (lim1.blocked || lim2.blocked) return done();
+
+      const user = (await repo.users.list({ email }))[0];
+      if (!user) return done();
+
+      await ensureResetTable(repo.pool);
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      await repo.pool.query(
+        'INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\')',
+        [tokenHash, user.id]);
+
+      const link = `https://gemlinecards.com/reset?token=${token}`;
+      const tpl = emailTpl.passwordReset({ link });
+      await sendEmail({ to: user.email, subject: tpl.subject, html: tpl.html }).catch(() => {});
+      return done();
+    } catch (e) {
+      console.error('forgot error:', e.message);
+      res.json({ ok: true, message: 'If that email has an account, a reset link is on the way.' });
+    }
+  });
+
+  r.post('/reset', async (req, res) => {
+    try {
+      const { token, password } = req.body || {};
+      if (!token || typeof password !== 'string') return res.status(400).json({ error: 'token and password are required' });
+      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      if (password.length > 128) return res.status(400).json({ error: 'Password too long' });
+      if (!repo.pool) return res.status(503).json({ error: 'Unavailable' });
+
+      // 10/hour per IP — stops token brute-force (tokens are 256-bit anyway).
+      const ip = getIp(req);
+      const lim = await checkLimit(repo, { bucket: 'pw_reset_ip', identifier: ip, max: 10, windowSec: 3600 });
+      if (lim.blocked) {
+        res.setHeader('Retry-After', lim.retryAfter);
+        return res.status(429).json({ error: 'Too many attempts — try again later', retryAfter: lim.retryAfter });
+      }
+
+      await ensureResetTable(repo.pool);
+      const tokenHash = createHash('sha256').update(String(token)).digest('hex');
+      const { rows: [row] } = await repo.pool.query(
+        'SELECT user_id FROM password_resets WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()',
+        [tokenHash]);
+      if (!row) return res.status(400).json({ error: 'This reset link is invalid or expired — request a new one' });
+
+      const newHash = await bcrypt.hash(password, BCRYPT_COST);
+      await repo.pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, row.user_id]);
+      await repo.pool.query('UPDATE password_resets SET used_at = NOW() WHERE token_hash = $1', [tokenHash]);
+      // Invalidate any other outstanding tokens for this user.
+      await repo.pool.query('UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [row.user_id]).catch(() => {});
+
+      const jwtToken = signToken(row.user_id);
+      const user = await repo.users.get(row.user_id);
+      res.json({ ok: true, token: jwtToken, user: user ? { id: user.id, handle: user.handle, email: user.email } : undefined });
+    } catch (e) {
+      console.error('reset error:', e.message);
+      res.status(500).json({ error: 'Reset failed — try again' });
     }
   });
 

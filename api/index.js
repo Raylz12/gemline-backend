@@ -2481,10 +2481,46 @@ async function expirePendingPayments(r, { force = false } = {}) {
   return { expired };
 }
 
+// Auto-settle orders whose inspection window lapsed without buyer action —
+// this is the "or the inspection window lapses" promise in /fees and the
+// legal docs. Runs from the same external sweep cron as payment expiry.
+async function settleLapsedInspections(r, stripe) {
+  const pool = r.pool;
+  if (!pool) return { settled: 0 };
+  const { rows } = await pool.query(
+    "SELECT id FROM orders WHERE status = 'inspection' AND inspection_ends_at IS NOT NULL AND inspection_ends_at < NOW() LIMIT 10");
+  let settled = 0;
+  for (const row of rows) {
+    try {
+      const order = await r.orders.get(row.id);
+      if (!order || order.status !== 'inspection') continue;
+      await ordersSvc.settle(r, stripe, order);
+      const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
+      const amt = `$${(Number(order.amount) / 100).toLocaleString()}`;
+      const netStr = `$${((Number(order.amount) * 0.9) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      await notify(pool, order.seller_id, 'order_completed',
+        `Sale complete: ${card?.player || 'card'} — ${amt}`,
+        'The inspection window closed with no issues reported. Your payout has been released from escrow.',
+        { orderId: order.id, cardId: order.card_id });
+      await notify(pool, order.buyer_id, 'order_settled',
+        `Order complete: ${card?.player || 'card'}`,
+        'The inspection window closed — this order is settled. Enjoy the card!',
+        { orderId: order.id, cardId: order.card_id });
+      const payTpl = emailTpl.payoutReleased({ player: card?.player || 'your card', amount: amt, net: netStr });
+      await emailUser(pool, order.seller_id, payTpl.subject, payTpl.html);
+      settled++;
+    } catch (e) { console.error('inspection sweep', row.id, e.message); }
+  }
+  return { settled };
+}
+
 async function sweepHandler(req, res) {
   try {
     const r = await getRepo();
-    res.json({ ok: true, ...(await expirePendingPayments(r, { force: true })) });
+    const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const expired = await expirePendingPayments(r, { force: true });
+    const inspections = await settleLapsedInspections(r, stripe);
+    res.json({ ok: true, ...expired, ...inspections });
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 app.post('/api/checkout/sweep', sweepHandler);
@@ -3057,6 +3093,8 @@ app.post('/api/orders/:id/cancel-request', requireAuth, limitWrites, async (req,
         `Order cancelled: ${card?.player || 'card'}`,
         'The seller cancelled this order. Your payment hold has been released — no charge.',
         { orderId: order.id, cardId: order.card_id });
+      const ocTpl = emailTpl.orderCancelled({ player: card?.player || 'the card', byWhom: 'seller' });
+      await emailUser(pool, order.buyer_id, ocTpl.subject, ocTpl.html);
       return res.json({ success: true, cancelled: true });
     }
 
@@ -3067,6 +3105,8 @@ app.post('/api/orders/:id/cancel-request', requireAuth, limitWrites, async (req,
       `Cancel request: ${card?.player || 'card'}`,
       `The buyer asked to cancel${reason ? ` — “${reason}”` : ''}. Approve or decline in Portfolio → Orders.`,
       { orderId: order.id, cardId: order.card_id });
+    const crTpl = emailTpl.cancelRequested({ player: card?.player || 'the card', reason });
+    await emailUser(pool, order.seller_id, crTpl.subject, crTpl.html);
     res.json({ success: true, requested: true });
   } catch (e) {
     console.error('cancel-request error:', e.message);
@@ -3097,6 +3137,8 @@ app.post('/api/orders/:id/cancel-respond', requireAuth, limitWrites, async (req,
         `Cancelled: ${card?.player || 'card'}`,
         'The seller approved your cancellation. Your payment hold has been released — no charge.',
         { orderId: order.id, cardId: order.card_id });
+      const oc2Tpl = emailTpl.orderCancelled({ player: card?.player || 'the card', byWhom: 'seller (at your request)' });
+      await emailUser(pool, order.buyer_id, oc2Tpl.subject, oc2Tpl.html);
       return res.json({ success: true, cancelled: true });
     }
     await pool.query('UPDATE orders SET cancel_requested_by = NULL, cancel_requested_at = NULL, cancel_reason = NULL WHERE id = $1', [order.id]);
@@ -3141,6 +3183,10 @@ app.post('/api/orders/:id/dispute', requireAuth, limitWrites, async (req, res) =
       `Dispute opened: ${card?.player || 'card'}`,
       'We\u2019ve paused the seller payout while we review. Watch for updates here.',
       { orderId: order.id, cardId: order.card_id });
+    const dsTpl = emailTpl.disputeOpenedSeller({ player: card?.player || 'your card', reason });
+    await emailUser(pool, order.seller_id, dsTpl.subject, dsTpl.html);
+    const dbTpl = emailTpl.disputeOpenedBuyer({ player: card?.player || 'the card' });
+    await emailUser(pool, order.buyer_id, dbTpl.subject, dbTpl.html);
     res.json({ success: true });
   } catch (e) {
     console.error('order dispute error:', e.message);
@@ -3277,6 +3323,9 @@ app.post('/api/orders/:id/confirm-receipt', requireAuth, async (req, res) => {
       `Order complete: ${card?.player || 'card'}`,
       'Receipt confirmed — this order is settled. Enjoy the card!',
       { orderId: order.id, cardId: order.card_id });
+    const netStr = `$${((Number(order.amount) * 0.9) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const payTpl = emailTpl.payoutReleased({ player: card?.player || 'your card', amount: amt, net: netStr });
+    await emailUser(pool, order.seller_id, payTpl.subject, payTpl.html);
 
     res.json({ success: true, order: { id: order.id, status: order.status } });
   } catch (e) {

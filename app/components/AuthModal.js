@@ -49,8 +49,28 @@ export default function AuthModal({ onClose }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
   const tsRef = useRef(null);
   const tsToken = useTurnstile(tsRef, !!TURNSTILE_SITE_KEY);
+
+  const sendForgot = async () => {
+    setError('');
+    if (!email) { setError('Enter your email above first, then tap “Forgot password”'); return; }
+    setForgotBusy(true);
+    try {
+      await fetch('/api/auth/forgot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      setForgotSent(true);
+    } catch {
+      setError('Network error — try again');
+    } finally {
+      setForgotBusy(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -144,6 +164,18 @@ export default function AuthModal({ onClose }) {
               />
               {tab === 'signup' && (
                 <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>At least 8 characters</div>
+              )}
+              {tab === 'login' && (
+                <div style={{ marginTop: 6, textAlign: 'right' }}>
+                  {forgotSent ? (
+                    <span style={{ fontSize: 11.5, color: 'var(--up)' }}>If that email has an account, a reset link is on the way ✉️</span>
+                  ) : (
+                    <button type="button" onClick={sendForgot} disabled={forgotBusy}
+                      style={{ fontSize: 11.5, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      {forgotBusy ? 'Sending…' : 'Forgot password?'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
