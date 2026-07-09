@@ -8,3 +8,9 @@ public/gemline.html.bak
 .next/
 probe-sets.cjs
 .env.cron.local
+
+# runtime logs + crawl/sync progress (running jobs write these)
+*.log
+scripts/.batch-price-sync-progress.json
+scripts/.bbfb-sets.json
+scripts/.crawl-bbfb-progress.json

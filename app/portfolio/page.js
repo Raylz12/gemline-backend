@@ -35,7 +35,7 @@ export default function PortfolioPage() {
   // Recently added (bulk-add UX)
   const [addedIds, setAddedIds] = useState(new Set());
 
-  // Modal states — ?tab= deep-links (notification clicks land on the right tab)
+  // Modal states - ?tab= deep-links (notification clicks land on the right tab)
   const [subTab, setSubTab] = useState('cards');
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -114,7 +114,7 @@ export default function PortfolioPage() {
     return () => clearTimeout(t);
   }, [searchQuery, doSearch, scanInfo]);
 
-  // Add card to portfolio — keeps the search modal OPEN so you can bulk-add
+  // Add card to portfolio - keeps the search modal OPEN so you can bulk-add
   const addCard = useCallback(async (cardId, { closeAfter = false } = {}) => {
     if (!token) { toast('Please log in first', true); return; }
     setAdding(cardId);
@@ -213,7 +213,7 @@ export default function PortfolioPage() {
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast(d.verified ? 'Card verified ✓' : (d.message || 'Cert saved — pending review'));
+        toast(d.verified ? 'Card verified ✓' : (d.message || 'Cert saved - pending review'));
         setVerifyItem(null);
         setCertValue('');
         fetchPortfolio();
@@ -249,11 +249,11 @@ export default function PortfolioPage() {
     finally { setListingSubmitting(false); }
   }, [listingItem, listingPrice, authFetch, fetchPortfolio]);
 
-  // Camera scan result handler — opens a confirmation picker. NEVER auto-adds.
+  // Camera scan result handler - opens a confirmation picker. NEVER auto-adds.
   const handleScanResult = useCallback(async (cardInfo) => {
     setShowCamera(false);
     if (!cardInfo || !cardInfo.player) {
-      toast('Could not identify the card — try a clearer, well-lit photo', true);
+      toast('Could not identify the card - try a clearer, well-lit photo', true);
       return;
     }
     setScanInfo(cardInfo);
@@ -306,7 +306,7 @@ export default function PortfolioPage() {
   const totalPnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100).toFixed(1) : 0;
 
   const subTabBar = (
-    // sub-tabbar: 6 tabs are wider than a phone — scroll the bar, don't let it
+    // sub-tabbar: 6 tabs are wider than a phone - scroll the bar, don't let it
     // stretch the page (iOS was getting 53px of horizontal wobble and the
     // Watchlist tab sat off-screen).
     <div className="sub-tabbar" style={{ display: 'flex', gap: 4, marginBottom: 18, marginTop: 16, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
@@ -336,7 +336,7 @@ export default function PortfolioPage() {
       <>
         <div className="eyebrow">Your Collection</div>
         <h1 className="page">My Collection</h1>
-        <p className="sub">Every card you own, valued live — what it’s worth, what you paid, and where the value sits.</p>
+        <p className="sub">Every card you own, valued live - what it's worth, what you paid, and where the value sits.</p>
         {subTabBar}
         {subTab === 'trades' && <TradesContent />}
         {subTab === 'sell' && <SellContent />}
@@ -359,7 +359,7 @@ export default function PortfolioPage() {
     <>
       <div className="eyebrow">Your Collection</div>
       <h1 className="page">My Collection</h1>
-      <p className="sub">Every card you own, valued live — what it’s worth, what you paid, and where the value sits.</p>
+      <p className="sub">Every card you own, valued live - what it's worth, what you paid, and where the value sits.</p>
 
       {subTabBar}
 
@@ -466,7 +466,7 @@ export default function PortfolioPage() {
                 <small style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.set}</span><span className="mchip mchip-grade" style={{ flexShrink: 0 }}>{`${item.grader || 'RAW'} ${item.grade || ''}`.trim()}</span></small>
               </div>
               <div className="num">
-                {item.marketValue ? fmt(item.marketValue) : '—'}
+                {item.marketValue ? fmt(item.marketValue) : '-'}
                 <small>market</small>
               </div>
               {item.pnlPct !== null ? (
@@ -485,11 +485,11 @@ export default function PortfolioPage() {
                 {item.verificationStatus === 'verified' ? (
                   <span title={`Verified via ${item.verificationMethod || 'scan'}`} style={{ fontSize: 10, color: 'var(--gold)', fontFamily: 'var(--mono)', padding: '2px 6px', background: 'var(--gold-soft)', borderRadius: 4, whiteSpace: 'nowrap' }}>✓ VERIFIED</span>
                 ) : item.verificationStatus === 'pending' ? (
-                  <span title="Cert submitted — pending review. Scan the card for instant verification." style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', padding: '2px 6px', border: '1px dashed var(--line-2)', borderRadius: 4, whiteSpace: 'nowrap' }}>CERT PENDING</span>
+                  <span title="Cert submitted - pending review. Scan the card for instant verification." style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', padding: '2px 6px', border: '1px dashed var(--line-2)', borderRadius: 4, whiteSpace: 'nowrap' }}>CERT PENDING</span>
                 ) : (
                   <button
                     onClick={() => { setVerifyItem(item); setCertValue(item.certNumber || ''); }}
-                    title="Verify ownership — required before selling"
+                    title="Verify ownership - required before selling"
                     style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '3px 8px', borderRadius: 5, border: '1px dashed var(--line-2)', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >VERIFY</button>
                 )}
@@ -591,7 +591,7 @@ export default function PortfolioPage() {
                 className="btn-primary"
                 style={{ padding: '10px 24px', fontSize: 13, opacity: listingSubmitting ? 0.6 : 1 }}
               >
-                {listingSubmitting ? 'Listing…' : 'List for Sale'}
+                {listingSubmitting ? 'Listing...' : 'List for Sale'}
               </button>
             </div>
           </div>
@@ -615,15 +615,15 @@ export default function PortfolioPage() {
                   {scanInfo.cardNumber ? ` #${scanInfo.cardNumber}` : ''}
                   {scanInfo.grader ? ` ${scanInfo.grader} ${scanInfo.grade || ''}`.trimEnd() : ''}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pick the exact card and version below — nothing is added until you choose.</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pick the exact card and version below - nothing is added until you choose.</div>
               </div>
             ) : (
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like — the search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like - the search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
             )}
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <input
                 type="text"
-                placeholder={scanInfo ? 'Not right? Type to search the catalog…' : 'Search by player name, set, sport...'}
+                placeholder={scanInfo ? 'Not right? Type to search the catalog...' : 'Search by player name, set, sport...'}
                 value={searchQuery}
                 onChange={e => { setScanInfo(null); setSearchQuery(e.target.value); }}
                 autoFocus={!scanInfo}
@@ -633,11 +633,11 @@ export default function PortfolioPage() {
                 }}
               />
             </div>
-            {searching && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 12 }}>{scanInfo ? 'Matching your scan against the catalog…' : 'Searching...'}</div>}
+            {searching && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 12 }}>{scanInfo ? 'Matching your scan against the catalog...' : 'Searching...'}</div>}
             {!searching && searchResults.length === 0 && (searchQuery.length >= 2 || scanInfo) && (
               <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>
                 {scanInfo
-                  ? `No catalog match for “${[scanInfo.player, scanInfo.year, scanInfo.set].filter(Boolean).join(' ')}” — edit the search above or re-scan with better lighting.`
+                  ? `No catalog match for "${[scanInfo.player, scanInfo.year, scanInfo.set].filter(Boolean).join(' ')}" - edit the search above or re-scan with better lighting.`
                   : 'No cards found'}
               </div>
             )}
@@ -656,15 +656,27 @@ export default function PortfolioPage() {
                     >
                       <CardThumb src={fam.ebay_thumb || fam.image_url} name={fam.player} sport={fam.sport} width={36} height={48} radius={6} fit="cover" />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{fam.player}</div>
+                        {/* Variant gets its own never-truncated badge — it's often the ONLY
+                            thing distinguishing 6 foil parallels of the same card, and a
+                            mid-word ellipsis (“Red Foo…”) made rows look like duplicates. */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, fontSize: 14 }}>{fam.player}</span>
+                          {fam.variant && fam.variant !== 'Base' && (
+                            <span className="mchip mchip-var" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{fam.variant}</span>
+                          )}
+                        </div>
                         <div style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {fam.card_set || ''}{fam.number ? ` #${fam.number}` : ''}{fam.variant && fam.variant !== 'Base' ? ` ${fam.variant}` : ''}
-                          {fam.sport ? ` ${fam.sport}` : ''}
+                          {fam.card_set || ''}{fam.number ? ` #${fam.number}` : ''}
+                          {fam.sport ? ` · ${fam.sport}` : ''}
                         </div>
                       </div>
-                      {fam.topPrice > 0 && (
+                      {fam.topPrice > 0 ? (
                         <div className="mono" style={{ fontSize: 13, color: 'var(--gold)', flexShrink: 0 }}>
                           {fmt(fam.topPrice)}
+                        </div>
+                      ) : (
+                        <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                          no price yet
                         </div>
                       )}
                       <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
@@ -684,7 +696,9 @@ export default function PortfolioPage() {
                             onClick={(e) => { e.stopPropagation(); if (!addedIds.has(t.id)) addCard(t.id); }}
                           >
                             <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'var(--mono)', flex: 1 }}>{tierLabel(t)}</span>
-                            {t.price > 0 && <span className="mono" style={{ fontSize: 12, color: 'var(--gold)' }}>{fmt(t.price)}</span>}
+                            {t.price > 0
+                              ? <span className="mono" style={{ fontSize: 12, color: 'var(--gold)' }}>{fmt(t.price)}</span>
+                              : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>no price yet</span>}
                             {adding === t.id ? (
                               <span style={{ fontSize: 11, color: 'var(--muted)' }}>Adding...</span>
                             ) : addedIds.has(t.id) ? (
@@ -729,7 +743,7 @@ export default function PortfolioPage() {
               )}
               <button onClick={() => setCostItem(null)} style={{ padding: '10px 18px', fontSize: 13, borderRadius: 8, background: 'none', border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer' }}>Cancel</button>
               <button onClick={saveCost} disabled={costSaving} className="btn-primary" style={{ padding: '10px 22px', fontSize: 13, opacity: costSaving ? 0.6 : 1 }}>
-                {costSaving ? 'Saving…' : 'Save'}
+                {costSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>
@@ -741,7 +755,7 @@ export default function PortfolioPage() {
         <CameraScanner onResult={handleScanResult} onClose={() => setShowCamera(false)} />
       )}
 
-      {/* Verify chooser — selling requires verification; scan or cert */}
+      {/* Verify chooser - selling requires verification; scan or cert */}
       {verifyItem && (
         <div className="overlay on" onClick={e => e.target === e.currentTarget && setVerifyItem(null)}>
           <div className="modal" style={{ maxWidth: 440 }}>
@@ -753,15 +767,15 @@ export default function PortfolioPage() {
               {verifyItem.player} <span className="mchip mchip-grade">{[verifyItem.grader, verifyItem.grade].filter(Boolean).join(' ') || 'RAW'}</span>
             </div>
             <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 18 }}>
-              Buyers trust verified cards. Verify once and this card can be listed for sale —
+              Buyers trust verified cards. Verify once and this card can be listed for sale -
               scan the physical card with your camera, or enter its grading cert number.
             </p>
             <button
               onClick={() => { setVerifyScanItem(verifyItem); setVerifyItem(null); }}
               className="btn-primary"
               style={{ width: '100%', padding: '12px 0', fontSize: 14, marginBottom: 14 }}
-            >📷 Scan the card — instant verification</button>
-            <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--dim)', margin: '4px 0 6px' }}>OR — GRADED SLAB CERT NUMBER</div>
+            >📷 Scan the card - instant verification</button>
+            <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--dim)', margin: '4px 0 6px' }}>OR - GRADED SLAB CERT NUMBER</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 type="text"
@@ -774,20 +788,20 @@ export default function PortfolioPage() {
                 onClick={submitCert}
                 disabled={certSaving || !certValue.trim()}
                 style={{ padding: '10px 18px', fontSize: 13, borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer', opacity: certSaving || !certValue.trim() ? 0.5 : 1 }}
-              >{certSaving ? 'Saving…' : 'Submit'}</button>
+              >{certSaving ? 'Saving...' : 'Submit'}</button>
             </div>
             <p style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8 }}>
-              Cert numbers are held for review — scanning verifies instantly.
+              Cert numbers are held for review - scanning verifies instantly.
             </p>
           </div>
         </div>
       )}
 
-      {/* Verification scan — AI must match the claimed card */}
+      {/* Verification scan - AI must match the claimed card */}
       {verifyScanItem && (
         <CameraScanner
           verifyItemId={verifyScanItem.id}
-          onResult={() => { setVerifyScanItem(null); toast('Card verified ✓ — it can now be listed'); fetchPortfolio(); }}
+          onResult={() => { setVerifyScanItem(null); toast('Card verified ✓ - it can now be listed'); fetchPortfolio(); }}
           onClose={() => setVerifyScanItem(null)}
         />
       )}
