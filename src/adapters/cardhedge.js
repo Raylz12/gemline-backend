@@ -1,7 +1,7 @@
 // Card Hedge adapter — spine of the arbitrage feed.
 // API Key set via CARDHEDGE_API_KEY env var
 const BASE = 'https://api.cardhedger.com';
-const KEY  = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
+const KEY  = process.env.CARDHEDGE_API_KEY || 'IVizMeJGO17DThsD4anFVtoceA8mYyBkZdGtqLKK';
 
 export function cardHedgeEnabled() { return !!KEY; }
 

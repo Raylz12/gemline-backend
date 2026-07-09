@@ -582,7 +582,7 @@ app.post('/api/scout/search', async (req, res) => {
   try {
     const { query, category } = req.body || {};
     if (!query) return res.json({ results: [] });
-    const CH = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
+    const CH = process.env.CARDHEDGE_API_KEY || 'IVizMeJGO17DThsD4anFVtoceA8mYyBkZdGtqLKK';
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
     // 1. Search Card Hedge for candidates
@@ -690,7 +690,7 @@ app.post('/api/scout/search', async (req, res) => {
 // ── Card Hedge proxy: FMV + AI explanation ───────────────────────────────────
 app.get('/api/cards/:cardhedgeId/fmv', async (req, res) => {
   try {
-    const CH = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
+    const CH = process.env.CARDHEDGE_API_KEY || 'IVizMeJGO17DThsD4anFVtoceA8mYyBkZdGtqLKK';
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
     const grade = req.query.grade || 'PSA 10';
     const cacheKey = `fmv_${req.params.cardhedgeId}_${grade}`;
@@ -759,7 +759,7 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
     const cacheKey = `history_${cardhedgeId}_${grade}_${days}`;
     if (app._historyCache?.[cacheKey]?.expires > Date.now())
       return res.json(app._historyCache[cacheKey].data);
-    const apiKey = process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR';
+    const apiKey = process.env.CARDHEDGE_API_KEY || 'IVizMeJGO17DThsD4anFVtoceA8mYyBkZdGtqLKK';
 
     // Fetch price history + comps in parallel
     const [histRes, compRes] = await Promise.allSettled([
@@ -894,7 +894,7 @@ app.get('/api/market/movers', async (req, res) => {
     const count = Math.min(Number(req.query.count) || 50, 100);
     const category = req.query.category || '';
     const url = `https://api.cardhedger.com/v1/cards/top-movers?count=${count}${category ? `&category=${category}` : ''}`;
-    const r = await fetch(url, { headers: { 'X-API-Key': process.env.CARDHEDGE_API_KEY || 'mKCO7PqBm8DL4u7Olyurw-6IFGyj-hduAZRLAhyR' } });
+    const r = await fetch(url, { headers: { 'X-API-Key': process.env.CARDHEDGE_API_KEY || 'IVizMeJGO17DThsD4anFVtoceA8mYyBkZdGtqLKK' } });
     const data = await r.json();
     app._moversCache = { expires: Date.now() + 60 * 60 * 1000, data }; // 1hr cache
     res.json(data);

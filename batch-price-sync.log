@@ -1,0 +1,96 @@
+
+[batch-sync] START | concurrency=3 | stale>20h | resume lastId=00000000-0000-0000-0000-000000000000 | prev written=0
+(node:408825) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[batch-sync] 693,027 stale cards | ~6,931 API calls
+
+  1,500/693,027 (0.2%) | 141 cards/s | ETA 22:39Z | written:1,205 err:295 calls:15 429s:0
+  3,000/693,027 (0.4%) | 145 cards/s | ETA 22:37Z | written:2,508 err:492 calls:30 429s:0
+  4,500/693,027 (0.6%) | 141 cards/s | ETA 22:39Z | written:3,784 err:716 calls:45 429s:0
+  6,000/693,027 (0.9%) | 138 cards/s | ETA 22:41Z | written:5,064 err:936 calls:60 429s:0
+  7,500/693,027 (1.1%) | 142 cards/s | ETA 22:39Z | written:6,372 err:1,128 calls:75 429s:0
+  9,000/693,027 (1.3%) | 142 cards/s | ETA 22:39Z | written:7,652 err:1,348 calls:90 429s:0
+  10,500/693,027 (1.5%) | 143 cards/s | ETA 22:38Z | written:8,951 err:1,549 calls:105 429s:0
+  12,000/693,027 (1.7%) | 143 cards/s | ETA 22:38Z | written:10,260 err:1,740 calls:120 429s:0
+
+[batch-sync] START | concurrency=3 | stale>20h | resume lastId=082f4a33-80c0-4267-bd24-2b49d5ffd50b | prev written=10260
+(node:409454) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[batch-sync] 682,767 stale cards | ~6,828 API calls
+
+
+[batch-sync] START | concurrency=3 | stale>20h | resume lastId=085d27aa-4e2c-4410-a758-adda43614a1a | prev written=10520
+(node:409701) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[batch-sync] 682,507 stale cards | ~6,826 API calls
+
+  1,500/682,507 (0.2%) | 137 cards/s | ETA 22:45Z | written:11,803 err:1,997 calls:138 429s:0
+  3,000/682,507 (0.4%) | 145 cards/s | ETA 22:40Z | written:13,092 err:2,208 calls:153 429s:0
+  4,500/682,507 (0.7%) | 149 cards/s | ETA 22:38Z | written:14,387 err:2,413 calls:168 429s:0
+  6,000/682,507 (0.9%) | 151 cards/s | ETA 22:37Z | written:15,706 err:2,594 calls:183 429s:0
+  7,500/682,507 (1.1%) | 148 cards/s | ETA 22:39Z | written:17,004 err:2,796 calls:198 429s:0
+  9,000/682,507 (1.3%) | 147 cards/s | ETA 22:39Z | written:18,288 err:3,012 calls:213 429s:0
+  10,500/682,507 (1.5%) | 148 cards/s | ETA 22:38Z | written:19,598 err:3,202 calls:228 429s:0
+  12,000/682,507 (1.8%) | 149 cards/s | ETA 22:38Z | written:20,886 err:3,414 calls:243 429s:0
+  13,500/682,507 (2.0%) | 148 cards/s | ETA 22:39Z | written:22,193 err:3,607 calls:258 429s:0
+  15,000/682,507 (2.2%) | 150 cards/s | ETA 22:38Z | written:23,504 err:3,796 calls:273 429s:0
+  16,500/682,507 (2.4%) | 151 cards/s | ETA 22:37Z | written:24,797 err:4,003 calls:288 429s:0
+  18,000/682,507 (2.6%) | 151 cards/s | ETA 22:37Z | written:26,101 err:4,199 calls:303 429s:0
+  19,500/682,507 (2.9%) | 149 cards/s | ETA 22:38Z | written:27,413 err:4,387 calls:318 429s:0
+  21,000/682,507 (3.1%) | 149 cards/s | ETA 22:38Z | written:28,695 err:4,605 calls:333 429s:0
+  22,500/682,507 (3.3%) | 148 cards/s | ETA 22:39Z | written:29,990 err:4,810 calls:348 429s:0
+  24,000/682,507 (3.5%) | 148 cards/s | ETA 22:39Z | written:31,307 err:4,993 calls:363 429s:0
+  25,500/682,507 (3.7%) | 148 cards/s | ETA 22:39Z | written:32,616 err:5,184 calls:378 429s:0
+  27,000/682,507 (4.0%) | 147 cards/s | ETA 22:39Z | written:33,944 err:5,356 calls:393 429s:0
+  28,500/682,507 (4.2%) | 147 cards/s | ETA 22:39Z | written:35,240 err:5,560 calls:408 429s:0
+  30,000/682,507 (4.4%) | 147 cards/s | ETA 22:39Z | written:36,552 err:5,748 calls:423 429s:0
+  31,500/682,507 (4.6%) | 147 cards/s | ETA 22:39Z | written:37,841 err:5,959 calls:438 429s:0
+  33,000/682,507 (4.8%) | 146 cards/s | ETA 22:39Z | written:39,133 err:6,167 calls:453 429s:0
+  34,500/682,507 (5.1%) | 146 cards/s | ETA 22:40Z | written:40,422 err:6,378 calls:468 429s:0
+  36,000/682,507 (5.3%) | 145 cards/s | ETA 22:40Z | written:41,725 err:6,575 calls:483 429s:0
+  37,500/682,507 (5.5%) | 145 cards/s | ETA 22:40Z | written:43,040 err:6,760 calls:498 429s:0
+  39,000/682,507 (5.7%) | 145 cards/s | ETA 22:40Z | written:44,350 err:6,950 calls:513 429s:0
+  40,500/682,507 (5.9%) | 145 cards/s | ETA 22:40Z | written:45,663 err:7,137 calls:528 429s:0
+  42,000/682,507 (6.2%) | 145 cards/s | ETA 22:40Z | written:46,964 err:7,336 calls:543 429s:0
+  43,500/682,507 (6.4%) | 145 cards/s | ETA 22:40Z | written:48,248 err:7,552 calls:558 429s:0
+  45,000/682,507 (6.6%) | 146 cards/s | ETA 22:40Z | written:49,559 err:7,741 calls:573 429s:0
+  46,500/682,507 (6.8%) | 146 cards/s | ETA 22:40Z | written:50,848 err:7,952 calls:588 429s:0
+  48,000/682,507 (7.0%) | 146 cards/s | ETA 22:40Z | written:52,141 err:8,159 calls:603 429s:0
+  49,500/682,507 (7.3%) | 145 cards/s | ETA 22:40Z | written:53,435 err:8,365 calls:618 429s:0
+  51,000/682,507 (7.5%) | 145 cards/s | ETA 22:40Z | written:54,740 err:8,560 calls:633 429s:0
+  52,500/682,507 (7.7%) | 145 cards/s | ETA 22:40Z | written:56,125 err:8,675 calls:648 429s:0
+  54,000/682,507 (7.9%) | 144 cards/s | ETA 22:41Z | written:57,507 err:8,793 calls:663 429s:0
+  55,500/682,507 (8.1%) | 143 cards/s | ETA 22:41Z | written:58,902 err:8,898 calls:678 429s:0
+  57,000/682,507 (8.4%) | 143 cards/s | ETA 22:42Z | written:60,300 err:9,000 calls:693 429s:0
+
+  [MV] Refreshing mv_card_feed... done (16041ms)
+  58,500/682,507 (8.6%) | 137 cards/s | ETA 22:45Z | written:61,695 err:9,105 calls:708 429s:0
+  60,000/682,507 (8.8%) | 136 cards/s | ETA 22:45Z | written:63,083 err:9,217 calls:723 429s:0
+  61,500/682,507 (9.0%) | 136 cards/s | ETA 22:45Z | written:64,492 err:9,308 calls:738 429s:0
+  63,000/682,507 (9.2%) | 135 cards/s | ETA 22:46Z | written:65,880 err:9,420 calls:753 429s:0
+  64,500/682,507 (9.5%) | 135 cards/s | ETA 22:46Z | written:67,269 err:9,531 calls:768 429s:0
+  66,000/682,507 (9.7%) | 135 cards/s | ETA 22:46Z | written:68,660 err:9,640 calls:783 429s:0
+  67,500/682,507 (9.9%) | 135 cards/s | ETA 22:46Z | written:70,046 err:9,754 calls:798 429s:0
+  69,000/682,507 (10.1%) | 135 cards/s | ETA 22:46Z | written:71,442 err:9,858 calls:813 429s:0
+  70,500/682,507 (10.3%) | 135 cards/s | ETA 22:46Z | written:72,856 err:9,944 calls:828 429s:0
