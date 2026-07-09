@@ -223,7 +223,7 @@ export default function SellContent() {
                   fontSize: 10, fontWeight: 700,
                 }}>{i < step ? '✓' : i + 1}</span>
                 <span className="step-label">{s}</span>
-                {i < STEPS.length - 1 && <span style={{ color: 'var(--line)', margin: '0 2px' }}>—</span>}
+                {i < STEPS.length - 1 && <span className="step-sep" style={{ color: 'var(--line)', margin: '0 2px' }}>—</span>}
               </div>
             ))}
           </div>

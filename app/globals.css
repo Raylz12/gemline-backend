@@ -1110,6 +1110,30 @@ input, select, textarea { font-size: 16px !important; }
   .scout-chip { font-size: 11px; padding: 5px 10px; }
 }
 
+/* Segmented filters (.seg — stores/trades/community/etc): 7 sport buttons
+   overflow a phone; scroll the control instead of stretching the page. */
+@media (max-width: 480px) {
+  .seg { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg button { flex-shrink: 0; white-space: nowrap; }
+}
+
+/* Sell wizard steps: 5 labeled steps don't fit a phone — drop the — separators,
+   tighten labels, and let the strip scroll instead of stretching the page. */
+@media (max-width: 480px) {
+  .sell-steps { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 6px !important; }
+  .sell-steps::-webkit-scrollbar { display: none; }
+  .sell-step { flex-shrink: 0; }
+  .sell-step .step-label { font-size: 10px; }
+  .step-sep { display: none; }
+}
+
+/* Collection/portfolio sub-tabs: horizontally scrollable on phones so the
+   last tab (Watchlist) stays reachable instead of overflowing the page. */
+.sub-tabbar { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.sub-tabbar::-webkit-scrollbar { display: none; }
+.sub-tabbar .live-tab { flex-shrink: 0; white-space: nowrap; }
+
 /* ══════════ LIVE PAGE — TABS, BIDS, BOOSTS ══════════ */
 .live-tab {
   padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--muted);

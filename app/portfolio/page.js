@@ -305,7 +305,10 @@ export default function PortfolioPage() {
   const totalPnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100).toFixed(1) : 0;
 
   const subTabBar = (
-    <div style={{ display: 'flex', gap: 4, marginBottom: 18, marginTop: 16, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
+    // sub-tabbar: 6 tabs are wider than a phone — scroll the bar, don't let it
+    // stretch the page (iOS was getting 53px of horizontal wobble and the
+    // Watchlist tab sat off-screen).
+    <div className="sub-tabbar" style={{ display: 'flex', gap: 4, marginBottom: 18, marginTop: 16, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
       <button className={`live-tab ${subTab === 'cards' ? 'on' : ''}`} onClick={() => setSubTab('cards')}>
         My Cards
       </button>
