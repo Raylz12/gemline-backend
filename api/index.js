@@ -2284,6 +2284,87 @@ app.get('/api/sellers/:id/stats', async (req, res) => {
   }
 });
 
+// ── Store / seller reviews ───────────────────────────────────────
+// Buyers with a settled order can leave one 1–5★ review per order.
+let _reviewTableReady = false;
+async function ensureReviewTable(pool) {
+  if (_reviewTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS seller_reviews (
+      id BIGSERIAL PRIMARY KEY,
+      order_id uuid NOT NULL UNIQUE,
+      reviewer_id uuid NOT NULL,
+      seller_id uuid NOT NULL,
+      rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      body TEXT DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_seller_reviews_seller ON seller_reviews (seller_id, created_at DESC)').catch(() => {});
+  _reviewTableReady = true;
+}
+
+// Public: avg + count + recent reviews for a seller.
+app.get('/api/sellers/:id/reviews', async (req, res) => {
+  try {
+    const sellerId = String(req.params.id);
+    if (!/^[0-9a-f-]{36}$/i.test(sellerId)) return res.status(400).json({ error: 'Invalid seller id' });
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ avg: null, count: 0, reviews: [] });
+    await ensureReviewTable(pool);
+    const [aggRes, listRes] = await Promise.all([
+      pool.query('SELECT AVG(rating) AS avg, COUNT(*) AS count FROM seller_reviews WHERE seller_id = $1', [sellerId]),
+      pool.query(`
+        SELECT sr.id, sr.rating, sr.body, sr.created_at, u.handle AS reviewer_handle, c.player
+        FROM seller_reviews sr
+        LEFT JOIN users u ON u.id = sr.reviewer_id
+        LEFT JOIN orders o ON o.id = sr.order_id
+        LEFT JOIN cards c ON c.id = o.card_id
+        WHERE sr.seller_id = $1 ORDER BY sr.created_at DESC LIMIT 20`, [sellerId]),
+    ]);
+    const count = Number(aggRes.rows[0]?.count) || 0;
+    res.json({
+      avg: count > 0 ? Math.round(Number(aggRes.rows[0].avg) * 10) / 10 : null,
+      count,
+      reviews: listRes.rows,
+    });
+  } catch (e) { res.json({ avg: null, count: 0, reviews: [] }); }
+});
+
+// Leave a review — buyer of a settled order with this seller, one per order.
+app.post('/api/sellers/:id/reviews', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const sellerId = String(req.params.id);
+    if (!/^[0-9a-f-]{36}$/i.test(sellerId)) return res.status(400).json({ error: 'Invalid seller id' });
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureReviewTable(pool);
+    const rating = Number(req.body?.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be 1–5' });
+    const body = String(req.body?.body || '').trim().slice(0, 1000);
+    const orderId = String(req.body?.orderId || '');
+    if (!/^[0-9a-f-]{36}$/i.test(orderId)) return res.status(400).json({ error: 'orderId required' });
+    const { rows: [order] } = await pool.query(
+      'SELECT id, buyer_id, seller_id, status FROM orders WHERE id = $1', [orderId]);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyer_id !== req.userId) return res.status(403).json({ error: 'Only the buyer can review this order' });
+    if (order.seller_id !== sellerId) return res.status(400).json({ error: 'Order is not with this seller' });
+    if (order.status !== 'settled') return res.status(400).json({ error: 'You can review once the order completes' });
+    const ins = await pool.query(`
+      INSERT INTO seller_reviews (order_id, reviewer_id, seller_id, rating, body)
+      VALUES ($1, $2, $3, $4, $5) ON CONFLICT (order_id) DO NOTHING RETURNING id`,
+      [orderId, req.userId, sellerId, rating, body]);
+    if (ins.rowCount === 0) return res.status(400).json({ error: 'You already reviewed this order' });
+    await notify(pool, sellerId, 'review_received', `New ${rating}★ review`,
+      body.slice(0, 140) || 'A buyer rated their purchase.', { orderId, rating });
+    res.json({ ok: true, id: ins.rows[0].id });
+  } catch (e) {
+    console.error('seller review error:', e.message);
+    res.status(500).json({ error: 'Failed to post review' });
+  }
+});
+
 // ── Portfolio verification (anti-scam) ───────────────────────────────────
 // Tracking a card is frictionless; SELLING requires verification. Two paths:
 //  • scan  — photograph the physical card; AI vision must match the claimed card
@@ -3420,12 +3501,14 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     await expirePendingPayments(r).catch(() => {});
     await ensureMsgTable(pool);
     await ensureCancelCols(pool);
+    await ensureReviewTable(pool);
     const base = `
       SELECT o.id, o.listing_id, o.card_id, o.buyer_id, o.seller_id, o.amount, o.platform_fee,
              o.fulfillment_method, o.status, o.created_at, o.updated_at, o.inspection_ends_at, o.payment_due_at,
              o.shipping_address, o.cancel_requested_by, o.cancel_requested_at, o.cancel_reason,
              (SELECT COUNT(*) FROM order_messages m WHERE m.order_id = o.id AND m.sender_id != $1 AND m.read = FALSE) AS unread_messages,
              (SELECT COUNT(*) FROM order_messages m2 WHERE m2.order_id = o.id) AS message_count,
+             EXISTS (SELECT 1 FROM seller_reviews sr WHERE sr.order_id = o.id) AS reviewed,
              tl.timeline,
              c.player, c.card_set, c.grader, c.grade, c.year, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle,
@@ -3457,6 +3540,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       player: o.player, set: o.card_set, grader: o.grader, grade: o.grade, year: o.year,
       thumbnail: o.ebay_thumb || o.image_url || null,
       buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
+      sellerId: o.seller_id, reviewed: !!o.reviewed,
       carrier: o.carrier || null, trackingNumber: o.tracking_number || null,
       shippedAt: o.shipped_at || null, deliveredAt: o.ship_delivered_at || null,
       shippingAddress: o.shipping_address || null,

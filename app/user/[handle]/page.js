@@ -7,6 +7,7 @@ import { toast } from '../../lib/toast';
 import TradeProposal from '../../components/TradeProposal';
 import ReportModal from '../../components/ReportModal';
 import SellerTrust from '../../components/SellerTrust';
+import SellerReviews from '../../components/SellerReviews';
 
 export default function UserPortfolioPage() {
   const params = useParams();
@@ -226,6 +227,7 @@ export default function UserPortfolioPage() {
             )}
           </div>
           <SellerTrust sellerId={profileUser.id} />
+          <SellerReviews sellerId={profileUser.id} compact />
         </div>
         <div className="user-profile-actions">
           {isSelf && (

@@ -161,6 +161,52 @@ function OrderTimeline({ o }) {
   );
 }
 
+// Post-purchase review form — buyers rate a settled order (one per order).
+function ReviewForm({ order, authFetch, onDone }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!rating) { toast('Pick a star rating', true); return; }
+    setSubmitting(true);
+    try {
+      const res = await authFetch(`/api/sellers/${order.sellerId}/reviews`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, rating, body: body.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to post review');
+      toast('Review posted — thanks!');
+      onDone?.();
+    } catch (e) { toast(e.message, true); }
+    finally { setSubmitting(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 8, padding: '12px 14px', background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
+      <div style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+        Rate @{order.sellerHandle}
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <button key={i} onClick={() => setRating(i)} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, padding: 0, lineHeight: 1,
+                     color: i <= (hover || rating) ? 'var(--gold)' : 'var(--line-2)' }}>★</button>
+        ))}
+      </div>
+      <textarea value={body} onChange={e => setBody(e.target.value)} maxLength={1000} rows={2}
+        placeholder="How was the card, packaging, and communication? (optional)"
+        style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, background: 'var(--panel)', color: 'var(--txt)', border: '1px solid var(--line-2)', resize: 'vertical', marginBottom: 8 }} />
+      <button onClick={submit} disabled={submitting}
+        style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'var(--gold)', color: '#141006', border: 'none', cursor: submitting ? 'wait' : 'pointer' }}>
+        {submitting ? '…' : 'Post Review'}
+      </button>
+    </div>
+  );
+}
+
 // Buyer↔seller message thread, expanded per order.
 function MessageThread({ order, authFetch, onRead }) {
   const [messages, setMessages] = useState(null);
@@ -237,6 +283,7 @@ export default function OrdersContent() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('purchases');
   const [shipFormId, setShipFormId] = useState(null);
+  const [reviewFormId, setReviewFormId] = useState(null);
   const [confirming, setConfirming] = useState(null);
   const [payModal, setPayModal] = useState(null);
   const [paying, setPaying] = useState(null);
@@ -359,6 +406,7 @@ export default function OrdersContent() {
             const canShip = isSale && ['created', 'escrow_held', 'awaiting_shipment'].includes(o.status);
             const canConfirm = !isSale && ['shipped', 'delivered', 'inspection'].includes(o.status);
             const canPay = !isSale && o.status === 'pending_payment';
+            const canReview = !isSale && o.status === 'settled' && !o.reviewed && o.sellerId;
             return (
               <div key={o.id} style={{ padding: '12px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -405,6 +453,12 @@ export default function OrdersContent() {
                       <button onClick={() => confirmReceipt(o)} disabled={confirming === o.id}
                         style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'var(--up)', color: '#04140c', border: 'none', cursor: confirming === o.id ? 'wait' : 'pointer' }}>
                         {confirming === o.id ? '…' : 'Confirm Receipt'}
+                      </button>
+                    )}
+                    {canReview && (
+                      <button onClick={() => setReviewFormId(reviewFormId === o.id ? null : o.id)}
+                        style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'var(--gold-soft)', color: 'var(--gold)', border: '1px solid var(--gold)', cursor: 'pointer' }}>
+                        {reviewFormId === o.id ? 'Cancel' : '★ Rate Seller'}
                       </button>
                     )}
                   </div>
@@ -471,6 +525,10 @@ export default function OrdersContent() {
 
                 {canShip && shipFormId === o.id && (
                   <ShipForm order={o} authFetch={authFetch} onDone={() => { setShipFormId(null); load(); }} />
+                )}
+
+                {canReview && reviewFormId === o.id && (
+                  <ReviewForm order={o} authFetch={authFetch} onDone={() => { setReviewFormId(null); load(); }} />
                 )}
               </div>
             );

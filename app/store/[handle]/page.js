@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '../../components/AuthContext';
 import { fmt } from '../../lib/data';
 import { IconStore, IconPackage } from '../../components/Icons';
+import SellerReviews from '../../components/SellerReviews';
 
 const SPORT_COLOR = { Basketball: '#f59e0b', Baseball: '#2563eb', Football: '#7c3aed', Pokemon: '#eab308', Hockey: '#0ea5e9', Soccer: '#16a34a' };
 
@@ -95,6 +96,7 @@ export default function StorePage() {
               )}
             </div>
             <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 4 }}>@{store.handle}</div>
+            <div style={{ marginTop: 6 }}><SellerReviews sellerId={store.id} compact /></div>
             {store.store_location && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>📍 {store.store_location}</div>}
             {store.store_description && <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10, lineHeight: 1.55, maxWidth: 500 }}>{store.store_description}</p>}
 
@@ -136,6 +138,7 @@ export default function StorePage() {
         <button className={tab === 'listings' ? 'on' : ''} onClick={() => setTab('listings')}>
           Listings <span style={{ marginLeft: 4, background: 'var(--panel-2)', padding: '1px 6px', borderRadius: 10, fontSize: 10 }}>{listings.length}</span>
         </button>
+        <button className={tab === 'reviews' ? 'on' : ''} onClick={() => setTab('reviews')}>Reviews</button>
         <button className={tab === 'about' ? 'on' : ''} onClick={() => setTab('about')}>About</button>
       </div>
 
@@ -151,6 +154,10 @@ export default function StorePage() {
             {listings.map(l => <ListingCard key={l.id} listing={l} />)}
           </div>
         )
+      )}
+
+      {tab === 'reviews' && (
+        <SellerReviews sellerId={store.id} emptyText="No reviews yet — reviews come from verified completed orders." />
       )}
 
       {tab === 'about' && (

@@ -16,3 +16,9 @@ See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode de
   [batch 1/7520] 100/751,920 (0.0%) | 35/s | ETA 02:33Z | written:84 err:16
   [batch 10/7520] 1,000/751,920 (0.1%) | 23/s | ETA 05:34Z | written:895 err:105
   [batch 20/7520] 2,000/751,920 (0.3%) | 24/s | ETA 05:20Z | written:1,826 err:174
+  [batch 30/7520] 3,000/751,920 (0.4%) | 24/s | ETA 05:24Z | written:2,749 err:251
+  [batch 40/7520] 4,000/751,920 (0.5%) | 23/s | ETA 05:29Z | written:3,677 err:323
+  [batch 50/7520] 5,000/751,920 (0.7%) | 23/s | ETA 05:29Z | written:4,595 err:405
+  [batch 60/7520] 6,000/751,920 (0.8%) | 24/s | ETA 05:26Z | written:5,515 err:485
+  [batch 70/7520] 7,000/751,920 (0.9%) | 24/s | ETA 05:18Z | written:6,433 err:567
+  [batch 80/7520] 8,000/751,920 (1.1%) | 24/s | ETA 05:15Z | written:7,356 err:644
