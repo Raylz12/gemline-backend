@@ -28,6 +28,48 @@ const IconStar = ({ size = 13 }) => (
 
 const BADGE_TIER_ORDER = { diamond: 0, gold: 1, emerald: 2, silver: 3, bronze: 4 };
 
+// ── Invite collectors (referrals) ─────────────────────────────────
+function InviteSection({ authFetch }) {
+  const [data, setData] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    authFetch('/api/referrals/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(setData)
+      .catch(() => {});
+  }, [authFetch]);
+
+  if (!data?.url) return null;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(data.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { toast('Copy failed — long-press the link instead', true); }
+  };
+
+  return (
+    <div className="panel" style={{ padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+        Share your link — when a collector signs up through it, they count as your referral.
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input readOnly value={data.url} onFocus={e => e.target.select()}
+          style={{ flex: 1, padding: '9px 11px', borderRadius: 8, fontSize: 12, fontFamily: 'var(--mono)', background: 'var(--panel-2)', color: 'var(--txt)', border: '1px solid var(--line)' }} />
+        <button onClick={copy}
+          style={{ padding: '9px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: copied ? 'var(--up)' : 'var(--gold)', color: '#141006', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {copied ? 'Copied ✓' : 'Copy'}
+        </button>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
+        <strong style={{ color: 'var(--gold)', fontFamily: 'var(--mono)' }}>{data.count}</strong> collector{data.count !== 1 ? 's' : ''} joined through your link
+      </div>
+    </div>
+  );
+}
+
 // ── Shipping address book section ─────────────────────────────────────────────
 function BlockedSection({ authFetch }) {
   const [blocked, setBlocked] = useState(null);
@@ -632,6 +674,12 @@ export default function SettingsModal({ onClose }) {
               <ToggleRow label="Price alerts" desc="Cards on your watchlist" on={priceAlerts} toggle={() => setPriceAlerts(!priceAlerts)} />
               <ToggleRow label="Trade offers" desc="Incoming trade proposals" on={tradeOffers} toggle={() => setTradeOffers(!tradeOffers)} last />
             </div>
+          </div>
+
+          {/* INVITE COLLECTORS */}
+          <div style={sectionWrap}>
+            <SectionLabel icon={IconLink}>Invite Collectors</SectionLabel>
+            <InviteSection authFetch={authFetch} />
           </div>
 
           {/* ABOUT */}

@@ -192,6 +192,21 @@ export function authRouter(repo) {
         created_at: new Date().toISOString(),
       });
 
+      // Referral attribution — best-effort, never blocks signup. The code
+      // comes from /r/[code] via localStorage; tables are created lazily by
+      // /api/referrals/me, so tolerate them missing here.
+      try {
+        const refCode = String(req.body?.referralCode || '').trim().toLowerCase().slice(0, 40);
+        if (refCode && repo.pool) {
+          const { rows: [rc] } = await repo.pool.query('SELECT user_id FROM referral_codes WHERE code = $1', [refCode]);
+          if (rc && rc.user_id !== user.id) {
+            await repo.pool.query(
+              'INSERT INTO referrals (referred_id, referrer_id) VALUES ($1, $2) ON CONFLICT (referred_id) DO NOTHING',
+              [user.id, rc.user_id]);
+          }
+        }
+      } catch (e) { console.error('referral record error (non-fatal):', e.message); }
+
       // Welcome email — best-effort, never blocks signup.
       const welcome = emailTpl.welcome({ handle: user.handle });
       await sendEmail({ to: user.email, subject: welcome.subject, html: welcome.html }).catch(() => {});

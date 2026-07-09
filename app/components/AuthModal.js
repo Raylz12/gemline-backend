@@ -82,7 +82,12 @@ export default function AuthModal({ onClose }) {
       if (tab === 'login') {
         await login(email, password, extra);
       } else {
+        // Referral attribution — code stashed by /r/[code], cleared on success.
+        let ref = null;
+        try { ref = localStorage.getItem('gemline_ref'); } catch {}
+        if (ref) extra.referralCode = ref;
         await signup(handle, email, password, extra);
+        try { localStorage.removeItem('gemline_ref'); } catch {}
       }
       onClose();
     } catch (err) {

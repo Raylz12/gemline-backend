@@ -2284,6 +2284,57 @@ app.get('/api/sellers/:id/stats', async (req, res) => {
   }
 });
 
+// ── Referrals ──────────────────────────────────────────────────────
+// Each user gets a short shareable code; /r/[code] stores it client-side and
+// signup attributes the referral (recorded in src/routes/auth.js register).
+// No monetary rewards yet — just attribution + counts.
+let _refTablesReady = false;
+async function ensureReferralTables(pool) {
+  if (_refTablesReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS referral_codes (
+      user_id uuid PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      referred_id uuid PRIMARY KEY,
+      referrer_id uuid NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer_id)').catch(() => {});
+  _refTablesReady = true;
+}
+
+app.get('/api/referrals/me', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureReferralTables(pool);
+    let { rows: [rc] } = await pool.query('SELECT code FROM referral_codes WHERE user_id = $1', [req.userId]);
+    if (!rc) {
+      const { rows: [u] } = await pool.query('SELECT handle FROM users WHERE id = $1', [req.userId]);
+      const base = String(u?.handle || 'collector').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12) || 'collector';
+      // Retry on the (unlikely) code collision — 4 random base36 chars.
+      for (let i = 0; i < 5 && !rc; i++) {
+        const code = `${base}-${Math.random().toString(36).slice(2, 6)}`;
+        const ins = await pool.query(
+          'INSERT INTO referral_codes (user_id, code) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING RETURNING code',
+          [req.userId, code]);
+        if (ins.rowCount) rc = ins.rows[0];
+      }
+      if (!rc) return res.status(500).json({ error: 'Could not generate code' });
+    }
+    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) AS count FROM referrals WHERE referrer_id = $1', [req.userId]);
+    res.json({ code: rc.code, url: `https://gemlinecards.com/r/${rc.code}`, count: Number(count) });
+  } catch (e) {
+    console.error('referrals/me error:', e.message);
+    res.status(500).json({ error: 'Failed to load referrals' });
+  }
+});
+
 // ── Store / seller reviews ───────────────────────────────────────
 // Buyers with a settled order can leave one 1–5★ review per order.
 let _reviewTableReady = false;
