@@ -7,3 +7,4 @@ node_modules/
 public/gemline.html.bak
 .next/
 probe-sets.cjs
+.env.cron.local

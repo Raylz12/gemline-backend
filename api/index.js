@@ -154,9 +154,17 @@ app.get('/feed', (_req, res) => res.json({ mode: 'preview', cards: [] }));
 
 
 // ── Admin: refresh mv_card_feed + trigger price refresh ──────────────────────
-app.post('/api/admin/refresh-mv', async (req, res) => {
-  if (req.headers['x-admin-key'] !== (process.env.ADMIN_KEY || 'gemline-admin-2026'))
-    return res.status(403).json({ error: 'forbidden' });
+// Cron/admin auth: Vercel crons send GET with `Authorization: Bearer $CRON_SECRET`
+// (when the CRON_SECRET env var is set). Manual/admin calls use x-admin-key.
+function cronOrAdminAuthed(req) {
+  if (req.headers['x-admin-key'] === (process.env.ADMIN_KEY || 'gemline-admin-2026')) return true;
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && req.headers['authorization'] === `Bearer ${cronSecret}`) return true;
+  return false;
+}
+
+async function refreshMvHandler(req, res) {
+  if (!cronOrAdminAuthed(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const r = await getRepo();
     const pool = r.pool;
@@ -173,7 +181,10 @@ app.post('/api/admin/refresh-mv', async (req, res) => {
     const alerts = await sweepPriceAlerts(pool);
     res.json({ ok: true, refreshedMs: Date.now()-t0, priceAlerts: alerts });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
-});
+}
+// GET = Vercel cron invocation (crons always send GET); POST = manual/admin.
+app.get('/api/admin/refresh-mv', refreshMvHandler);
+app.post('/api/admin/refresh-mv', refreshMvHandler);
 
 // ── Admin ingest (no auth — key-protected instead) ────────────────────────────
 app.post('/api/admin/ingest', async (req, res) => {
@@ -2470,12 +2481,14 @@ async function expirePendingPayments(r, { force = false } = {}) {
   return { expired };
 }
 
-app.post('/api/checkout/sweep', async (req, res) => {
+async function sweepHandler(req, res) {
   try {
     const r = await getRepo();
     res.json({ ok: true, ...(await expirePendingPayments(r, { force: true })) });
   } catch (e) { res.status(500).json({ error: e.message }); }
-});
+}
+app.post('/api/checkout/sweep', sweepHandler);
+app.get('/api/checkout/sweep', sweepHandler); // external cron pinger
 
 // ── Buy a listing directly (CardDetail buy flow) ────────────────────────────
 // Creates a pending_payment order + manual-capture PI and returns the PI's

@@ -116,7 +116,7 @@ const SECTIONS = [
   {
     h: 'Governing law and disputes with GEMLINE',
     p: [
-      'These Terms are governed by the laws of the State of California, without regard to conflict-of-law rules. Before filing any claim against GEMLINE, you agree to contact us and attempt in good faith to resolve the issue informally for 30 days. Any claim must be brought individually — not as a class action — in the state or federal courts located in California, and you consent to their jurisdiction.',
+      'These Terms are governed by the laws of the State of Florida, without regard to conflict-of-law rules. Before filing any claim against GEMLINE, you agree to contact us and attempt in good faith to resolve the issue informally for 30 days. Any claim must be brought individually — not as a class action — in the state or federal courts located in Florida, and you consent to their jurisdiction.',
     ],
   },
   {
