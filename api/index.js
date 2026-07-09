@@ -1038,7 +1038,6 @@ app.get('/api/market/feed', async (req, res) => {
     const params = [];
     let paramIdx = 1;
     if (sport && sport !== 'All') { conditions.push(`sport = $${paramIdx}`); params.push(sport); paramIdx++; }
-    if (search) { conditions.push(`(player ILIKE $${paramIdx} OR card_set ILIKE $${paramIdx})`); params.push(`%${search}%`); paramIdx++; }
     if (brand) { conditions.push(`card_set ILIKE $${paramIdx}`); params.push(`%${brand}%`); paramIdx++; }
     // Use materialized view (mv_card_feed) — pre-grouped, indexed, ~10ms vs 500ms raw
     // mv columns: id, player, card_set, year, variant, number, sport, catalog_price,
@@ -1066,16 +1065,67 @@ app.get('/api/market/feed', async (req, res) => {
         break;
     }
 
-    const { rows: cards } = await pool.query(`
-      SELECT * FROM mv_card_feed ${mvWhere}
-      ORDER BY (catalog_price IS NOT NULL AND catalog_price > 0) DESC, ${orderBy}
-      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
-    `, [...params, limit, offset]);
+    let cards, totalCards;
+    if (search) {
+      // Tokenized AND search over the FULL cards table — same semantics as the
+      // header typeahead (POST /api/catalog/search): every word must match
+      // player/set/variant/year. mv_card_feed only holds priced families, so
+      // newly imported (unpriced) cards were invisible here, and the old
+      // whole-phrase ILIKE never matched player+brand queries like
+      // "emeka egbuka donruss". Backed by expression index idx_cards_search_trgm.
+      const tokens = String(search).split(/\s+/).filter(Boolean).slice(0, 8);
+      const SEARCH_EXPR = `(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,'') || ' ' || coalesce(year,''))`;
+      const sp = [];
+      const sconds = tokens.map((t) => { sp.push(`%${t}%`); return `${SEARCH_EXPR} ILIKE $${sp.length}`; });
+      if (sport && sport !== 'All') { sp.push(sport); sconds.push(`sport = $${sp.length}`); }
+      if (brand) { sp.push(`%${brand}%`); sconds.push(`card_set ILIKE $${sp.length}`); }
+      if (sort === 'gain' || sort === 'loss') sconds.push(`catalog_price >= 5`, `COALESCE(sales_7d,0) >= 2`, `gain_7d BETWEEN -90 AND 500`);
+      const { rows } = await pool.query(`
+        WITH m AS (
+          SELECT * FROM cards
+          WHERE ${sconds.join(' AND ')}
+          ORDER BY (catalog_price IS NOT NULL AND catalog_price > 0) DESC,
+                   sales_30d DESC NULLS LAST, catalog_price DESC NULLS LAST
+          LIMIT 3000
+        ), fam AS (
+          SELECT (array_agg(id ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS id,
+                 player, card_set, COALESCE(max(NULLIF(year,'')),'') AS year, variant, number, sport,
+                 (array_agg(catalog_price ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS catalog_price,
+                 (array_agg(ch_price_lo ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS ch_price_lo,
+                 (array_agg(ch_price_hi ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS ch_price_hi,
+                 (array_agg(ch_confidence ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS ch_confidence,
+                 (array_agg(ebay_thumb ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS ebay_thumb,
+                 (array_agg(image_url ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url,
+                 (array_agg(cardhedge_id ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE cardhedge_id IS NOT NULL))[1] AS cardhedge_id,
+                 (array_agg(grader ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS grader,
+                 (array_agg(grade ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS grade,
+                 (array_agg(gain_7d ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS gain_7d,
+                 sum(COALESCE(sales_7d,0)) AS sales_7d, sum(COALESCE(sales_30d,0)) AS sales_30d,
+                 bool_or(rookie) AS rookie, count(*) AS grade_count,
+                 min(catalog_price) AS price_min, max(catalog_price) AS price_max,
+                 json_agg(json_build_object('id', id, 'grader', grader, 'grade', grade, 'price', catalog_price,
+                          'lo', ch_price_lo, 'hi', ch_price_hi, 'sales7d', sales_7d, 'sales30d', sales_30d, 'gain7d', gain_7d)
+                          ORDER BY m.catalog_price DESC NULLS LAST) AS grades
+          FROM m GROUP BY player, card_set, variant, number, sport
+        )
+        SELECT *, count(*) OVER () AS _total FROM fam
+        ORDER BY (catalog_price IS NOT NULL AND catalog_price > 0) DESC, ${orderBy}
+        LIMIT $${sp.length + 1} OFFSET $${sp.length + 2}
+      `, [...sp, limit, offset]);
+      cards = rows;
+      totalCards = rows.length ? Number(rows[0]._total) : 0;
+    } else {
+      ({ rows: cards } = await pool.query(`
+        SELECT * FROM mv_card_feed ${mvWhere}
+        ORDER BY (catalog_price IS NOT NULL AND catalog_price > 0) DESC, ${orderBy}
+        LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
+      `, [...params, limit, offset]));
 
-    const { rows: [{ count: totalCards }] } = await pool.query(
-      `SELECT COUNT(*) FROM mv_card_feed ${mvWhere}`,
-      params
-    );
+      ({ rows: [{ count: totalCards }] } = await pool.query(
+        `SELECT COUNT(*) FROM mv_card_feed ${mvWhere}`,
+        params
+      ));
+    }
 
     const feed = cards.map(card => {
       const mp = Number(card.catalog_price) || 0;

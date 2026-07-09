@@ -173,7 +173,13 @@ export default function MarketplacePage() {
         if (v.includes('rc') || v.includes('rookie') || v.includes('auto') || v.includes('silver') || v.includes('gold') || v.includes('refractor') || v.includes('parallel') || v.includes('holo') || v.includes('alt art')) return false;
       }
 
-      if (q && !(c.player + ' ' + c.set + ' ' + c.variant + ' ' + c.sport + ' ' + c.grader + ' ' + c.grade).toLowerCase().includes(q)) return false;
+      // Tokenized AND match — same semantics as the server search: every word
+      // must appear somewhere across player/set/variant/year/number/sport/grade
+      // ("emeka egbuka donruss" = player + brand mixed in one query).
+      if (q) {
+        const hay = (c.player + ' ' + c.set + ' ' + c.variant + ' ' + (c.year || '') + ' ' + (c.num || '') + ' ' + c.sport + ' ' + c.grader + ' ' + c.grade).toLowerCase();
+        if (!q.split(/\s+/).filter(Boolean).every(t => hay.includes(t))) return false;
+      }
 
       // Hide cards with no player name AND no price AND no image
       if (!c.player || c.player === 'Unknown') return false;
