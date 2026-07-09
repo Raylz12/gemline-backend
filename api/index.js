@@ -2136,6 +2136,104 @@ app.get('/api/listings/for-card/:cardId', async (req, res) => {
   }
 });
 
+// ── Pre-sale Q&A on listings ─────────────────────────────────────
+// Buyers ask public questions on a listing; the seller answers. Q&A is
+// visible to everyone on the card detail (queried per card across listings).
+let _listingQReady = false;
+async function ensureListingQTable(pool) {
+  if (_listingQReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS listing_questions (
+      id BIGSERIAL PRIMARY KEY,
+      listing_id uuid NOT NULL,
+      asker_id uuid NOT NULL,
+      question TEXT NOT NULL,
+      answer TEXT,
+      answered_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_listing_q_listing ON listing_questions (listing_id, created_at DESC)').catch(() => {});
+  _listingQReady = true;
+}
+
+// Public: all Q&A for a card (across its listings), answered first-class.
+app.get('/api/cards/:cardId/questions', async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ questions: [] });
+    await ensureListingQTable(pool);
+    const { rows } = await pool.query(`
+      SELECT q.id, q.listing_id, q.question, q.answer, q.answered_at, q.created_at,
+             ua.handle AS asker_handle, us.handle AS seller_handle, l.seller_id, l.status AS listing_status
+      FROM listing_questions q
+      JOIN listings l ON l.id = q.listing_id
+      LEFT JOIN users ua ON ua.id = q.asker_id
+      LEFT JOIN users us ON us.id = l.seller_id
+      WHERE l.card_id = $1
+      ORDER BY q.created_at DESC LIMIT 50`, [req.params.cardId]);
+    res.json({ questions: rows });
+  } catch (e) { res.json({ questions: [] }); }
+});
+
+// Ask (auth, rate-limited, 500 chars). Notifies + emails the seller.
+app.post('/api/listings/:id/questions', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureListingQTable(pool);
+    const question = String(req.body?.question || '').trim().slice(0, 500);
+    if (question.length < 5) return res.status(400).json({ error: 'Question is too short' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    const { rows: [l] } = await pool.query(
+      `SELECT l.id, l.seller_id, l.status, c.player FROM listings l JOIN cards c ON c.id = l.card_id WHERE l.id = $1`,
+      [req.params.id]);
+    if (!l) return res.status(404).json({ error: 'Listing not found' });
+    if (l.status !== 'active') return res.status(400).json({ error: 'This listing is no longer active' });
+    if (l.seller_id === req.userId) return res.status(400).json({ error: 'You can\u2019t ask a question on your own listing' });
+    if (await isBlockedEitherWay(pool, req.userId, l.seller_id)) return res.status(403).json({ error: 'You can\u2019t interact with this seller' });
+    const { rows: [row] } = await pool.query(
+      'INSERT INTO listing_questions (listing_id, asker_id, question) VALUES ($1, $2, $3) RETURNING id, created_at',
+      [l.id, req.userId, question]);
+    await notify(pool, l.seller_id, 'listing_question', `New question on ${l.player}`,
+      question.slice(0, 140), { listingId: l.id, questionId: row.id });
+    const tpl = emailTpl.questionReceived({ player: l.player, question });
+    await emailUser(pool, l.seller_id, tpl.subject, tpl.html);
+    res.json({ ok: true, id: row.id });
+  } catch (e) {
+    console.error('listing question error:', e.message);
+    res.status(500).json({ error: 'Failed to post question' });
+  }
+});
+
+// Answer (seller only, 1000 chars). Notifies the asker.
+app.post('/api/questions/:id/answer', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    await ensureListingQTable(pool);
+    const answer = String(req.body?.answer || '').trim().slice(0, 1000);
+    if (!answer) return res.status(400).json({ error: 'Answer required' });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const { rows: [q] } = await pool.query(`
+      SELECT q.id, q.asker_id, q.answer AS existing, l.seller_id, l.card_id, c.player
+      FROM listing_questions q JOIN listings l ON l.id = q.listing_id JOIN cards c ON c.id = l.card_id
+      WHERE q.id = $1`, [id]);
+    if (!q) return res.status(404).json({ error: 'Question not found' });
+    if (q.seller_id !== req.userId) return res.status(403).json({ error: 'Only the seller can answer' });
+    await pool.query('UPDATE listing_questions SET answer = $1, answered_at = NOW() WHERE id = $2', [answer, id]);
+    await notify(pool, q.asker_id, 'question_answered', `The seller answered your question on ${q.player}`,
+      answer.slice(0, 140), { cardId: q.card_id, questionId: id });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('answer question error:', e.message);
+    res.status(500).json({ error: 'Failed to post answer' });
+  }
+});
+
 // ── Seller trust signals ─────────────────────────────────────────
 // Public per-seller stats: completed sales, avg ship time, dispute record.
 // Only surfaced when the seller has ≥1 completed sale (no zero-shaming).

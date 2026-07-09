@@ -9,6 +9,7 @@ import AuthModal from './AuthModal';
 import ProGate, { hasCapability } from './ProGate';
 import ReportModal from './ReportModal';
 import SellerTrust from './SellerTrust';
+import ListingQA from './ListingQA';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1103,6 +1104,9 @@ export default function CardDetail({ card: cardProp, onClose }) {
                 </div>
               )}
             </div>
+
+            {/* Pre-sale Q&A — public questions answered by the seller */}
+            <ListingQA cardId={c.id} listings={listings} onNeedAuth={() => setShowAuth(true)} />
 
             {/* Bid form */}
             {showBidForm && (
