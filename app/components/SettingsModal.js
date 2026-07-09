@@ -361,7 +361,7 @@ function ShowcaseSection({ user, authFetch }) {
               <div key={c.portfolioId || c.id} style={rowStyle(on)} onClick={() => toggleCard(c.id)}>
                 <span style={checkStyle(on)}>{on ? '✓' : ''}</span>
                 {c.thumbnail
-                  ? <img src={c.thumbnail} alt="" style={{ width: 26, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+                  ? <img src={c.thumbnail} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: 26, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
                   : <div style={{ width: 26, height: 36, borderRadius: 4, background: 'var(--panel-2)', flexShrink: 0 }} />}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.player}</div>

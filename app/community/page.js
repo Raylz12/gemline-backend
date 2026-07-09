@@ -659,7 +659,7 @@ export default function CommunityPage() {
               ) : trending.map((c, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < trending.length-1 ? '1px solid var(--line)' : 'none' }}>
                   <span style={{ width: 28, height: 38, borderRadius: 4, flexShrink: 0, overflow: 'hidden', background: 'var(--panel-2)', display: 'grid', placeItems: 'center', fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700, color: 'var(--muted)', border: '1px solid var(--line)' }}>
-                    {c.thumbnail ? <img src={c.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (c.player || '?').split(' ').map(w => w[0]).join('').slice(0, 2)}
+                    {c.thumbnail ? <img src={c.thumbnail} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (c.player || '?').split(' ').map(w => w[0]).join('').slice(0, 2)}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>

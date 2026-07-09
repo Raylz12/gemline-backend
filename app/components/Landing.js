@@ -95,7 +95,7 @@ function HeroStack({ cards, onOpen }) {
       <div className="nft-glow" style={{ background: up ? 'rgba(22,199,132,.5)' : 'rgba(239,68,68,.4)' }} />
       {behind.map((b, i) => (
         <div key={`b${i}`} className={`nft-back b${i + 1}`} aria-hidden="true">
-          {b.thumbnail && <img src={b.thumbnail} alt="" loading="lazy" />}
+          {b.thumbnail && <img src={b.thumbnail} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none'; }} />}
         </div>
       ))}
       <div className="nft-card"

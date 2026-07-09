@@ -335,7 +335,7 @@ export default function SellPage() {
                         color: 'var(--dim)', overflow: 'hidden', flexShrink: 0,
                       }}>
                         {(c.ebay_thumb || c.image_url) ? (
-                          <img src={c.ebay_thumb || c.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={c.ebay_thumb || c.image_url} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -368,7 +368,7 @@ export default function SellPage() {
                   display: 'grid', placeItems: 'center', overflow: 'hidden', flexShrink: 0,
                 }}>
                   {(selectedCard.ebay_thumb || selectedCard.image_url)
-                    ? <img src={selectedCard.ebay_thumb || selectedCard.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={selectedCard.ebay_thumb || selectedCard.image_url} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>{(selectedCard.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}</span>}
                 </div>
                 <div>
@@ -476,7 +476,7 @@ export default function SellPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10, marginBottom: 16 }}>
                 {photos.map((p, i) => (
                   <div key={i} style={{ position: 'relative', aspectRatio: '3/4', borderRadius: 8, overflow: 'hidden' }}>
-                    <img src={p} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={p} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <button onClick={() => setPhotos(prev => prev.filter((_, j) => j !== i))}
                       style={{
                         position: 'absolute', top: 4, right: 4, width: 22, height: 22,
@@ -528,7 +528,7 @@ export default function SellPage() {
                   display: 'grid', placeItems: 'center', overflow: 'hidden', flexShrink: 0,
                 }}>
                   {(photos[0] || selectedCard.ebay_thumb || selectedCard.image_url)
-                    ? <img src={photos[0] || selectedCard.ebay_thumb || selectedCard.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={photos[0] || selectedCard.ebay_thumb || selectedCard.image_url} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--dim)' }}>{(selectedCard.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}</span>}
                 </div>
                 <div>
@@ -610,7 +610,7 @@ export default function SellPage() {
               }}>
                 <div style={{ height: 140, background: 'var(--panel-2)', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                   {(l.ebay_thumb || l.image_url)
-                    ? <img src={l.ebay_thumb || l.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={l.ebay_thumb || l.image_url} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontFamily: 'var(--mono)', fontSize: 18, color: 'var(--dim)' }}>{(l.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}</span>}
                 </div>
                 <div style={{ padding: '12px 14px' }}>
