@@ -5,16 +5,12 @@ import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
 import Link from 'next/link';
 import { SkeletonList } from './Skeleton';
+import CardThumb from './CardThumb';
 
 function TradeCard({ card }) {
   return (
     <div className="trade-item">
-      <div className="mini" style={{
-        width: 32, height: 44, borderRadius: 5, flexShrink: 0,
-        background: card.thumbnail
-          ? `url(${card.thumbnail}) center/cover`
-          : 'linear-gradient(135deg, #2a2a2a, #555)',
-      }} />
+      <CardThumb className="mini" src={card.thumbnail} name={card.player} sport={card.sport} width={32} height={44} radius={5} fit="cover" />
       <div className="ti">
         {card.player}
         <small>{card.grader} {card.grade} {' '}{fmt(card.market)}</small>

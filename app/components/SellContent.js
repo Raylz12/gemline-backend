@@ -5,6 +5,7 @@ import { useCardStore } from './CardStore';
 import { fmt } from '../lib/data';
 import { toast } from '../lib/toast';
 import SignupTeaser from './SignupTeaser';
+import CardThumb from './CardThumb';
 
 const STEPS = ['Search', 'Price', 'Type', 'Photos', 'Review'];
 
@@ -250,15 +251,7 @@ export default function SellContent() {
                     }}
                     onMouseOver={e => e.currentTarget.style.background = 'var(--panel-2)'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
-                      <div style={{
-                        width: 44, height: 56, borderRadius: 6, background: 'var(--panel-2)',
-                        display: 'grid', placeItems: 'center', fontSize: 10, fontFamily: 'var(--mono)',
-                        color: 'var(--dim)', overflow: 'hidden', flexShrink: 0,
-                      }}>
-                        {(c.ebay_thumb || c.image_url) ? (
-                          <img src={c.ebay_thumb || c.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}
-                      </div>
+                      <CardThumb src={c.ebay_thumb || c.image_url} name={c.player} sport={c.sport} width={44} height={56} radius={6} fit="cover" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{c.player}</div>
                         <div style={{ color: 'var(--muted)', fontSize: 12 }}>
@@ -284,14 +277,7 @@ export default function SellContent() {
           {step === 1 && selectedCard && (
             <div className="sell-card-panel" style={{ background: 'var(--panel)', borderRadius: 'var(--r)', padding: 24 }}>
               <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                <div style={{
-                  width: 60, height: 80, borderRadius: 8, background: 'var(--panel-2)',
-                  display: 'grid', placeItems: 'center', overflow: 'hidden', flexShrink: 0,
-                }}>
-                  {(selectedCard.ebay_thumb || selectedCard.image_url)
-                    ? <img src={selectedCard.ebay_thumb || selectedCard.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>{(selectedCard.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}</span>}
-                </div>
+                <CardThumb src={selectedCard.ebay_thumb || selectedCard.image_url} name={selectedCard.player} sport={selectedCard.sport} width={60} height={80} radius={8} fit="cover" />
                 <div>
                   <h3 style={{ fontFamily: 'var(--disp)', fontSize: 16 }}>{selectedCard.player}</h3>
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}><span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${selectedCard.grader || 'RAW'} ${selectedCard.grade || ''}`.trim()}</span>{selectedCard.card_set}</div>
@@ -435,14 +421,7 @@ export default function SellContent() {
               <h3 style={{ fontFamily: 'var(--disp)', marginBottom: 16 }}>Review your listing</h3>
 
               <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                <div style={{
-                  width: 80, height: 110, borderRadius: 8, background: 'var(--panel-2)',
-                  display: 'grid', placeItems: 'center', overflow: 'hidden', flexShrink: 0,
-                }}>
-                  {(photos[0] || selectedCard.ebay_thumb || selectedCard.image_url)
-                    ? <img src={photos[0] || selectedCard.ebay_thumb || selectedCard.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--dim)' }}>{(selectedCard.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}</span>}
-                </div>
+                <CardThumb src={photos[0] || selectedCard.ebay_thumb || selectedCard.image_url} name={selectedCard.player} sport={selectedCard.sport} width={80} height={110} radius={8} fit="cover" />
                 <div>
                   <h4 style={{ fontFamily: 'var(--disp)', fontSize: 18 }}>{selectedCard.player}</h4>
                   <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>
@@ -540,11 +519,7 @@ export default function SellContent() {
                 background: 'var(--panel)', borderRadius: 'var(--r)', overflow: 'hidden',
                 border: '1px solid var(--line)',
               }}>
-                <div style={{ height: 140, background: 'var(--panel-2)', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
-                  {(l.ebay_thumb || l.image_url)
-                    ? <img src={l.ebay_thumb || l.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontFamily: 'var(--mono)', fontSize: 18, color: 'var(--dim)' }}>{(l.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}</span>}
-                </div>
+                <CardThumb src={l.ebay_thumb || l.image_url} name={l.player} sport={l.sport} width="100%" height={140} radius={0} fit="cover" style={{ width: '100%' }} />
                 <div style={{ padding: '12px 14px' }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{l.player}</div>
                   <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>

@@ -8,6 +8,7 @@ import AuthModal from './AuthModal';
 import SettingsModal from './SettingsModal';
 import CreditsModal from './CreditsModal';
 import CardDetail from './CardDetail';
+import CardThumb from './CardThumb';
 import { IconSettings, IconLogout, IconZap, IconTrophy, IconDollar, IconBell, IconGavel, IconCheck } from './Icons';
 
 
@@ -266,7 +267,7 @@ export default function Header() {
                 )}
                 {(searchResults.length > 0 ? searchResults : recentCards).map(c => (
                   <div key={c.id} className="search-result" onClick={() => { setSelectedCard(c); setSearchOpen(false); }}>
-                    {c.thumbnail && <img src={c.thumbnail} alt="" className="search-thumb" />}
+                    <CardThumb src={c.thumbnail} name={c.player} sport={c.sport} size={36} radius={6} className="search-thumb" />
                     <div className="search-info">
                       <div className="search-name">{c.player}{c.gradeCount > 1 ? <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400, marginLeft: 6 }}>{c.gradeCount} grades</span> : null}</div>
                       <div className="search-meta"><span className="mchip mchip-grade" style={{ marginRight: 6 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{[String(c.set || '').startsWith(String(c.year)) ? null : c.year, c.set].filter(Boolean).join(' ')}</div>

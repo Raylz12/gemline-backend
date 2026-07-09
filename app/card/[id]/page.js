@@ -127,6 +127,7 @@ export default async function CardPage({ params }) {
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           {img && (
             <img src={img} alt={name}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
               style={{ width: 220, maxWidth: '40vw', borderRadius: 12, border: '1px solid var(--line)', objectFit: 'cover' }} />
           )}
           <div style={{ flex: 1, minWidth: 260 }}>

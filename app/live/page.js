@@ -492,7 +492,7 @@ export default function LivePage() {
                   {/* Card Image */}
                   <div className="live-auction-img-wrap">
                     {(a.ebay_thumb || a.image_url) ? (
-                      <img src={a.ebay_thumb || a.image_url} alt="" className="live-auction-img" />
+                      <img src={a.ebay_thumb || a.image_url} alt="" className="live-auction-img" onError={e => { e.currentTarget.style.display = 'none'; }} />
                     ) : (
                       <div className="live-auction-img-fallback">
                         {(a.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}
@@ -591,7 +591,7 @@ export default function LivePage() {
                   <div key={a.id} className="live-auction-card live-auction-card--upcoming">
                     <div className="live-auction-img-wrap">
                       {(a.ebay_thumb || a.image_url) ? (
-                        <img src={a.ebay_thumb || a.image_url} alt="" className="live-auction-img" style={{ opacity: 0.7 }} />
+                        <img src={a.ebay_thumb || a.image_url} alt="" className="live-auction-img" style={{ opacity: 0.7 }} onError={e => { e.currentTarget.style.display = 'none'; }} />
                       ) : (
                         <div className="live-auction-img-fallback" style={{ opacity: 0.5 }}>
                           {(a.player || '').split(' ').map(w => w[0]).join('').slice(0, 3)}

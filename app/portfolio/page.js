@@ -7,6 +7,7 @@ import { SkeletonList } from '../components/Skeleton';
 import CardDetail from '../components/CardDetail';
 import CameraScanner from '../components/CameraScanner';
 import SignupTeaser from '../components/SignupTeaser';
+import CardThumb from '../components/CardThumb';
 import PreviewGate, { SamplePortfolio } from '../components/PreviewGate';
 import TradesContent from '../components/TradesContent';
 import SellContent from '../components/SellContent';
@@ -459,12 +460,7 @@ export default function PortfolioPage() {
             }
           }).slice(0, showCount).map(item => (
             <div key={item.id} className="hold" style={{ cursor: 'default', position: 'relative' }}>
-              <div className="mini" style={{
-                width: 38, height: 52, borderRadius: 6, flexShrink: 0,
-                background: item.imageUrl
-                  ? `url(${item.imageUrl}) center/cover`
-                  : 'linear-gradient(135deg, var(--panel-2), var(--line))',
-              }} />
+              <CardThumb className="mini" src={item.imageUrl} name={item.player} sport={item.sport} width={38} height={52} radius={6} fit="cover" />
               <div className="nm" style={{ flex: 1, minWidth: 0 }}>
                 {item.player}
                 <small style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.set}</span><span className="mchip mchip-grade" style={{ flexShrink: 0 }}>{`${item.grader || 'RAW'} ${item.grade || ''}`.trim()}</span></small>
@@ -658,12 +654,7 @@ export default function PortfolioPage() {
                       onMouseLeave={e => { if (!open) e.currentTarget.parentElement.style.background = 'transparent'; }}
                       onClick={() => setExpandedFam(open ? null : famKey)}
                     >
-                      <div style={{
-                        width: 36, height: 48, borderRadius: 6, flexShrink: 0,
-                        background: fam.ebay_thumb || fam.image_url
-                          ? `url(${fam.ebay_thumb || fam.image_url}) center/cover`
-                          : 'linear-gradient(135deg, var(--panel-2), var(--line))',
-                      }} />
+                      <CardThumb src={fam.ebay_thumb || fam.image_url} name={fam.player} sport={fam.sport} width={36} height={48} radius={6} fit="cover" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{fam.player}</div>
                         <div style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
