@@ -9,6 +9,56 @@ import CardThumb from './CardThumb';
 
 const STEPS = ['Search', 'Price', 'Type', 'Photos', 'Review'];
 
+// Shop/dealer accounts: subscription status + subscribe/manage. Hidden for individuals.
+function ShopSubscriptionBanner({ token }) {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/shop/subscription', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(setInfo).catch(() => {});
+  }, [token]);
+  if (!info || !info.isShop) return null;
+  const go = async (path) => {
+    setBusy(true);
+    try {
+      const res = await fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const d = await res.json();
+      if (d.url) window.location.href = d.url;
+      else { toast(d.error || 'Something went wrong', true); setBusy(false); }
+    } catch { toast('Something went wrong', true); setBusy(false); }
+  };
+  const active = info.active;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+      background: active ? 'var(--panel)' : 'var(--gold-soft, rgba(232,179,57,.08))',
+      border: `1px solid ${active ? 'var(--line)' : 'var(--gold)'}`,
+      borderRadius: 12, padding: '14px 16px', marginBottom: 20,
+    }}>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--txt)' }}>
+          Gemline Shop {active ? (info.inGrace ? '— payment past due' : '— active') : 'subscription'}
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 3, lineHeight: 1.5 }}>
+          {active
+            ? (info.inGrace
+                ? 'Your last payment failed — update your card to keep listing new cards.'
+                : 'Your shop can list unlimited cards. $9.99/mo.')
+            : 'Shop accounts need an active $9.99/mo subscription to list new cards. Existing listings stay live.'}
+        </div>
+      </div>
+      {active ? (
+        <button className="chip" disabled={busy} onClick={() => go('/api/shop/subscription/portal')}
+          style={{ padding: '9px 16px' }}>{busy ? '…' : 'Manage billing'}</button>
+      ) : (
+        <button className="chip on" disabled={busy} onClick={() => go('/api/shop/subscription/checkout')}
+          style={{ padding: '9px 18px', fontWeight: 700 }}>{busy ? '…' : 'Subscribe — $9.99/mo'}</button>
+      )}
+    </div>
+  );
+}
+
 export default function SellContent() {
   const { token, user } = useAuth();
   const { cards } = useCardStore();
@@ -213,6 +263,8 @@ export default function SellContent() {
       <div className="eyebrow">Your Storefront</div>
       <h1 className="page">Sell your cards.</h1>
       <p className="sub">List cards from the catalog, set your price, and start selling. Every listing is backed by real market data.</p>
+
+      <ShopSubscriptionBanner token={token} />
 
       {/* Tabs */}
       <div className="sell-tabs" style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
