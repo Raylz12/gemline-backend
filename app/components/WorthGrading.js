@@ -143,7 +143,7 @@ export default function WorthGrading({ onSelect }) {
                     {c.rookie ? <span style={{ fontSize: 8, background: '#E8B339', color: '#000', borderRadius: 2, padding: '1px 3px', marginLeft: 4 }}>RC</span> : null}
                   </div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {[c.year, c.set, c.variant, c.number && `#${c.number}`].filter(Boolean).join(' · ')}
+                    {[(c.year && !String(c.set || '').startsWith(String(c.year))) ? c.year : null, c.set, c.variant, c.number && `#${c.number}`].filter(Boolean).join(' · ')}
                   </div>
                 </div>
               </div>
