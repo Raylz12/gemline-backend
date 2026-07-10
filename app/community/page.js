@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../components/AuthContext';
 import AuthModal from '../components/AuthModal';
@@ -252,28 +252,113 @@ const TYPE_META = {
 const SPORT_EMOJI = { basketball: '🏀', baseball: '⚾', football: '🏈', hockey: '🏒', soccer: '⚽', pokemon: '🃏', 'trading card': '🃏' };
 function sportEmoji(sport) { return SPORT_EMOJI[(sport||'').toLowerCase()] || '🃏'; }
 
-function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) {
+function CommentSection({ post, authFetch, token, onRequireAuth, onCountChange, tick }) {
+  const [open, setOpen] = useState(false);
+  const [comments, setComments] = useState(null); // null = not loaded
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = token ? await authFetch(`/api/posts/${post.id}/comments`) : await fetch(`/api/posts/${post.id}/comments`);
+      const d = await res.json();
+      setComments(d.comments || []);
+    } catch { setComments([]); }
+  }, [post.id, token, authFetch]);
+
+  const toggle = () => {
+    if (!open && comments === null) load();
+    setOpen(o => !o);
+  };
+
+  const submit = async () => {
+    if (!token) { onRequireAuth?.(); return; }
+    if (!draft.trim() || posting) return;
+    setPosting(true);
+    try {
+      const res = await authFetch(`/api/posts/${post.id}/comments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: draft.trim() }),
+      });
+      const d = await res.json();
+      if (res.ok && d.comment) {
+        setComments(prev => [...(prev || []), d.comment]);
+        setDraft('');
+        onCountChange?.(d.commentCount);
+      }
+    } catch (_) {}
+    finally { setPosting(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+        fontFamily: 'var(--mono)', fontSize: 12, color: open ? 'var(--gold)' : 'var(--muted)', cursor: 'pointer', minHeight: 32, padding: '4px 6px 4px 0' }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg> {post._commentCount ?? post.comments ?? 0}
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+          {comments === null ? (
+            <div style={{ fontSize: 12, color: 'var(--dim)' }}>Loading…</div>
+          ) : comments.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>No comments yet — be the first.</div>
+          ) : comments.map(c => (
+            <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <Link href={`/user/${c.user?.handle}`} style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                background: 'linear-gradient(135deg,#16c784,#0d9463)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 11, color: '#000', textDecoration: 'none' }}>
+                {(c.user?.handle || 'U')[0].toUpperCase()}
+              </Link>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12 }}><Link href={`/user/${c.user?.handle}`} style={{ fontWeight: 600, color: 'var(--txt)', textDecoration: 'none' }}>@{c.user?.handle}</Link>
+                  <span style={{ color: 'var(--dim)', marginLeft: 6, fontFamily: 'var(--mono)', fontSize: 10 }}>{timeAgo(c.createdAt)}</span></div>
+                <div style={{ fontSize: 13, color: 'var(--txt)', lineHeight: 1.45, marginTop: 1 }}>{c.body}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <input value={draft} onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+              onFocus={() => { if (!token) onRequireAuth?.(); }}
+              placeholder={token ? 'Add a comment…' : 'Sign in to comment'} maxLength={300}
+              style={{ flex: 1, background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 8,
+                padding: '8px 10px', color: 'var(--txt)', fontSize: 13, outline: 'none' }} />
+            <button onClick={submit} disabled={posting || !draft.trim()} style={{ padding: '8px 14px', borderRadius: 8,
+              fontSize: 12, fontWeight: 700, background: 'var(--gold)', border: 'none', color: '#000',
+              cursor: posting || !draft.trim() ? 'not-allowed' : 'pointer', opacity: posting || !draft.trim() ? 0.6 : 1 }}>Send</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle, tick }) {
   const [showReport, setShowReport] = useState(false);
   const [liked, setLiked] = useState(post.userLiked || false);
   const [likeCount, setLikeCount] = useState(post.likes || 0);
+  const [commentCount, setCommentCount] = useState(post.comments || 0);
   const [liking, setLiking] = useState(false);
   const meta = TYPE_META[post.type] || TYPE_META.general;
   const handle = post.user?.handle || 'user';
   const initial = handle[0]?.toUpperCase() || 'U';
 
   const toggleLike = async () => {
-    if (!token) { onRequireAuth?.(); return; } // visitors: sign-in prompt, not a dead button
+    if (!token) { onRequireAuth?.(); return; }
     if (liking) return;
+    // Optimistic
+    const prevLiked = liked, prevCount = likeCount;
+    setLiked(!prevLiked); setLikeCount(prevCount + (prevLiked ? -1 : 1));
     setLiking(true);
     try {
       const res = await authFetch(`/api/posts/${post.id}/like`, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
-        setLiked(data.liked);
-        setLikeCount(data.likes);
+        setLiked(data.liked); setLikeCount(data.likes);
         if (onLiked) onLiked(post.id, data.liked);
-      }
-    } catch (_) {}
+      } else { setLiked(prevLiked); setLikeCount(prevCount); }
+    } catch (_) { setLiked(prevLiked); setLikeCount(prevCount); }
     finally { setLiking(false); }
   };
 
@@ -282,7 +367,7 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
       background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '16px 18px',
       marginBottom: 12, transition: '.15s',
     }}>
-      {/* Header — avatar and handle both navigate to the public profile */}
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <Link href={`/user/${handle}`} aria-label={`@${handle} profile`} style={{
           width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
@@ -302,15 +387,15 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
         }}><span className="emoji">{meta.icon}</span> {meta.label}</div>
       </div>
 
-      {/* Post body */}
+      {/* Body */}
       <p style={{ fontSize: 13, lineHeight: 1.55, marginBottom: post.card ? 12 : 14, color: 'var(--txt)' }}>
         {post.body}
       </p>
 
       {/* Card attachment */}
       {post.card && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
+        <Link href={`/card/${post.card.id}`} style={{
+          display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit',
           background: 'var(--panel-2)', border: '1px solid var(--line)',
           borderRadius: 10, padding: '10px 14px', marginBottom: 14,
         }}>
@@ -326,28 +411,33 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
               {post.card.value > 0 && <span style={{ color: 'var(--gold)' }}>${post.card.value.toFixed(0)}</span>}
             </div>
           </div>
-        </div>
+        </Link>
       )}
 
-      {/* Actions — auto-events are read-only (no like/report; synthetic ids) */}
+      {/* Actions — auto-events are read-only (synthetic ids) */}
       {!post.activity && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <button
           onClick={toggleLike}
           style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
             fontFamily: 'var(--mono)', fontSize: 12, color: liked ? 'var(--gold)' : 'var(--muted)',
-            cursor: 'pointer', opacity: liking ? 0.6 : 1, minHeight: 32, padding: '4px 6px 4px 0' }}>
+            cursor: 'pointer', opacity: liking ? 0.6 : 1, minHeight: 32, padding: '4px 6px 4px 0',
+            transition: 'transform .12s', transform: liked ? 'scale(1.02)' : 'none' }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
             <path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .9-4 2-1-1.1-2.3-2-4-2A5.5 5.5 0 0 0 3 8.5c0 2.3 1.5 4 3 5.5l6 6Z" />
           </svg> {likeCount}
         </button>
+        <div style={{ flex: 1 }}>
+          <CommentSection post={{ ...post, _commentCount: commentCount }} authFetch={authFetch} token={token}
+            onRequireAuth={onRequireAuth} onCountChange={setCommentCount} tick={tick} />
+        </div>
         {token && meHandle !== handle && (
           <button
             onClick={() => setShowReport(true)}
             title="Report this post"
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+            style={{ background: 'none', border: 'none', cursor: 'pointer',
               fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)', padding: '4px 6px', minHeight: 32 }}>
-            ⚑ Report
+            ⚑
           </button>
         )}
       </div>
@@ -359,10 +449,20 @@ function FeedPost({ post, authFetch, token, onLiked, onRequireAuth, meHandle }) 
   );
 }
 
+const FEED_TABS = [
+  { key: 'foryou', label: 'For You' },
+  { key: 'following', label: 'Following' },
+  { key: 'latest', label: 'Latest' },
+];
+
 function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState('');
   const [postType, setPostType] = useState('general');
+  const [attachCard, setAttachCard] = useState(null);
+  const [cardSearch, setCardSearch] = useState('');
+  const [cardResults, setCardResults] = useState([]);
+  const [feedTab, setFeedTab] = useState('foryou');
   const [posts, setPosts] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -370,26 +470,74 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState('');
+  const [newCount, setNewCount] = useState(0);
+  const [tick, setTick] = useState(0); // drives relative-timestamp refresh
+  const sentinel = useRef(null);
+  const newestTs = useRef(null);
 
-  const loadFeed = useCallback(async (p = 1) => {
+  // Relative timestamps refresh every 30s
+  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 30000); return () => clearInterval(t); }, []);
+
+  const loadFeed = useCallback(async (p = 1, tab = feedTab) => {
     if (p === 1) setLoading(true); else setLoadingMore(true);
     try {
-      // Signed-in: send the token so the server can filter blocked users out of the feed.
-      const res = token
-        ? await authFetch(`/api/posts/feed?page=${p}`)
-        : await fetch(`/api/posts/feed?page=${p}`);
+      const url = `/api/posts/feed?page=${p}&tab=${tab}`;
+      const res = token ? await authFetch(url) : await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        if (p === 1) setPosts(data.posts || []);
-        else setPosts(prev => [...prev, ...(data.posts || [])]);
+        const incoming = data.posts || [];
+        if (p === 1) {
+          setPosts(incoming);
+          setNewCount(0);
+          const realPosts = incoming.filter(x => !x.activity);
+          newestTs.current = realPosts.length ? realPosts[0].createdAt : new Date().toISOString();
+        } else setPosts(prev => [...prev, ...incoming]);
         setHasMore(data.hasMore || false);
         setPage(p);
       }
     } catch (_) {}
     finally { setLoading(false); setLoadingMore(false); }
-  }, [token, authFetch]);
+  }, [token, authFetch, feedTab]);
 
-  useEffect(() => { loadFeed(1); }, [loadFeed]);
+  useEffect(() => { loadFeed(1, feedTab); }, [feedTab]);
+
+  // Infinite scroll
+  useEffect(() => {
+    if (!sentinel.current || !hasMore || loading) return;
+    const io = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !loadingMore) loadFeed(page + 1, feedTab);
+    }, { rootMargin: '400px' });
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [hasMore, loading, loadingMore, page, feedTab, loadFeed]);
+
+  // "New posts" poll every 45s (only on For You / Latest)
+  useEffect(() => {
+    if (feedTab === 'following') return;
+    const check = async () => {
+      if (!newestTs.current) return;
+      try {
+        const res = await fetch(`/api/posts/since?ts=${encodeURIComponent(newestTs.current)}`);
+        const d = await res.json();
+        if (d.count > 0) setNewCount(d.count);
+      } catch (_) {}
+    };
+    const t = setInterval(check, 45000);
+    return () => clearInterval(t);
+  }, [feedTab]);
+
+  // Card typeahead for composer attachment
+  useEffect(() => {
+    if (!cardSearch || cardSearch.length < 2) { setCardResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(cardSearch)}`);
+        const d = await res.json();
+        setCardResults((d.results || d.families || []).slice(0, 5));
+      } catch { setCardResults([]); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [cardSearch]);
 
   const submitPost = async () => {
     if (!draft.trim() || !token) return;
@@ -398,13 +546,23 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
       const res = await authFetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: draft.trim(), type: postType }),
+        body: JSON.stringify({ body: draft.trim(), type: postType, cardId: attachCard?.id || null }),
       });
       const data = await res.json();
       if (!res.ok) { setPostError(data.error || 'Failed to post'); }
       else {
-        setPosts(prev => [data.post, ...prev]);
-        setDraft(''); setComposing(false); setPostType('general');
+        const newPost = {
+          ...data.post,
+          createdAt: data.post.created_at || data.post.createdAt || new Date().toISOString(),
+          likes: 0, comments: 0, userLiked: false,
+          card: attachCard ? { id: attachCard.id, player: attachCard.player,
+            grader: attachCard.grader, grade: attachCard.grade,
+            value: Number(attachCard.catalog_price) || 0, sport: attachCard.sport,
+            thumbnail: attachCard.ebay_thumb || attachCard.image_url || null } : null,
+        };
+        setPosts(prev => [newPost, ...prev]);
+        newestTs.current = newPost.createdAt;
+        setDraft(''); setComposing(false); setPostType('general'); setAttachCard(null); setCardSearch('');
       }
     } catch (e) { setPostError(e.message); }
     finally { setPosting(false); }
@@ -412,7 +570,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
 
   return (
     <div style={{ marginBottom: 28 }}>
-      {/* Post Composer */}
+      {/* Composer */}
       <div className="cf-composer" style={{
         background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12,
         padding: '14px 16px', marginBottom: 14,
@@ -441,6 +599,33 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
             />
             {composing && user && (
               <div style={{ marginTop: 8 }}>
+                {/* Attached card chip */}
+                {attachCard && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 8, padding: '6px 10px', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{attachCard.player}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{attachCard.card_set || attachCard.year}</span>
+                    <button onClick={() => setAttachCard(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                  </div>
+                )}
+                {/* Card search */}
+                {!attachCard && (
+                  <div style={{ position: 'relative', marginBottom: 8 }}>
+                    <input value={cardSearch} onChange={e => setCardSearch(e.target.value)}
+                      placeholder="🃏 Attach a card (search player/set)…"
+                      style={{ width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px', color: 'var(--txt)', fontSize: 12, outline: 'none' }} />
+                    {cardResults.length > 0 && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 4, overflow: 'hidden' }}>
+                        {cardResults.map(c => (
+                          <button key={c.id} onClick={() => { setAttachCard(c); setCardResults([]); setCardSearch(''); }}
+                            style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center', padding: '8px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left', color: 'var(--txt)' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600 }}>{c.player}</span>
+                            <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{c.card_set || c.year}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                   {['general','pull','trade','sale'].map(t => (
                     <button key={t} onClick={() => setPostType(t)} style={{
@@ -453,7 +638,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
                 </div>
                 {postError && <div style={{ color: 'var(--down)', fontSize: 12, marginBottom: 6 }}>{postError}</div>}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button onClick={() => { setComposing(false); setDraft(''); setPostError(''); }} style={{
+                  <button onClick={() => { setComposing(false); setDraft(''); setPostError(''); setAttachCard(null); setCardSearch(''); }} style={{
                     padding: '7px 16px', borderRadius: 8, fontSize: 12, background: 'none',
                     border: '1px solid var(--line)', color: 'var(--muted)', cursor: 'pointer',
                   }}>Cancel</button>
@@ -470,6 +655,25 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
         </div>
       </div>
 
+      {/* Feed sub-tabs */}
+      <div className="seg" style={{ marginBottom: 12 }}>
+        {FEED_TABS.map(t => (
+          <button key={t.key} className={feedTab === t.key ? 'on' : ''}
+            onClick={() => { if (t.key === 'following' && !user) { onRequireAuth?.(); return; } setFeedTab(t.key); }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* New posts pill */}
+      {newCount > 0 && (
+        <button onClick={() => loadFeed(1, feedTab)} style={{
+          display: 'block', margin: '0 auto 12px', padding: '8px 18px', borderRadius: 20,
+          background: 'var(--gold)', color: '#04140c', border: 'none', fontWeight: 700, fontSize: 12,
+          cursor: 'pointer', boxShadow: '0 4px 16px rgba(22,199,132,.35)',
+        }}>↑ {newCount} new post{newCount > 1 ? 's' : ''}</button>
+      )}
+
       {/* Feed */}
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -484,30 +688,34 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
           </div>
-          <div style={{ fontFamily: 'var(--disp)', fontWeight: 800, fontSize: 20, marginBottom: 6, color: 'var(--txt)' }}>The feed starts with you</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 300, margin: '0 auto 18px', lineHeight: 1.5 }}>
-            Be the first to post your latest pickup — a new slab, a trade win, or a card you&apos;re hunting.
+          <div style={{ fontFamily: 'var(--disp)', fontWeight: 800, fontSize: 20, marginBottom: 6, color: 'var(--txt)' }}>
+            {feedTab === 'following' ? 'Follow collectors to fill this feed' : 'The feed starts with you'}
           </div>
-          <button
-            onClick={() => {
-              const ta = document.querySelector('.cf-composer textarea');
-              if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-            }}
-            style={{ padding: '11px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: 'var(--gold)', color: '#04140c', border: 'none', cursor: 'pointer' }}>
-            Post your latest pickup
-          </button>
+          <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 300, margin: '0 auto 18px', lineHeight: 1.5 }}>
+            {feedTab === 'following'
+              ? 'When people you follow post pulls, trades, and finds, they show up here.'
+              : 'Be the first to post your latest pickup — a new slab, a trade win, or a card you\u2019re hunting.'}
+          </div>
+          {feedTab !== 'following' && (
+            <button
+              onClick={() => {
+                const ta = document.querySelector('.cf-composer textarea');
+                if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+              }}
+              style={{ padding: '11px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: 'var(--gold)', color: '#04140c', border: 'none', cursor: 'pointer' }}>
+              Post your latest pickup
+            </button>
+          )}
         </div>
       ) : (
         <>
           {posts.map(p => (
-            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} onRequireAuth={onRequireAuth} meHandle={user?.handle} />
+            <FeedPost key={p.id} post={p} authFetch={authFetch} token={token} onRequireAuth={onRequireAuth} meHandle={user?.handle} tick={tick} />
           ))}
-          {hasMore && (
-            <button onClick={() => loadFeed(page + 1)} disabled={loadingMore} style={{
-              width: '100%', padding: '12px', borderRadius: 10, background: 'var(--panel)',
-              border: '1px solid var(--line)', color: 'var(--muted)', cursor: loadingMore ? 'wait' : 'pointer',
-              fontFamily: 'var(--mono)', fontSize: 12, marginTop: 4,
-            }}>{loadingMore ? 'Loading…' : 'Load more posts'}</button>
+          <div ref={sentinel} style={{ height: 1 }} />
+          {loadingMore && <div style={{ textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12, padding: 12 }}>Loading…</div>}
+          {!hasMore && posts.length > 4 && (
+            <div style={{ textAlign: 'center', color: 'var(--dim)', fontSize: 12, padding: '16px 0' }}>You&apos;re all caught up.</div>
           )}
         </>
       )}
@@ -577,15 +785,23 @@ export default function CommunityPage() {
   const raw = searchQuery ? searchResults : (tab === 'discover' ? suggested : tab === 'following' ? myFollowing : myFollowers);
   const displayUsers = user ? raw.filter(u => u.id !== user.id) : raw;
 
-  // Live trending from the market heatmap (top validated gainers)
+  // Live trending from the market heatmap (top validated gainers). Re-polls
+  // every 5 min so repeat visits see the rotated set; shows "updated Xm ago".
   const [trending, setTrending] = useState([]);
+  const [trendingAt, setTrendingAt] = useState(null);
   const [liveStats, setLiveStats] = useState(null);
+  const [, setTrendTick] = useState(0);
   useEffect(() => {
-    fetch('/api/market/heatmap').then(r => r.json()).then(d => {
-      const rows = (d.cards || []).filter(c => Number(c.gain_7d) > 0).slice(0, 4);
+    const load = () => fetch('/api/market/heatmap?sort=movers').then(r => r.json()).then(d => {
+      const rows = (d.cards || []).filter(c => Number(c.gain_7d) > 0).slice(0, 5);
       setTrending(rows);
+      setTrendingAt(d.updatedAt || new Date().toISOString());
     }).catch(() => {});
+    load();
+    const poll = setInterval(load, 5 * 60 * 1000);
+    const tick = setInterval(() => setTrendTick(x => x + 1), 30000);
     fetch('/api/stats/live').then(r => r.json()).then(setLiveStats).catch(() => {});
+    return () => { clearInterval(poll); clearInterval(tick); };
   }, []);
 
   return (
@@ -650,10 +866,11 @@ export default function CommunityPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 96 }}>
             {/* Trending now — live market data */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 14, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                 Trending Now
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--up)', boxShadow: '0 0 6px var(--up)', display: 'inline-block' }} />
+                <span className="lp-live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--up)', boxShadow: '0 0 6px var(--up)', display: 'inline-block' }} />
               </div>
+              {trendingAt && <div style={{ fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--mono)', marginBottom: 10 }}>updated {timeAgo(trendingAt)}</div>}
               {trending.length === 0 ? (
                 <div style={{ fontSize: 12, color: 'var(--dim)', padding: '8px 0' }}>Loading market data…</div>
               ) : trending.map((c, i) => (

@@ -4877,7 +4877,25 @@ app.get('/api/users/:userId/is-following', optionalAuth, async (req, res) => {
 
 // ── Community Posts ───────────────────────────────────────────────────────────
 
-// GET /api/posts/feed — paginated feed (20/page), JOIN with users for handle/avatar
+// Comments live in post_comments (lazy-created). Counts ride along on the feed.
+let _communityTablesReady = false;
+async function ensureCommunityTables(pool) {
+  if (_communityTablesReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS post_comments (
+      id BIGSERIAL PRIMARY KEY,
+      post_id INTEGER NOT NULL,
+      user_id uuid NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments (post_id, created_at)').catch(() => {});
+  _communityTablesReady = true;
+}
+
+// GET /api/posts/feed — paginated feed (20/page), JOIN with users for handle/avatar.
+// tab=foryou (default: posts + show-floor events) | following (people you follow)
+// | latest (pure posts, newest first).
 app.get('/api/posts/feed', optionalAuth, async (req, res) => {
   try {
     const r = await getRepo();
@@ -4886,25 +4904,38 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = 20;
     const offset = (page - 1) * limit;
+    const tab = ['foryou', 'following', 'latest'].includes(req.query.tab) ? req.query.tab : 'foryou';
     if (req.userId) await ensureTsTables(pool);
+    await ensureCommunityTables(pool);
+    if (tab === 'following' && !req.userId) return res.json({ posts: [], hasMore: false, page, needsAuth: true });
+
+    const params = [limit + 1, offset];
+    const conds = [];
+    if (req.userId) {
+      params.push(req.userId); // $3
+      conds.push(`NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.blocker_id = $3 AND b.blocked_id = p.user_id) OR (b.blocker_id = p.user_id AND b.blocked_id = $3))`);
+      if (tab === 'following') conds.push(`p.user_id IN (SELECT following_id FROM follows WHERE follower_id = $3)`);
+    }
     const { rows } = await pool.query(`
       SELECT p.id, p.type, p.body, p.likes, p.created_at, p.card_id,
              u.id as user_id, u.handle, u.avatar_url,
              c.player, c.grader, c.grade, c.catalog_price, c.sport, c.ebay_thumb, c.image_url,
+             (SELECT COUNT(*)::int FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
              ${req.userId ? `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $3) as user_liked` : `false as user_liked`}
       FROM posts p
       JOIN users u ON u.id = p.user_id
       LEFT JOIN cards c ON c.id = p.card_id
-      ${req.userId ? `WHERE NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.blocker_id = $3 AND b.blocked_id = p.user_id) OR (b.blocker_id = p.user_id AND b.blocked_id = $3))` : ''}
+      ${conds.length ? `WHERE ${conds.join(' AND ')}` : ''}
       ORDER BY p.created_at DESC
       LIMIT $1 OFFSET $2
-    `, req.userId ? [limit + 1, offset, req.userId] : [limit + 1, offset]);
+    `, params);
     const hasMore = rows.length > limit;
     const posts = rows.slice(0, limit).map(p => ({
       id: p.id,
       type: p.type,
       body: p.body,
       likes: p.likes,
+      comments: Number(p.comment_count) || 0,
       userLiked: p.user_liked,
       createdAt: p.created_at,
       user: { id: p.user_id, handle: p.handle, avatarUrl: p.avatar_url },
@@ -4915,11 +4946,11 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
       } : null,
     }));
 
-    // ── Show-floor auto-events (page 1 only) ──
+    // ── Show-floor auto-events (For You page 1 only) ──
     // The feed should never look dead: synthesize activity items from real
     // marketplace events (new listings, sales, new members) — read-only, no
     // rows written, test accounts filtered. Rendered read-only client-side.
-    if (page === 1) {
+    if (page === 1 && tab === 'foryou') {
       const notTest = `u.handle NOT ILIKE 'queefus%' AND u.handle NOT ILIKE '%test%'`;
       const [lst, sold, joined] = await Promise.allSettled([
         pool.query(`
@@ -5023,6 +5054,73 @@ app.post('/api/posts/:id/like', requireAuth, async (req, res) => {
     const { rows: [p] } = await pool.query('SELECT likes FROM posts WHERE id = $1', [postId]);
     res.json({ liked, likes: p?.likes || 0 });
   } catch (e) { console.error('posts/like:', e.message); res.status(500).json({ error: 'Failed to toggle like' }); }
+});
+
+// GET /api/posts/since?ts=<iso> — count posts newer than ts (drives the
+// "N new posts" pill without pulling the whole feed). Cheap COUNT, no cache.
+app.get('/api/posts/since', optionalAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ count: 0 });
+    const ts = req.query.ts ? new Date(req.query.ts) : null;
+    if (!ts || isNaN(ts.getTime())) return res.json({ count: 0 });
+    const { rows: [x] } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM posts WHERE created_at > $1${req.userId ? ' AND user_id <> $2' : ''}`,
+      req.userId ? [ts.toISOString(), req.userId] : [ts.toISOString()]);
+    res.json({ count: Number(x.n) || 0 });
+  } catch (e) { res.json({ count: 0 }); }
+});
+
+// GET /api/posts/:id/comments — newest-last, 100 max
+app.get('/api/posts/:id/comments', optionalAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ comments: [] });
+    await ensureCommunityTables(pool);
+    const postId = parseInt(req.params.id);
+    if (!postId) return res.json({ comments: [] });
+    const { rows } = await pool.query(`
+      SELECT pc.id, pc.body, pc.created_at, u.id AS user_id, u.handle, u.avatar_url
+      FROM post_comments pc JOIN users u ON u.id = pc.user_id
+      WHERE pc.post_id = $1
+      ${req.userId ? 'AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = pc.user_id) OR (b.blocker_id = pc.user_id AND b.blocked_id = $2))' : ''}
+      ORDER BY pc.created_at ASC LIMIT 100
+    `, req.userId ? [postId, req.userId] : [postId]);
+    res.json({ comments: rows.map(c => ({
+      id: c.id, body: c.body, createdAt: c.created_at,
+      user: { id: c.user_id, handle: c.handle, avatarUrl: c.avatar_url },
+    })) });
+  } catch (e) { console.error('posts/comments:', e.message); res.json({ comments: [] }); }
+});
+
+// POST /api/posts/:id/comments — add a comment (auth required)
+app.post('/api/posts/:id/comments', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'community_posts'))) return res.status(503).json({ error: 'Commenting is temporarily disabled' });
+    await ensureCommunityTables(pool);
+    const postId = parseInt(req.params.id);
+    if (!postId) return res.status(400).json({ error: 'Invalid post id' });
+    const body = (req.body?.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Comment body required' });
+    if (body.length > 300) return res.status(400).json({ error: 'Comment too long (max 300 chars)' });
+    const { rows: [exists] } = await pool.query('SELECT 1 FROM posts WHERE id = $1', [postId]);
+    if (!exists) return res.status(404).json({ error: 'Post not found' });
+    const { rows: [c] } = await pool.query(
+      'INSERT INTO post_comments (post_id, user_id, body) VALUES ($1, $2, $3) RETURNING id, created_at',
+      [postId, req.userId, body]);
+    const { rows: [user] } = await pool.query('SELECT handle, avatar_url FROM users WHERE id = $1', [req.userId]);
+    const { rows: [cnt] } = await pool.query('SELECT COUNT(*)::int AS n FROM post_comments WHERE post_id = $1', [postId]);
+    res.json({
+      comment: { id: c.id, body, createdAt: c.created_at, user: { id: req.userId, handle: user?.handle, avatarUrl: user?.avatar_url } },
+      commentCount: Number(cnt.n) || 0,
+    });
+  } catch (e) { console.error('posts/comment-create:', e.message); res.status(500).json({ error: 'Failed to comment' }); }
 });
 
 // ── Card Like/Pin endpoints ─────────────────────────────────────────────────
