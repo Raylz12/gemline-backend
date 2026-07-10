@@ -1161,33 +1161,42 @@ app.get('/api/market/hero', async (req, res) => {
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ cards: [] });
-    const { rows } = await pool.query(`
+    // Mix: 5 top-selling SPORTS cards + exactly 1 Pokémon (Rhett 07-10).
+    // r2_thumb required — those are the full-res (~705x1200) images in our
+    // bucket, so the hero never rotates in a blurry bubble/ebay thumbnail.
+    const heroQuery = (sportsFilter, take) => `
       WITH top AS (
-        SELECT id, player, sport, year, grader, grade, catalog_price, gain_7d,
-               ebay_thumb, image_url, sales_7d
-        FROM mv_card_feed
-        WHERE (ebay_thumb IS NOT NULL OR image_url IS NOT NULL)
-          AND catalog_price >= 25
-          AND player IS NOT NULL AND player <> '' AND player !~ '^[0-9]+x[0-9]+$'
-        ORDER BY sales_7d DESC NULLS LAST
-        LIMIT 60
+        SELECT f.id, f.player, f.sport, f.year, f.grader, f.grade, f.catalog_price,
+               f.gain_7d, f.ebay_thumb, f.image_url, f.sales_7d, c.r2_thumb
+        FROM mv_card_feed f JOIN cards c ON c.id = f.id
+        WHERE c.r2_thumb IS NOT NULL
+          AND f.sport IN (${sportsFilter})
+          AND f.catalog_price >= 25
+          AND f.player IS NOT NULL AND f.player <> '' AND f.player !~ '^[0-9]+x[0-9]+$'
+        ORDER BY f.sales_7d DESC NULLS LAST
+        LIMIT 80
       ), dedup AS (
         SELECT DISTINCT ON (player) * FROM top ORDER BY player, sales_7d DESC NULLS LAST
       )
-      SELECT d.*, c.r2_thumb FROM dedup d LEFT JOIN cards c ON c.id = d.id
-      ORDER BY d.sales_7d DESC NULLS LAST
-      LIMIT 6`);
-    const cards = rows.map(x => {
+      SELECT * FROM dedup ORDER BY sales_7d DESC NULLS LAST LIMIT ${take}`;
+    const [sports, poke] = await Promise.all([
+      pool.query(heroQuery(`'Basketball','Baseball','Football','Hockey','Soccer'`, 5)),
+      pool.query(heroQuery(`'Pokemon','TCG'`, 1)),
+    ]);
+    const shape = (x, isPoke) => {
       const ebay = x.ebay_thumb || x.image_url || null;
       return {
-        cardId: x.id, player: x.player, sport: x.sport || '', year: x.year || '',
+        cardId: x.id, player: x.player,
+        sport: isPoke ? 'Pok\u00e9mon' : (x.sport || ''), year: x.year || '',
         grader: normGrader(x.grader), grade: normGrade(x.grade),
         marketPrice: Number(x.catalog_price) || 0,
         gain7d: Number(x.gain_7d) || 0,
         thumbnail: x.r2_thumb || ebay,
         thumbAlt: (x.r2_thumb && ebay) ? ebay : null,
       };
-    });
+    };
+    const cards = sports.rows.map(x => shape(x, false));
+    if (poke.rows[0]) cards.splice(Math.min(2, cards.length), 0, shape(poke.rows[0], true)); // Pokémon rides third in the stack
     const data = { cards, updatedAt: new Date().toISOString() };
     app._heroCache = { data, expires: Date.now() + 15 * 60 * 1000 };
     res.json(data);
