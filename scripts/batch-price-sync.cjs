@@ -25,6 +25,14 @@ const ZERO_UUID   = '00000000-0000-0000-0000-000000000000';
 
 const pool = new pg.Pool({ connectionString: DB, max: 4 });
 
+// Junk-price guard: CardHedge occasionally carries corrupted FMVs (decimal bugs / bogus sales).
+// Cap: no card FMV above the all-time record ballpark. Denylist: known-bad card_id|grade pairs.
+const PRICE_CAP = 15000000; // > any legit card sale ever
+const PRICE_DENYLIST = new Set([
+  '1656804929369x194302339676524000|PSA 8',   // 1964 Topps Gary Cutsinger #71 — $1.6M corrupted (raw = $4)
+  '1768593122893x124090903242291000|Raw',     // 2025 Topps Chrome Curry Geometric Orange — $121.9M bogus sale
+]);
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function gradeLabel(grader, grade) {
@@ -174,6 +182,10 @@ async function main() {
     for (const results of resultSets) {
       for (const r of results) {
         if (!r || !r.price || r.price <= 0) { errors++; continue; }
+        if (r.price >= PRICE_CAP || PRICE_DENYLIST.has(`${r.card_id}|${r.grade}`)) {
+          process.stdout.write(`\n  [junk-guard] skipped ${r.card_id}|${r.grade} @ ${r.price}\n`);
+          errors++; continue;
+        }
         const ids = byKey.get(`${r.card_id}|${r.grade}`);
         if (!ids) continue;
         hits++;

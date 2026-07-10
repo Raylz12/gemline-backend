@@ -168,7 +168,6 @@ export default function WorthGrading({ onSelect }) {
 
       <p style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--dim)', padding: '12px 6px 4px', letterSpacing: '.04em', lineHeight: 1.6 }}>
         NET = GRADE PRICE − RAW PRICE − ${g} GRADING COST. ASSUMES THE CARD GEMS — CONDITION IS YOUR CALL.
-        POP REPORTS &amp; GEM RATES: COMING SOON (WE DON&apos;T GUESS).
       </p>
 
       <style>{`
