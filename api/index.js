@@ -1069,15 +1069,25 @@ app.get('/api/market/heatmap', async (req, res) => {
     }
 
     const g7 = c => Number(c.gain_7d) || 0;
+    // 5-min time bucket seeds a tiny deterministic jitter so near-equal movers
+    // rotate between refreshes (repeat visitors see fresh cards) without any
+    // extra DB work. Magnitude ordering is preserved for clearly bigger moves.
+    const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
+    const jitter = (c) => {
+      const key = String(c.cardId || c.player || '');
+      let h = bucket;
+      for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+      return (h % 1000) / 1000; // 0..1
+    };
     let ranked = [...cachedPool.rows];
     if (sort === 'gainers') ranked = ranked.filter(c => g7(c) > 0).sort((a, b) => g7(b) - g7(a));
     else if (sort === 'losers') ranked = ranked.filter(c => g7(c) < 0).sort((a, b) => g7(a) - g7(b));
     else if (sort === 'volume') ranked.sort((a, b) => (Number(b.sales_7d) || 0) - (Number(a.sales_7d) || 0));
     else if (sort === 'value') ranked.sort((a, b) => (Number(b.marketPrice) || 0) - (Number(a.marketPrice) || 0));
-    else ranked.sort((a, b) => Math.abs(g7(b)) - Math.abs(g7(a))); // movers: biggest absolute move
+    else ranked.sort((a, b) => (Math.abs(g7(b)) + jitter(b) * 6) - (Math.abs(g7(a)) + jitter(a) * 6)); // movers: biggest move + gentle time-seeded rotation
 
     const cards = ranked.slice(offset, offset + limit);
-    res.json({ cards, count: cards.length, total: ranked.length, sort, sport: poolKey, sports: app._heatmapSports.data });
+    res.json({ cards, count: cards.length, total: ranked.length, sort, sport: poolKey, sports: app._heatmapSports.data, updatedAt: new Date().toISOString() });
   } catch(e) { console.error('Heatmap error:', e.message); res.json({ cards: [], count: 0 }); }
 });
 
@@ -1122,17 +1132,17 @@ app.get('/api/market/hero', async (req, res) => {
         thumbAlt: (x.r2_thumb && ebay) ? ebay : null,
       };
     });
-    const data = { cards };
+    const data = { cards, updatedAt: new Date().toISOString() };
     app._heroCache = { data, expires: Date.now() + 15 * 60 * 1000 };
     res.json(data);
   } catch (e) { console.error('market/hero:', e.message); res.json({ cards: [] }); }
 });
 
-// Landing-page hot path — aggregate over mv_card_feed, cached hard (15 min per
-// sport in-memory + CDN s-maxage). No index numbers, no external calls.
+// Landing-page hot path — aggregate over mv_card_feed, cached 5 min per sport
+// (in-memory + CDN s-maxage) so the board visibly refreshes. No external calls.
 app.get('/api/market/hot-board', async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ players: [], sports: [] });
@@ -1193,8 +1203,8 @@ app.get('/api/market/hot-board', async (req, res) => {
         topCardId: t.id || null,
       };
     });
-    const data = { players, sports: ['All', ...app._hotBoardSports.data] };
-    app._hotBoard[key] = { data, expires: Date.now() + 15 * 60 * 1000 };
+    const data = { players, sports: ['All', ...app._hotBoardSports.data], updatedAt: new Date().toISOString() };
+    app._hotBoard[key] = { data, expires: Date.now() + 5 * 60 * 1000 };
     res.json(data);
   } catch (e) { console.error('hot-board:', e.message); res.json({ players: [], sports: [] }); }
 });

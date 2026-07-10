@@ -220,23 +220,37 @@ const fmtSales = (n) => {
   return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}K` : String(v);
 };
 
+function relTime(iso) {
+  if (!iso) return '';
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+}
+
 function HotBoard({ onOpen }) {
   const [sport, setSport] = useState('All');
   const [sports, setSports] = useState(['All']);
   const [players, setPlayers] = useState(null); // null = loading
   const [imgDead, setImgDead] = useState({});
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     let dead = false;
-    fetch(`/api/market/hot-board?sport=${encodeURIComponent(sport)}`)
+    const load = () => fetch(`/api/market/hot-board?sport=${encodeURIComponent(sport)}`)
       .then(r => r.json())
       .then(d => {
         if (dead) return;
         setPlayers(d.players || []);
+        setUpdatedAt(d.updatedAt || new Date().toISOString());
         if (Array.isArray(d.sports) && d.sports.length > 1) setSports(d.sports);
       })
       .catch(() => { if (!dead) setPlayers([]); });
-    return () => { dead = true; };
+    load();
+    const poll = setInterval(load, 5 * 60 * 1000);        // board refreshes live
+    const tick = setInterval(() => setTick(x => x + 1), 30000); // "updated Xm ago"
+    return () => { dead = true; clearInterval(poll); clearInterval(tick); };
   }, [sport]);
 
   if (players && players.length === 0 && sport === 'All') return null; // nothing hot — hide the section
@@ -244,7 +258,7 @@ function HotBoard({ onOpen }) {
   return (
     <section className="lp-hotboard">
       <div className="lp-sec-head reveal">
-        <div className="eyebrow"><span className="lp-live-dot" />The hot board</div>
+        <div className="eyebrow"><span className="lp-live-dot" />The hot board{updatedAt ? ` \u00b7 updated ${relTime(updatedAt)}` : ''}</div>
         <h2>Who&apos;s moving at the show</h2>
       </div>
       <div className="lp-hot-tabs reveal" role="tablist" aria-label="Sport">
