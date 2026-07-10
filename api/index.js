@@ -92,6 +92,56 @@ async function sellerFeeBps(pool, sellerId) {
   } catch (e) { console.error('sellerFeeBps:', e.message); return STANDARD_FEE_BPS; }
 }
 
+// ── Shop subscription ────────────────────────────────────────────────────────
+// Shop/dealer accounts pay $9.99/mo to list. Status is webhook-driven and
+// stored in the subscriptions table (plan='shop_monthly'). past_due gets a
+// 7-day grace before listing is gated; active always passes.
+const SHOP_PRICE_LOOKUP = 'gemline_shop_monthly';
+const SHOP_PRICE_ID = process.env.SHOP_PRICE_ID || 'price_1TrXC2ELKWcqIWsc4DfgibcY';
+const SHOP_GRACE_DAYS = 7;
+let _subColsReady = false;
+async function ensureSubColumns(pool) {
+  if (_subColsReady || !pool) return;
+  await pool.query('ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT').catch(() => {});
+  _subColsReady = true;
+}
+// Returns { active, status, currentPeriodEnd, inGrace } for a user's shop sub.
+async function shopSubStatus(pool, userId) {
+  const out = { active: false, status: 'none', currentPeriodEnd: null, inGrace: false };
+  if (!pool || !userId) return out;
+  try {
+    await ensureSubColumns(pool);
+    const { rows: [me] } = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (me?.role === 'admin') return { active: true, status: 'admin', currentPeriodEnd: null, inGrace: false };
+    const { rows } = await pool.query(
+      `SELECT status, current_period_end FROM subscriptions
+       WHERE user_id = $1 AND plan = 'shop_monthly'
+       ORDER BY created_at DESC LIMIT 1`, [userId]);
+    if (!rows.length) return out;
+    const s = rows[0];
+    out.status = s.status;
+    out.currentPeriodEnd = s.current_period_end;
+    if (s.status === 'active' || s.status === 'trialing') { out.active = true; return out; }
+    if (s.status === 'past_due') {
+      // Grace: allow for SHOP_GRACE_DAYS past the period end.
+      const graceUntil = s.current_period_end ? new Date(new Date(s.current_period_end).getTime() + SHOP_GRACE_DAYS * 86400_000) : null;
+      if (graceUntil && graceUntil > new Date()) { out.active = true; out.inGrace = true; return out; }
+    }
+    return out;
+  } catch (e) { console.error('shopSubStatus:', e.message); return out; }
+}
+// Returns an error string if a shop account may NOT create a new listing, else null.
+async function shopListingGate(pool, userId) {
+  if (!pool || !userId) return null;
+  try {
+    const { rows: [u] } = await pool.query('SELECT account_type FROM users WHERE id = $1', [userId]);
+    if (u?.account_type !== 'store') return null; // individuals unaffected
+    const st = await shopSubStatus(pool, userId);
+    if (st.active) return null;
+    return 'Your shop needs an active Gemline Shop subscription ($9.99/mo) to list new cards. Your existing listings stay live.';
+  } catch (e) { console.error('shopListingGate:', e.message); return null; }
+}
+
 // ── DB-backed rate limiters (hold across serverless instances) ───────────────
 const byUser = (req) => `u:${req.userId}`;
 const limitBids = pgRateLimit(getPool, { limits: [{ bucket: 'bids', max: 10, windowSec: 60 }], keyFn: byUser, message: 'Too many bids — slow down for a minute' });
@@ -3229,6 +3279,10 @@ app.post('/api/listings', requireAuth, async (req, res) => {
     const pool = r.pool;
     if (!pool) return res.status(503).json({ error: 'Database unavailable' });
     if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    // Shop accounts must carry an active subscription to create NEW listings
+    // (existing listings stay live). Individual/collector sellers unaffected.
+    const shopGate = await shopListingGate(pool, req.userId);
+    if (shopGate) return res.status(402).json({ error: shopGate, code: 'SHOP_SUBSCRIPTION_REQUIRED' });
     let { cardId, price, listingType, openToOffers, description, photos } = req.body || {};
     if (!cardId) return res.status(400).json({ error: 'cardId required' });
     const dollars = Number(price);
@@ -5694,6 +5748,122 @@ app.get('/api/subscription/return', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// SHOP SUBSCRIPTION — $9.99/mo for shop/dealer accounts to list cards
+// ══════════════════════════════════════════════════════════════════════════
+
+app.get('/api/shop/subscription', requireAuth, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.json({ isShop: false, active: false, status: 'none' });
+    const { rows: [u] } = await pool.query('SELECT account_type FROM users WHERE id = $1', [req.userId]);
+    const isShop = u?.account_type === 'store';
+    const st = await shopSubStatus(pool, req.userId);
+    res.json({ isShop, priceMonthly: 9.99, ...st });
+  } catch (e) { res.json({ isShop: false, active: false, status: 'none' }); }
+});
+
+app.post('/api/shop/subscription/checkout', requireAuth, async (req, res) => {
+  try {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) return res.status(400).json({ error: 'Stripe not configured' });
+    const pool = await getPool();
+    await ensureSubColumns(pool);
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(key);
+    // Prefer the lookup_key so a rotated price still resolves; fall back to id.
+    let priceId = SHOP_PRICE_ID;
+    try {
+      const found = await stripe.prices.list({ lookup_keys: [SHOP_PRICE_LOOKUP], active: true, limit: 1 });
+      if (found.data[0]) priceId = found.data[0].id;
+    } catch { /* use fallback id */ }
+    // Reuse an existing Stripe customer for this user if we have one.
+    let customerId = null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT stripe_customer_id FROM subscriptions WHERE user_id = $1 AND stripe_customer_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`, [req.userId]);
+      customerId = rows[0]?.stripe_customer_id || null;
+    } catch { /* ignore */ }
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      ...(customerId ? { customer: customerId } : {}),
+      client_reference_id: req.userId,
+      metadata: { userId: req.userId, plan: 'shop_monthly' },
+      subscription_data: { metadata: { userId: req.userId, plan: 'shop_monthly' } },
+      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/api/shop/subscription/return?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/sell?shop_sub=cancelled`,
+    });
+    res.json({ url: session.url });
+  } catch (e) {
+    console.error('shop sub checkout:', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Customer portal — manage/cancel the shop subscription
+app.post('/api/shop/subscription/portal', requireAuth, async (req, res) => {
+  try {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) return res.status(400).json({ error: 'Stripe not configured' });
+    const pool = await getPool();
+    await ensureSubColumns(pool);
+    const { rows } = await pool.query(
+      `SELECT stripe_customer_id FROM subscriptions WHERE user_id = $1 AND stripe_customer_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`, [req.userId]);
+    const customerId = rows[0]?.stripe_customer_id;
+    if (!customerId) return res.status(400).json({ error: 'No subscription to manage yet' });
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(key);
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/sell`,
+    });
+    res.json({ url: portal.url });
+  } catch (e) {
+    console.error('shop sub portal:', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Return from Checkout — persist the sub immediately (webhook also confirms)
+app.get('/api/shop/subscription/return', async (req, res) => {
+  try {
+    const sessionId = req.query.session_id;
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!sessionId || !key) return res.redirect('/sell');
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(key);
+    const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['subscription'] });
+    const pool = await getPool();
+    await ensureSubColumns(pool);
+    const userId = session.client_reference_id || session.metadata?.userId;
+    if (pool && userId && (session.status === 'complete' || session.payment_status === 'paid')) {
+      const sub = session.subscription;
+      const subId = typeof sub === 'string' ? sub : sub?.id;
+      const status = (typeof sub === 'object' && sub?.status) ? sub.status : 'active';
+      const periodEnd = (typeof sub === 'object' && sub?.current_period_end)
+        ? new Date(sub.current_period_end * 1000) : new Date(Date.now() + 30 * 86400_000);
+      // Upsert-ish: one shop_monthly row per user, keep it current.
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM subscriptions WHERE user_id = $1 AND plan = 'shop_monthly' ORDER BY created_at DESC LIMIT 1`, [userId]);
+      if (existing.length) {
+        await pool.query(
+          `UPDATE subscriptions SET status = $1, stripe_subscription_id = $2, current_period_end = $3, stripe_customer_id = $4 WHERE id = $5`,
+          [status === 'trialing' ? 'active' : status, subId, periodEnd, session.customer || null, existing[0].id]);
+      } else {
+        await pool.query(
+          `INSERT INTO subscriptions (user_id, plan, status, stripe_subscription_id, current_period_end, stripe_customer_id)
+           VALUES ($1, 'shop_monthly', $2, $3, $4, $5)`,
+          [userId, status === 'trialing' ? 'active' : status, subId, periodEnd, session.customer || null]);
+      }
+    }
+    res.redirect('/sell?shop_sub=active');
+  } catch (e) {
+    console.error('shop sub return:', e.message);
+    res.redirect('/sell');
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // DISPLAY NAME — one-time change
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -6322,16 +6492,37 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
       // Subscription fulfillment is handled via subscription.updated event and /api/subscription/return
       break;
     }
+    case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
       const sub = event.data.object;
       if (pool && sub.id) {
-        const status = sub.status === 'active' ? 'active' : 'cancelled';
+        // Preserve real Stripe status so shop grace logic works: active |
+        // trialing | past_due | canceled | unpaid | incomplete...
+        let status = sub.status || 'active';
+        if (event.type === 'customer.subscription.deleted') status = 'canceled';
+        if (status === 'trialing') status = 'active';
         const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
-        await pool.query(
-          `UPDATE subscriptions SET status = $1, current_period_end = $2 WHERE stripe_subscription_id = $3`,
-          [status, periodEnd, sub.id]
-        ).catch(e => console.error('[webhook] sub update:', e.message));
+        const customerId = typeof sub.customer === 'string' ? sub.customer : (sub.customer?.id || null);
+        try {
+          const { rowCount } = await pool.query(
+            `UPDATE subscriptions SET status = $1, current_period_end = $2,
+               stripe_customer_id = COALESCE($4, stripe_customer_id)
+             WHERE stripe_subscription_id = $3`,
+            [status, periodEnd, sub.id, customerId]);
+          // Shop subs may arrive here before the return handler wrote a row.
+          if (rowCount === 0) {
+            const plan = sub.metadata?.plan || null;
+            const userId = sub.metadata?.userId || null;
+            if (plan === 'shop_monthly' && userId) {
+              await ensureSubColumns(pool);
+              await pool.query(
+                `INSERT INTO subscriptions (user_id, plan, status, stripe_subscription_id, current_period_end, stripe_customer_id)
+                 VALUES ($1, 'shop_monthly', $2, $3, $4, $5)`,
+                [userId, status, sub.id, periodEnd, customerId]);
+            }
+          }
+        } catch (e) { console.error('[webhook] sub update:', e.message); }
       }
       break;
     }

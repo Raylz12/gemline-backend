@@ -12,6 +12,7 @@ const ROWS = [
   ['Your first 5 sales', '5% of the sale price'],
   ['Every sale after that', '7.5% of the sale price'],
   ['Buying a card', 'The listed price — no buyer surcharge from GEMLINE'],
+  ['Shop / dealer accounts', '$9.99/mo to list unlimited cards'],
 ];
 
 const STEPS = [
@@ -43,6 +44,15 @@ export default function FeesPage() {
         sale on it&apos;s 7.5% (you keep <b style={{ color: 'var(--up)' }}>$92.50</b> of that $100). The rate is locked in when
         each order is placed, and the sell flow shows your exact net payout before you list — no math required.
       </p>
+
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', marginTop: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: 'var(--txt)' }}>Running a shop?</div>
+        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+          Shop &amp; dealer accounts list unlimited cards for a flat <b style={{ color: 'var(--txt)' }}>$9.99/month</b>. Cancel anytime
+          from your billing portal; your existing listings stay live through the end of the period. Individual collectors never pay a
+          monthly fee — listing stays free.
+        </p>
+      </div>
 
       <h2 style={{ fontSize: 17, fontWeight: 700, margin: '28px 0 10px' }}>How escrow protects both sides</h2>
       <div style={{ display: 'grid', gap: 10 }}>

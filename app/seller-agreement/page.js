@@ -45,7 +45,8 @@ const SECTIONS = [
   {
     h: 'Fees',
     p: [
-      'Listing is free. When your card sells, GEMLINE\u2019s fee is 5% of the sale price on your first five completed sales and 7.5% from your sixth sale onward, deducted before payout. The applicable rate is locked in when each order is placed. Buyers pay no GEMLINE surcharge. Card-for-card trades are free; any cash component of a trade settles through escrow like a sale. Fee changes apply prospectively only — never to sales already completed or orders already placed. Full details: Fees & Payouts.',
+      'Listing is free for individual collectors. When your card sells, GEMLINE\u2019s fee is 5% of the sale price on your first five completed sales and 7.5% from your sixth sale onward, deducted before payout. The applicable rate is locked in when each order is placed. Buyers pay no GEMLINE surcharge. Card-for-card trades are free; any cash component of a trade settles through escrow like a sale. Fee changes apply prospectively only — never to sales already completed or orders already placed. Full details: Fees & Payouts.',
+      'Shop and dealer accounts require an active Gemline Shop subscription ($9.99/month) to create new listings; existing listings remain visible if the subscription lapses, with a 7-day grace period on a failed payment before new listings are paused. The shop subscription is in addition to the standard per-sale fee above. Cancel anytime from the billing portal. Full details: Fees & Payouts.',
       'Completing deals off-platform to avoid fees ("hey, just PayPal me") is a violation of this Agreement and forfeits all GEMLINE protections for that deal.',
     ],
   },
