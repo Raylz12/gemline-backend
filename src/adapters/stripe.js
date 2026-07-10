@@ -4,14 +4,17 @@
  * Flow:
  *   1. Seller onboards via Stripe Connect v2 (account controller model)
  *   2. Buyer hits "Buy Now" → createCheckoutSession with destination charge
- *   3. Platform takes 10% application fee, rest goes to seller's connected account
+ *   3. Platform fee (5% first 5 sales / 7.5% after, locked at order creation) is
+ *      withheld; the rest goes to the seller's connected account
  *
  * Seller onboarding: Stripe Connect v2 (controller model)
  *   POST /api/connect/onboard → creates v2 account + onboarding link
  *   GET  /api/connect/status  → check if payouts enabled
  */
 
-const PLATFORM_FEE_PCT = 0.10; // 10%
+const PLATFORM_FEE_PCT = 0.075; // 7.5% standard rate (informational only — the
+// binding fee is computed per-seller at order creation: 5% for a seller's first
+// 5 settled sales, 7.5% after, and stored on the order row)
 
 let _stripe = null;
 async function getStripe() {

@@ -2,7 +2,7 @@ import LegalDoc from '../components/LegalDoc';
 
 export const metadata = {
   title: 'Marketplace Seller Agreement — GEMLINE',
-  description: 'The deal for sellers: list accurately, ship fast with tracking, get paid through escrow minus a flat 10% fee. Fakes and trimmed cards get you banned.',
+  description: 'The deal for sellers: list accurately, ship fast with tracking, get paid through escrow — just 5% on your first five sales, 7.5% after. Fakes and trimmed cards get you banned.',
   alternates: { canonical: '/seller-agreement' },
 };
 
@@ -28,7 +28,7 @@ const SECTIONS = [
       'Describe the actual card: real photos of the physical card in your possession — no stock photos, no stolen photos.',
       'Condition and grade claims must be accurate. For graded cards, the cert number and label must match the grading company\u2019s records.',
       'Disclose everything material: surface wear, whitening, print lines, authenticity questions, and any alteration (see Prohibited items).',
-      'Set prices freely — market data is shown to help, but your price is your call. Your exact net payout (after the 10% fee) is shown before you publish.',
+      'Set prices freely — market data is shown to help, but your price is your call. Your exact net payout (after GEMLINE\u2019s fee) is shown before you publish.',
     ],
   },
   {
@@ -45,7 +45,7 @@ const SECTIONS = [
   {
     h: 'Fees',
     p: [
-      'Listing is free. When your card sells, GEMLINE\u2019s fee is a flat 10% of the sale price, deducted before payout. Buyers pay no GEMLINE surcharge. Card-for-card trades are free; any cash component of a trade settles through escrow like a sale. Fee changes apply prospectively only — never to sales already completed. Full details: Fees & Payouts.',
+      'Listing is free. When your card sells, GEMLINE\u2019s fee is 5% of the sale price on your first five completed sales and 7.5% from your sixth sale onward, deducted before payout. The applicable rate is locked in when each order is placed. Buyers pay no GEMLINE surcharge. Card-for-card trades are free; any cash component of a trade settles through escrow like a sale. Fee changes apply prospectively only — never to sales already completed or orders already placed. Full details: Fees & Payouts.',
       'Completing deals off-platform to avoid fees ("hey, just PayPal me") is a violation of this Agreement and forfeits all GEMLINE protections for that deal.',
     ],
   },
@@ -62,7 +62,7 @@ const SECTIONS = [
   {
     h: 'Escrow and payout',
     p: [
-      'The buyer\u2019s payment is captured by Stripe and held in escrow when the order is placed. After the carrier marks the order delivered, a 48-hour inspection window opens. Your payout — sale price minus the 10% fee — is released when the buyer confirms receipt or the inspection window lapses, whichever comes first. Payout timing after release depends on Stripe\u2019s standard transfer schedule.',
+      'The buyer\u2019s payment is captured by Stripe and held in escrow when the order is placed. After the carrier marks the order delivered, a 48-hour inspection window opens. Your payout — sale price minus GEMLINE\u2019s fee (5% on your first five sales, 7.5% after, at the rate locked when the order was placed) — is released when the buyer confirms receipt or the inspection window lapses, whichever comes first. Payout timing after release depends on Stripe\u2019s standard transfer schedule.',
     ],
   },
   {

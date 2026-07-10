@@ -27,6 +27,19 @@ export default function SellContent() {
   const [submitting, setSubmitting] = useState(false);
   const [fmv, setFmv] = useState(null);
 
+  // Tiered seller fee: 5% on your first five settled sales, 7.5% after.
+  // Fetched for the preview — the actual rate locks server-side at order creation.
+  const [feeInfo, setFeeInfo] = useState({ feeBps: 500, feePct: 5, introRemaining: 5 });
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/me/fee-rate', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d && d.feeBps) setFeeInfo(d); })
+      .catch(() => {});
+  }, [token]);
+  const feeRate = feeInfo.feeBps / 10000;
+  const feeLabel = `${feeInfo.feePct}%`;
+
   // My listings
   const [myListings, setMyListings] = useState([]);
   const [loadingMine, setLoadingMine] = useState(false);
@@ -173,7 +186,7 @@ export default function SellContent() {
       <>
         <div className="eyebrow">Sell</div>
         <h1 className="page">List your cards.</h1>
-        <p className="sub">Set your price backed by real market data. Listing is free — GEMLINE keeps 10% only when your card sells.</p>
+        <p className="sub">Set your price backed by real market data. Listing is free — and your first five sales are just 5% (7.5% after), only when your card sells.</p>
         {/* Teaser */}
         <div style={{ opacity: 0.4, pointerEvents: 'none', marginTop: 20 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -189,7 +202,7 @@ export default function SellContent() {
         <SignupTeaser
           icon=""
           title="Start selling on GEMLINE"
-          subtitle="List cards at your price. Buy now, make offers, or auction. Free to list — 10% only when it sells."
+          subtitle="List cards at your price. Buy now, make offers, or auction. Free to list — just 5% on your first five sales, 7.5% after."
         />
       </>
     );
@@ -462,12 +475,12 @@ export default function SellContent() {
 
               <div style={{ background: 'var(--ink)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span>Platform fee (10%)</span>
-                  <span className="mono">${(Number(price) * 0.1).toFixed(2)}</span>
+                  <span>Platform fee ({feeLabel}{feeInfo.introRemaining > 0 ? ' — intro rate' : ''})</span>
+                  <span className="mono">${(Number(price) * feeRate).toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--txt)' }}>
                   <span>You receive</span>
-                  <span className="mono">${(Number(price) * 0.9).toFixed(2)}</span>
+                  <span className="mono">${(Number(price) * (1 - feeRate)).toFixed(2)}</span>
                 </div>
               </div>
 

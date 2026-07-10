@@ -15,11 +15,11 @@ const FAQS = [
   },
   {
     q: 'What fees does GEMLINE charge?',
-    a: 'Listing is free. When your card sells, GEMLINE keeps a 10% marketplace fee and you receive the rest — the sell flow shows your exact net payout before you list. Buyers pay the listed price.',
+    a: 'Listing is free. When your card sells, GEMLINE keeps just 5% on your first five sales and 7.5% from your sixth sale on — you receive the rest, and the sell flow shows your exact net payout before you list. Buyers pay the listed price.',
   },
   {
     q: 'What is the Deal Finder?',
-    a: 'The Deal Finder (under Price Guide → Deals) surfaces cards listed below their fair market value, with the 10% fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
+    a: 'The Deal Finder (under Price Guide → Deals) surfaces cards listed below their fair market value, with the marketplace fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
   },
   {
     q: 'How do live auctions work?',
@@ -31,7 +31,7 @@ const FAQS = [
   },
   {
     q: 'When do I get paid after a sale?',
-    a: 'Your payout (sale price minus the 10% fee) releases when the buyer confirms receipt, or automatically when the inspection window lapses. If a dispute is opened, the payout stays frozen until it’s resolved.',
+    a: 'Your payout (sale price minus GEMLINE\u2019s fee — 5% on your first five sales, 7.5% after) releases when the buyer confirms receipt, or automatically when the inspection window lapses. If a dispute is opened, the payout stays frozen until it’s resolved.',
   },
   {
     q: 'Who pays for shipping?',

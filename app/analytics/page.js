@@ -78,7 +78,7 @@ function MoversTable({ cards, onSelect, loading }) {
 }
 
 // ── Arbitrage Table ───────────────────────────────────────────────────────────
-const MARKETPLACE_FEE = 0.10; // 10% marketplace fee applied on the sell side
+const MARKETPLACE_FEE = 0.075; // 7.5% standard marketplace fee applied on the sell side
 // Buy at the low ask (best acquire price), exit at Card Hedge high (FMV) net of fee.
 function deriveEdge(r) {
   const buy = Number(r.lo) > 0 ? Number(r.lo) : Number(r.market) || 0;

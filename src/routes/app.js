@@ -172,13 +172,23 @@ export function appRouter(repo, stripe) {
   }));
 
   // ── Buy ───────────────────────────────────────────────────────────────────
+  // Tiered seller fee: first 5 settled sales 5%, then 7.5% — mirrors the
+  // primary buy flow in api/index.js (rate locks at order creation).
   r.post('/buy', wrap(async (req) => {
     const l = await repo.listings.get(req.body.listingId);
     if (!l) { const e = new Error('listing not found'); e.code = 'NOT_FOUND'; throw e; }
     const method = l.vault_item_id ? 'vault' : 'direct';
+    let bps = 750;
+    if (repo.pool) {
+      try {
+        const { rows: [x] } = await repo.pool.query(
+          "SELECT COUNT(*)::int AS n FROM orders WHERE seller_id = $1 AND status = 'settled'", [l.seller_id]);
+        if (Number(x?.n) < 5) bps = 500;
+      } catch { /* default to standard rate */ }
+    }
     const order = await orders.create(repo, stripe, {
       listingId: l.id, cardId: l.card_id, buyerId: req.userId, sellerId: l.seller_id,
-      amount: Number(l.price), fee: Math.round(Number(l.price) * 0.1),
+      amount: Number(l.price), fee: Math.round(Number(l.price) * bps / 10000),
       method, vaultItemId: l.vault_item_id || null,
     });
     return { order, instant: order.status === 'settled' };

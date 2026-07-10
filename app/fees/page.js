@@ -1,6 +1,6 @@
 export const metadata = {
   title: 'Fees & Payouts — GEMLINE',
-  description: 'Exactly what GEMLINE costs: free listings, a flat 10% fee when your card sells, escrow protection on every order, and when your payout lands.',
+  description: 'Exactly what GEMLINE costs: free listings, just 5% on your first five sales (7.5% after), escrow protection on every order, and when your payout lands.',
   alternates: { canonical: '/fees' },
 };
 
@@ -9,7 +9,8 @@ const ROWS = [
   ['Browsing, watchlists & price alerts', 'Free'],
   ['Listing a card (buy now, offers, or auction)', 'Free'],
   ['Proposing & completing trades', 'Free'],
-  ['When your card sells', '10% of the sale price'],
+  ['Your first 5 sales', '5% of the sale price'],
+  ['Every sale after that', '7.5% of the sale price'],
   ['Buying a card', 'The listed price — no buyer surcharge from GEMLINE'],
 ];
 
@@ -17,7 +18,7 @@ const STEPS = [
   ['Buyer pays', 'The buyer\u2019s payment is captured by Stripe and held in escrow — the seller never sees card details, and the money doesn\u2019t move yet.'],
   ['Seller ships', 'The seller ships with tracking. Both sides can message each other on the order the whole way.'],
   ['Buyer confirms', 'When the card arrives as described, the buyer confirms receipt (or the inspection window lapses).'],
-  ['Payout releases', 'The sale price minus the 10% fee is released to the seller. If something\u2019s wrong, the buyer opens a dispute and the payout stays frozen while GEMLINE reviews.'],
+  ['Payout releases', 'The sale price minus GEMLINE\u2019s fee (5% on your first five sales, 7.5% after) is released to the seller. If something\u2019s wrong, the buyer opens a dispute and the payout stays frozen while GEMLINE reviews.'],
 ];
 
 export default function FeesPage() {
@@ -37,8 +38,10 @@ export default function FeesPage() {
         ))}
       </div>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10, lineHeight: 1.6 }}>
-        Example: sell a card for <b style={{ color: 'var(--txt)' }}>$100</b> and you receive{' '}
-        <b style={{ color: 'var(--up)' }}>$90</b>. The sell flow shows your exact net payout before you list — no math required.
+        New to the show? <b style={{ color: 'var(--txt)' }}>Your first five sales are just 5%</b> — sell a card for{' '}
+        <b style={{ color: 'var(--txt)' }}>$100</b> and you keep <b style={{ color: 'var(--up)' }}>$95</b>. From your sixth
+        sale on it&apos;s 7.5% (you keep <b style={{ color: 'var(--up)' }}>$92.50</b> of that $100). The rate is locked in when
+        each order is placed, and the sell flow shows your exact net payout before you list — no math required.
       </p>
 
       <h2 style={{ fontSize: 17, fontWeight: 700, margin: '28px 0 10px' }}>How escrow protects both sides</h2>

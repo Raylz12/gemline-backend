@@ -2,8 +2,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 
-// Buy at low ask, exit at Card Hedge high (FMV) net of the 10% marketplace fee.
-const MARKETPLACE_FEE = 0.10;
+// Buy at low ask, exit at Card Hedge high (FMV) net of the 7.5% marketplace fee.
+const MARKETPLACE_FEE = 0.075;  // standard seller fee (first-5-sales intro rate is 5%)
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 const fmtP = (n) => {
@@ -216,7 +216,7 @@ function SpreadTable({ cards, onSelect }) {
               <span style={{ width: 74, fontFamily: 'var(--mono)', fontSize: 11, color: '#fff', fontWeight: 700, textAlign: 'right' }}>{fmtP(c.market)}</span>
               {/* FMV (high) */}
               <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 600, textAlign: 'right' }}>{fmtP(c.hi)}</span>
-              {/* Net edge $ (after 10% fee) */}
+              {/* Net edge $ (after 7.5% fee) */}
               <span style={{ width: 80, fontFamily: 'var(--mono)', fontSize: 11, color: netColor, fontWeight: 700, textAlign: 'right' }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</span>
               {/* Net % bar */}
               <div style={{ width: 120, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -306,7 +306,7 @@ export default function ArbitrageContent({ onSelectCard }) {
   }, []);
 
   // Derived slices — the play: buy at low ask, exit at Card Hedge high (FMV)
-  // net of the 10% marketplace fee. Ranked by net edge $, momentum flag for
+  // net of the 7.5% marketplace fee. Ranked by net edge $, momentum flag for
   // undervalued + trending up (matches the analytics arb tab + /arbitrage).
   const withEdge = useMemo(() => cards
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
@@ -369,7 +369,7 @@ export default function ArbitrageContent({ onSelectCard }) {
         <Stat label="Top Gainer 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || 'no data'} color="#34D88A" glow />
         <Stat label="Top Loser 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || 'no data'} color="#FF5C6C" glow />
         <Stat label="Weekly Volume" value={fmtNum(totalVol)} sub="trades tracked" color="#5B8DEF" />
-        <Stat label="Net Arb Plays" value={signals} sub={avgEdge === '—' ? 'after 10% fee' : `avg +$${avgEdge} net`} color="#9B7BFF" />
+        <Stat label="Net Arb Plays" value={signals} sub={avgEdge === '—' ? 'after 7.5% fee' : `avg +$${avgEdge} net`} color="#9B7BFF" />
       </div>
 
       {/* ── 4-panel grid ── */}
@@ -416,7 +416,7 @@ export default function ArbitrageContent({ onSelectCard }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15, color: 'var(--txt)' }}>Undervalued Radar</span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>net edge after 10% fee × liquidity</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>net edge after 7.5% fee × liquidity</span>
         </div>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: '#E8B339' }}>{netPlays.length} net plays</span>
       </div>

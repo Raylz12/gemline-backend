@@ -14,9 +14,9 @@ const matchesArbQuery = (c, q) => {
   return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
 };
 
-// Buy at the low ask, exit at Card Hedge high (FMV) net of the 10% marketplace
+// Buy at the low ask, exit at Card Hedge high (FMV) net of the 7.5% marketplace
 // fee — the same net-edge model the analytics arb tab uses.
-const MARKETPLACE_FEE = 0.10;
+const MARKETPLACE_FEE = 0.075;  // standard seller fee (first-5-sales intro rate is 5%)
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtP = (n) => {
@@ -350,7 +350,7 @@ function SpreadMatrix({ cards, onSelect }) {
         <Th label="BUY (LOW)" col="lo" w={72} />
         <Th label="FMV (HIGH)" col="hi" w={72} />
         <Th label="YOU SAVE $" col="netEdge" w={92} />
-        <Th label="NET % (AF 10% FEE)" col="netPct" w={116} />
+        <Th label="NET % (AF 7.5% FEE)" col="netPct" w={116} />
         <Th label="7D %" col="gain7d" w={64} />
         <Th label="7D VOL" col="sales7d" w={64} />
         <Th label="30D VOL" col="sales30d" w={68} />
@@ -400,7 +400,7 @@ function SpreadMatrix({ cards, onSelect }) {
               <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: '#34D88A', fontWeight: 600 }}>{fmtP(c.lo)}</span>
               {/* FMV (high) */}
               <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 700 }}>{fmtP(c.hi)}</span>
-              {/* Net edge $ (after 10% fee) */}
+              {/* Net edge $ (after 7.5% fee) */}
               <span style={{ width: 92, fontFamily: 'var(--mono)', fontSize: 11, color: netColor, fontWeight: 700 }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</span>
               {/* Net % bar */}
               <div style={{ width: 116, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -456,7 +456,7 @@ export default function ArbitragePage() {
       const data = await res.json();
       // Merge all categories into a de-duped pool. arbPlays first — it's the
       // decision-grade net-edge bucket (real lo/hi inventory, net-positive
-      // after the 10% fee) that also powers the analytics arb tab.
+      // after the 7.5% fee) that also powers the analytics arb tab.
       const allCards = [
         ...(data.arbPlays || []),
         ...(data.gainers || []),
@@ -535,7 +535,7 @@ export default function ArbitragePage() {
   }, [cards, query]);
 
   // Derived datasets — the play is: buy at the low ask, exit at Card Hedge high
-  // (FMV) net of the 10% marketplace fee. Ranked by net edge $, momentum flag
+  // (FMV) net of the 7.5% marketplace fee. Ranked by net edge $, momentum flag
   // for undervalued + trending up. Same treatment as the analytics arb tab.
   const cardsWithEdge = useMemo(() => visible
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
@@ -679,7 +679,7 @@ export default function ArbitragePage() {
         <StatBox label="TOP GAINER · 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || ''} color="#34D88A" glow />
         <StatBox label="TOP LOSER · 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || ''} color="#FF5C6C" glow />
         <StatBox label="AVG SAVINGS" value={avgNetEdge === '—' ? '—' : `$${avgNetEdge}`} sub={`across ${netPlays.length} live deals`} color="#E8B339" />
-        <StatBox label="DEALS TODAY" value={netPlays.length} sub="below fair value after the 10% fee" color="#9B7BFF" />
+        <StatBox label="DEALS TODAY" value={netPlays.length} sub="below fair value after the 7.5% fee" color="#9B7BFF" />
       </div>
 
       {/* ── Main 4-panel grid ── */}

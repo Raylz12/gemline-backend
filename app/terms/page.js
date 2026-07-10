@@ -41,7 +41,7 @@ const SECTIONS = [
   {
     h: 'Selling',
     p: [
-      'Selling is additionally governed by the Marketplace Seller Agreement. In short: list only cards you own and physically possess, describe them accurately, ship promptly with tracking, and receive your payout — the sale price minus GEMLINE\u2019s 10% fee — when the buyer confirms receipt or the inspection window lapses. Full fee details are on the Fees & Payouts page.',
+      'Selling is additionally governed by the Marketplace Seller Agreement. In short: list only cards you own and physically possess, describe them accurately, ship promptly with tracking, and receive your payout — the sale price minus GEMLINE\u2019s fee (5% on your first five sales, 7.5% thereafter) — when the buyer confirms receipt or the inspection window lapses. Full fee details are on the Fees & Payouts page.',
     ],
   },
   {
@@ -80,7 +80,7 @@ const SECTIONS = [
   {
     h: 'Fees and payments',
     p: [
-      'Current fees are listed on the Fees & Payouts page: account creation, browsing, listing, and trading are free; sellers pay 10% of the sale price when a card sells. Payments are processed by Stripe — GEMLINE never stores your card numbers. We may change fees prospectively with notice; changes never apply retroactively to completed sales.',
+      'Current fees are listed on the Fees & Payouts page: account creation, browsing, listing, and trading are free; sellers pay 5% of the sale price on their first five completed sales and 7.5% from the sixth sale onward, with the rate locked in when each order is placed. Payments are processed by Stripe — GEMLINE never stores your card numbers. We may change fees prospectively with notice; changes never apply retroactively to completed sales or orders already placed.',
     ],
   },
   {

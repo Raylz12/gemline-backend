@@ -62,6 +62,36 @@ async function getRepo() {
 }
 const getPool = async () => (await getRepo()).pool;
 
+// ── Tiered seller fees ────────────────────────────────────────────────────────────
+// Intro pricing: a seller's first 5 settled sales are charged 5%; from sale #6
+// on it's 7.5% (the old flat 10% is retired). The rate is decided ONCE, when
+// the order is created, and locked onto the row (orders.fee_bps + the absolute
+// platform_fee in cents). Settlement always uses the stored amount — never a
+// recompute — so a seller crossing the threshold mid-flight keeps the rate each
+// order was created under. Refunds are untouched: the buyer gets the full PI
+// back and no fee is ever taken on a refunded order.
+const INTRO_FEE_BPS = 500;      // 5.00% — a seller's first 5 sales
+const STANDARD_FEE_BPS = 750;   // 7.50% — sale #6 onward
+const INTRO_SALES = 5;
+const feeFromBps = (amountCents, bps) => Math.round(amountCents * bps / 10000);
+let _feeBpsColReady = false;
+async function ensureFeeBpsColumn(pool) {
+  if (_feeBpsColReady || !pool) return;
+  await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fee_bps INTEGER').catch(() => {});
+  _feeBpsColReady = true;
+}
+// Prior sales = orders that actually reached 'settled' (the only terminal
+// success state). Cancelled/refunded orders never count toward the tier.
+async function sellerFeeBps(pool, sellerId) {
+  if (!pool || !sellerId) return STANDARD_FEE_BPS;
+  try {
+    await ensureFeeBpsColumn(pool);
+    const { rows: [x] } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM orders WHERE seller_id = $1 AND status = 'settled'", [sellerId]);
+    return Number(x.n) < INTRO_SALES ? INTRO_FEE_BPS : STANDARD_FEE_BPS;
+  } catch (e) { console.error('sellerFeeBps:', e.message); return STANDARD_FEE_BPS; }
+}
+
 // ── DB-backed rate limiters (hold across serverless instances) ───────────────
 const byUser = (req) => `u:${req.userId}`;
 const limitBids = pgRateLimit(getPool, { limits: [{ bucket: 'bids', max: 10, windowSec: 60 }], keyFn: byUser, message: 'Too many bids — slow down for a minute' });
@@ -173,6 +203,23 @@ app.use('/api/auth', async (req, res, next) => {
 
 // ── Static feed (no auth) ─────────────────────────────────────────────────────
 app.get('/feed', (_req, res) => res.json({ mode: 'preview', cards: [] }));
+
+// ── Seller fee tier (for sell-flow previews; the real rate locks at order
+// creation — see sellerFeeBps) ────────────────────────────────────────────
+app.get('/api/me/fee-rate', requireAuth, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.json({ feeBps: INTRO_FEE_BPS, feePct: INTRO_FEE_BPS / 100, settledSales: 0, introRemaining: INTRO_SALES });
+    const { rows: [x] } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM orders WHERE seller_id = $1 AND status = 'settled'", [req.userId]);
+    const n = Number(x?.n) || 0;
+    const bps = n < INTRO_SALES ? INTRO_FEE_BPS : STANDARD_FEE_BPS;
+    res.json({ feeBps: bps, feePct: bps / 100, settledSales: n, introRemaining: Math.max(0, INTRO_SALES - n) });
+  } catch (e) {
+    console.error('me/fee-rate:', e.message);
+    res.json({ feeBps: STANDARD_FEE_BPS, feePct: STANDARD_FEE_BPS / 100, settledSales: null, introRemaining: 0 });
+  }
+});
 
 
 // ── Admin: refresh mv_card_feed + trigger price refresh ──────────────────────
@@ -1658,7 +1705,7 @@ app.get('/api/market/arb', async (req, res) => {
          WHERE ch_price_lo > 0 AND ch_price_hi > 0
            AND catalog_price > 5 AND catalog_price <= 5000
            AND ${conds.join(' AND ')}
-         ORDER BY (ch_price_hi * 0.9 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
+         ORDER BY (ch_price_hi * 0.925 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
          LIMIT 120`, params);
       return res.json({ q, arbPlays: rows.map(mapCard) });
     }
@@ -1687,12 +1734,12 @@ app.get('/api/market/arb', async (req, res) => {
       pool.query(`SELECT ${arbCols} FROM cards
         WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
         ORDER BY sales_7d DESC, sales_30d DESC LIMIT 25`),
-      // Arb plays: real lo/hi spread, net-positive after 10% fee, ranked by net edge × liquidity
+      // Arb plays: real lo/hi spread, net-positive after the 7.5% standard fee, ranked by net edge × liquidity
       pool.query(`SELECT ${arbCols} FROM cards
         WHERE ch_price_lo > 0 AND ch_price_hi > 0
-          AND ch_price_hi * 0.9 - ch_price_lo >= 5
+          AND ch_price_hi * 0.925 - ch_price_lo >= 5
           AND catalog_price > 5 AND catalog_price <= 5000
-        ORDER BY (ch_price_hi * 0.9 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
+        ORDER BY (ch_price_hi * 0.925 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
         LIMIT 120`),
     ]);
 
@@ -2170,9 +2217,10 @@ async function settleEndedAuctions(r, { force = false } = {}) {
       // Winner — create a pending_payment order. The winner must complete
       // payment (Payment Element) within 24h before anything ships; if they
       // don't, the lazy sweep cancels it and the seller can relist.
+      const feeBps = await sellerFeeBps(pool, a.seller_id);
       const { order } = await ordersSvc.beginCheckout(r, stripe, {
         listingId: a.id, cardId: a.card_id, buyerId: a.winner_id, sellerId: a.seller_id,
-        amount: winningBid, fee: Math.round(winningBid * 0.1),
+        amount: winningBid, fee: feeFromBps(winningBid, feeBps), feeBps,
         method: a.vault_item_id ? 'vault' : 'direct',
         paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
       });
@@ -3358,7 +3406,7 @@ async function settleLapsedInspections(r, stripe) {
       await ordersSvc.settle(r, stripe, order);
       const { rows: [card] } = await pool.query('SELECT player FROM cards WHERE id = $1', [order.card_id]).catch(() => ({ rows: [{}] }));
       const amt = `$${(Number(order.amount) / 100).toLocaleString()}`;
-      const netStr = `$${((Number(order.amount) * 0.9) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      const netStr = `$${((Number(order.amount) - Number(order.platform_fee || 0)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
       await notify(pool, order.seller_id, 'order_completed',
         `Sale complete: ${card?.player || 'card'} — ${amt}`,
         'The inspection window closed with no issues reported. Your payout has been released from escrow.',
@@ -3422,9 +3470,10 @@ app.post('/api/listings/:id/buy', requireAuth, limitMoney, async (req, res) => {
 
     const method = l.vault_item_id ? 'vault' : 'direct';
     try {
+      const feeBps = await sellerFeeBps(pool, l.seller_id);
       const { order, clientSecret, paymentIntentId } = await ordersSvc.beginCheckout(r, stripe, {
         listingId: l.id, cardId: l.card_id, buyerId: req.userId, sellerId: l.seller_id,
-        amount: Number(l.price), fee: Math.round(Number(l.price) * 0.1),
+        amount: Number(l.price), fee: feeFromBps(Number(l.price), feeBps), feeBps,
         method, paymentDueAt: paymentDue(BUY_PAYMENT_WINDOW_MS),
       });
       // Snapshot the buyer's saved shipping address (if any) onto the order —
@@ -3658,10 +3707,11 @@ app.post('/api/offers/:id/accept', requireAuth, limitMoney, async (req, res) => 
     // Pending-payment order at the offer price (outside tx — order engine
     // manages its own writes). Buyer must complete payment within 24h.
     const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const offerFeeBps = await sellerFeeBps(pool, offer.seller_id);
     const { order } = await ordersSvc.beginCheckout(r, stripe, {
       listingId: offer.listing_id, cardId: offer.card_id,
       buyerId: offer.buyer_id, sellerId: offer.seller_id,
-      amount: Number(offer.amount), fee: Math.round(Number(offer.amount) * 0.1),
+      amount: Number(offer.amount), fee: feeFromBps(Number(offer.amount), offerFeeBps), feeBps: offerFeeBps,
       method: offer.vault_item_id ? 'vault' : 'direct',
       paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
     });
@@ -3789,10 +3839,11 @@ app.post('/api/offers/:id/respond-counter', requireAuth, limitMoney, async (req,
 
     const amountCents = Number(offer.counter_amount);
     const stripe = process.env.STRIPE_SECRET_KEY ? stripeClient : stripeStub;
+    const counterFeeBps = await sellerFeeBps(pool, offer.seller_id);
     const { order } = await ordersSvc.beginCheckout(r, stripe, {
       listingId: offer.listing_id, cardId: offer.card_id,
       buyerId: offer.buyer_id, sellerId: offer.seller_id,
-      amount: amountCents, fee: Math.round(amountCents * 0.1),
+      amount: amountCents, fee: feeFromBps(amountCents, counterFeeBps), feeBps: counterFeeBps,
       method: offer.vault_item_id ? 'vault' : 'direct',
       paymentDueAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
     });
@@ -4187,7 +4238,7 @@ app.post('/api/orders/:id/confirm-receipt', requireAuth, async (req, res) => {
       `Order complete: ${card?.player || 'card'}`,
       'Receipt confirmed — this order is settled. Enjoy the card!',
       { orderId: order.id, cardId: order.card_id });
-    const netStr = `$${((Number(order.amount) * 0.9) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const netStr = `$${((Number(order.amount) - Number(order.platform_fee || 0)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
     const payTpl = emailTpl.payoutReleased({ player: card?.player || 'your card', amount: amt, net: netStr });
     await emailUser(pool, order.seller_id, payTpl.subject, payTpl.html);
 

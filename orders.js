@@ -10,10 +10,10 @@ import * as vaultSvc from './vault.js';
 
 const INSPECTION_DAYS = 2;
 
-export async function create(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, method, vaultItemId = null }) {
+export async function create(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, feeBps = undefined, method, vaultItemId = null }) {
   const order = await repo.orders.insert({
     listing_id: listingId, card_id: cardId, buyer_id: buyerId, seller_id: sellerId,
-    amount, platform_fee: fee, currency: 'USD', fulfillment_method: method,
+    amount, platform_fee: fee, fee_bps: feeBps, currency: 'USD', fulfillment_method: method,
     status: ORDER.CREATED, created_at: new Date().toISOString(),
   });
   await repo.events.insert({ entity_type: 'order', entity_id: order.id, from_state: null, to_state: ORDER.CREATED });
@@ -40,10 +40,12 @@ export async function create(repo, stripe, { listingId = null, cardId, buyerId, 
 // beginCheckout: order starts in pending_payment with an unconfirmed PI whose
 // client_secret goes back to the buyer's Payment Element. Nothing is owed or
 // shipped until the buyer actually confirms the payment (finalizePayment).
-export async function beginCheckout(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, method, paymentDueAt = null }) {
+// feeBps: the seller's tier rate at creation time — stored on the row so the
+// rate is locked for the life of the order (settlement uses stored platform_fee).
+export async function beginCheckout(repo, stripe, { listingId = null, cardId, buyerId, sellerId, amount, fee = 0, feeBps = undefined, method, paymentDueAt = null }) {
   const order = await repo.orders.insert({
     listing_id: listingId, card_id: cardId, buyer_id: buyerId, seller_id: sellerId,
-    amount, platform_fee: fee, currency: 'USD', fulfillment_method: method,
+    amount, platform_fee: fee, fee_bps: feeBps, currency: 'USD', fulfillment_method: method,
     status: ORDER.CREATED, payment_due_at: paymentDueAt, created_at: new Date().toISOString(),
   });
   await repo.events.insert({ entity_type: 'order', entity_id: order.id, from_state: null, to_state: ORDER.CREATED });

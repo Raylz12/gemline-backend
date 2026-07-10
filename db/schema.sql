@@ -116,6 +116,8 @@ CREATE TABLE orders (
   seller_id          uuid NOT NULL REFERENCES users(id),
   amount             numeric(12,2) NOT NULL,
   platform_fee       numeric(12,2) NOT NULL DEFAULT 0,
+  fee_bps            integer,             -- seller fee rate locked at order creation:
+                                          -- 500 (first 5 settled sales), 750 after; legacy flat-10% orders = 1000
   currency           char(3) NOT NULL DEFAULT 'USD',
   fulfillment_method fulfillment_method NOT NULL,
   status             order_status NOT NULL DEFAULT 'created',
