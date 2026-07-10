@@ -1106,6 +1106,77 @@ app.get('/api/market/hot-board', async (req, res) => {
   } catch (e) { console.error('hot-board:', e.message); res.json({ players: [], sports: [] }); }
 });
 
+// Worth Grading? — raw cards where the family also has PSA 10 (and 9) prices.
+// Everything computed from OUR catalog: no external calls, no pop faked (we
+// don't hold pop data yet — future enhancement). Client does the grading-cost
+// math (user-adjustable input); server ships the candidate pool, cached 15min.
+app.get('/api/market/worth-grading', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ candidates: [] });
+    const sport = (req.query.sport && req.query.sport !== 'All') ? String(req.query.sport).slice(0, 40) : null;
+    const key = sport || 'All';
+    if (!app._worthGrading) app._worthGrading = {};
+    const hit = app._worthGrading[key];
+    if (hit && hit.expires > Date.now()) return res.json(hit.data);
+
+    const params = [];
+    let sportCond = '';
+    if (sport) { params.push(sport); sportCond = ` AND c.sport = $1`; }
+    // Family pivot: one row per cardhedge_id with Raw / PSA10 / PSA9 prices.
+    // Sanity: raw ≥ $1, PSA10 ≥ $10, some family sales in 30d, ≤150x ratio
+    // (beyond that the tier data is junk, not a grading play).
+    const { rows } = await pool.query(`
+      WITH fam AS (
+        SELECT cardhedge_id,
+               max(catalog_price) FILTER (WHERE upper(coalesce(grader,'')) = 'RAW') AS raw_price,
+               max(catalog_price) FILTER (WHERE upper(coalesce(grader,'')) = 'PSA' AND grade = '10') AS psa10,
+               max(catalog_price) FILTER (WHERE upper(coalesce(grader,'')) = 'PSA' AND grade = '9') AS psa9,
+               sum(COALESCE(sales_30d,0))::int AS s30,
+               sum(COALESCE(sales_7d,0))::int AS s7
+        FROM cards WHERE cardhedge_id IS NOT NULL
+        GROUP BY cardhedge_id
+        HAVING max(catalog_price) FILTER (WHERE upper(coalesce(grader,'')) = 'RAW') >= 1
+           AND max(catalog_price) FILTER (WHERE upper(coalesce(grader,'')) = 'PSA' AND grade = '10') >= 10
+           AND max(catalog_price) FILTER (WHERE upper(coalesce(grader,'')) = 'PSA' AND grade = '10') <= 5000000
+           AND sum(COALESCE(sales_30d,0)) >= 1
+      )
+      SELECT c.id, c.player, c.card_set, c.year, c.variant, c.number, c.sport, c.rookie,
+             COALESCE(c.ebay_thumb, c.image_url) AS thumbnail,
+             f.cardhedge_id, f.raw_price, f.psa10, f.psa9, f.s30, f.s7
+      FROM fam f
+      JOIN cards c ON c.cardhedge_id = f.cardhedge_id AND upper(coalesce(c.grader,'')) = 'RAW'
+      WHERE f.psa10 / f.raw_price <= 150${sportCond}
+      ORDER BY (f.psa10 - f.raw_price) DESC
+      LIMIT 1200`, params);
+
+    // Blend absolute-profit leaders with ROI leaders so cheap "quick win" raws
+    // make the pool too, then dedupe.
+    const byProfit = rows; // already profit-ordered
+    const byRoi = [...rows].sort((a, b) => (Number(b.psa10) / Number(b.raw_price)) - (Number(a.psa10) / Number(a.raw_price)));
+    const seen = new Set();
+    const merged = [];
+    for (const c of [...byProfit.slice(0, 600), ...byRoi.slice(0, 600)]) {
+      if (seen.has(c.cardhedge_id)) continue;
+      seen.add(c.cardhedge_id);
+      merged.push({
+        cardId: c.id, cardhedgeId: c.cardhedge_id,
+        player: c.player, set: c.card_set, year: c.year || '',
+        variant: c.variant || '', number: c.number || '', sport: c.sport,
+        rookie: c.rookie || false, thumbnail: c.thumbnail || null,
+        raw: Number(c.raw_price), psa10: Number(c.psa10),
+        psa9: c.psa9 != null ? Number(c.psa9) : null,
+        sales30d: Number(c.s30) || 0, sales7d: Number(c.s7) || 0,
+      });
+    }
+    const data = { candidates: merged.slice(0, 1000), popAvailable: false };
+    app._worthGrading[key] = { data, expires: Date.now() + 15 * 60 * 1000 };
+    res.json(data);
+  } catch (e) { console.error('worth-grading:', e.message); res.json({ candidates: [] }); }
+});
+
 // ── PUBLIC routes (no auth) ───────────────────────────────────────────────────
 // Normalize legacy grader pollution at read time ('Raw', 'NULL', 'null', empty → RAW)
 const normGrader = (g) => {

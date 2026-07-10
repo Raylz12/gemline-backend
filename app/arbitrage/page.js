@@ -4,6 +4,7 @@ import { useAuth } from '../components/AuthContext';
 import CardDetail from '../components/CardDetail';
 import AuthModal from '../components/AuthModal';
 import ProGate, { hasCapability } from '../components/ProGate';
+import WorthGrading from '../components/WorthGrading';
 import useDarkPage from '../lib/useDarkPage';
 
 // Tokenized play matcher — every search word must hit player/set/variant/year/grade.
@@ -436,6 +437,7 @@ export default function ArbitragePage() {
   const [now, setNow] = useState('');
   const [showAuth, setShowAuth] = useState(false);
   const [query, setQuery] = useState('');
+  const [tab, setTab] = useState('deals'); // deals | grading
 
   // Clock
   useEffect(() => {
@@ -634,6 +636,23 @@ export default function ArbitragePage() {
       {/* ── Ticker strip ── */}
       <TickerStrip cards={tickerCards} />
 
+      {/* ── Tabs: Deal Board / Worth Grading? ── */}
+      <div style={{ display: 'flex', gap: 2, padding: '8px 8px 0' }}>
+        {[['deals', 'DEAL BOARD'], ['grading', 'WORTH GRADING?']].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            style={{
+              padding: '8px 16px', fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '.1em',
+              background: tab === k ? '#0d1117' : 'transparent', cursor: 'pointer',
+              border: '1px solid', borderColor: tab === k ? 'rgba(232,179,57,.45)' : 'rgba(255,255,255,.08)',
+              borderBottom: tab === k ? '1px solid #0d1117' : '1px solid rgba(255,255,255,.08)',
+              borderRadius: '4px 4px 0 0', color: tab === k ? '#E8B339' : 'var(--dim)',
+            }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'grading' && <WorthGrading onSelect={setSelected} />}
+
+      {tab === 'deals' && <>
       {/* ── Play search ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 0', flexWrap: 'wrap' }}>
         <div className="arb-search" style={{ flex: '1 1 260px', maxWidth: 420 }}>
@@ -758,6 +777,7 @@ export default function ArbitragePage() {
           )}
         </Panel>
       </div>
+      </>}
 
       </ProGate>
 
