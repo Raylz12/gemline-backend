@@ -590,6 +590,34 @@ footer .wordmark span{color:var(--gold)}
 .lp-pulse-more{text-align:center;margin-top:22px}
 .lp-pulse-more button{font-size:13.5px;font-weight:600;color:var(--gold);padding:10px 18px;border:1px solid rgba(22,199,132,.35);border-radius:10px;transition:.15s}
 .lp-pulse-more button:hover{background:var(--gold-soft);border-color:var(--gold)}
+/* hot board — trending players */
+.lp-hotboard{max-width:900px;margin:0 auto;padding:34px 22px 30px}
+.lp-hot-tabs{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:16px}
+.lp-hot-tabs::-webkit-scrollbar{display:none}
+.lp-hot-tabs button{flex:0 0 auto;padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:999px;background:var(--panel);transition:.15s}
+.lp-hot-tabs button.on{color:var(--gold);border-color:rgba(22,199,132,.45);background:var(--gold-soft)}
+.lp-hot-list{display:flex;flex-direction:column;gap:8px}
+.lp-hot-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;cursor:pointer;transition:transform .15s ease,border-color .15s ease;min-height:64px}
+.lp-hot-row:hover{transform:translateX(3px);border-color:rgba(22,199,132,.45)}
+.lp-hot-row.lp-skel-tile{min-height:64px;padding:0}
+.lp-hot-rank{font-family:var(--mono);font-size:12px;font-weight:800;color:var(--dim);width:20px;text-align:center;flex-shrink:0}
+.lp-hot-thumb{width:42px;height:56px;border-radius:6px;background:var(--panel-2);display:grid;place-items:center;overflow:hidden;flex-shrink:0}
+.lp-hot-thumb img{width:100%;height:100%;object-fit:contain}
+.lp-hot-ini{font-family:var(--mono);font-size:12px;font-weight:700;color:rgba(255,255,255,.55)}
+.lp-hot-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lp-hot-name{font-weight:700;font-size:14px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lp-hot-meta{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lp-hot-sales{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0}
+.lp-hot-sales .n{font-family:var(--mono);font-weight:800;font-size:15px;color:var(--txt)}
+.lp-hot-sales .l{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+.lp-hot-row .lp-delta.big{width:74px;text-align:right;flex-shrink:0}
+@media(max-width:520px){
+  .lp-hotboard{padding:26px 14px 22px}
+  .lp-hot-row{gap:9px;padding:9px 10px}
+  .lp-hot-rank{width:14px}
+  .lp-hot-sales .n{font-size:13px}
+  .lp-hot-row .lp-delta.big{width:58px;font-size:12px}
+}
 /* swap meet steps */
 .lp-steps-wrap{max-width:1100px;margin:0 auto;padding:34px 22px 30px}
 .lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}

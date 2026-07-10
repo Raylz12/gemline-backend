@@ -157,6 +157,83 @@ function MoverTile({ c, onOpen, delay }) {
   );
 }
 
+/* ── hot board — trending players at the show ─────────────────────── */
+function playerInitials(name) {
+  return (name || '').split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase() || '?';
+}
+const fmtSales = (n) => {
+  const v = Number(n) || 0;
+  return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}K` : String(v);
+};
+
+function HotBoard({ onOpen }) {
+  const [sport, setSport] = useState('All');
+  const [sports, setSports] = useState(['All']);
+  const [players, setPlayers] = useState(null); // null = loading
+  const [imgDead, setImgDead] = useState({});
+
+  useEffect(() => {
+    let dead = false;
+    fetch(`/api/market/hot-board?sport=${encodeURIComponent(sport)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (dead) return;
+        setPlayers(d.players || []);
+        if (Array.isArray(d.sports) && d.sports.length > 1) setSports(d.sports);
+      })
+      .catch(() => { if (!dead) setPlayers([]); });
+    return () => { dead = true; };
+  }, [sport]);
+
+  if (players && players.length === 0 && sport === 'All') return null; // nothing hot — hide the section
+
+  return (
+    <section className="lp-hotboard">
+      <div className="lp-sec-head reveal">
+        <div className="eyebrow"><span className="lp-live-dot" />The hot board</div>
+        <h2>Who&apos;s moving at the show</h2>
+      </div>
+      <div className="lp-hot-tabs reveal" role="tablist" aria-label="Sport">
+        {sports.map(s => (
+          <button key={s} role="tab" aria-selected={s === sport} className={s === sport ? 'on' : ''}
+            onClick={() => { setPlayers(null); setSport(s); }}>{s}</button>
+        ))}
+      </div>
+      <div className="lp-hot-list">
+        {players === null
+          ? Array.from({ length: 6 }).map((_, i) => <div key={i} className="lp-hot-row lp-skel-tile"><div className="lp-skel" /></div>)
+          : players.slice(0, 10).map((p, i) => {
+              const up = (Number(p.gain7d) || 0) >= 0;
+              return (
+                <button key={`${p.player}|${p.sport}`} className="lp-hot-row reveal in"
+                  onClick={() => onOpen(`/market?q=${encodeURIComponent(p.player)}`)}
+                  aria-label={`${p.player} — see their cards`}>
+                  <span className="lp-hot-rank">{i + 1}</span>
+                  <span className="lp-hot-thumb">
+                    {p.thumbnail && !imgDead[p.player] ? (
+                      <img src={p.thumbnail} alt="" loading="lazy"
+                        onError={() => setImgDead(d => ({ ...d, [p.player]: true }))} />
+                    ) : (
+                      <span className="lp-hot-ini">{playerInitials(p.player)}</span>
+                    )}
+                  </span>
+                  <span className="lp-hot-main">
+                    <span className="lp-hot-name">{p.player}</span>
+                    <span className="lp-hot-meta">{p.sport}{p.families ? ` · ${p.families.toLocaleString()} cards` : ''}</span>
+                  </span>
+                  <span className="lp-hot-sales">
+                    <span className="n">{fmtSales(p.sales7d)}</span>
+                    <span className="l">sales · 7d</span>
+                  </span>
+                  <span className={`lp-delta big ${up ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {Math.abs(Number(p.gain7d) || 0).toFixed(1)}%</span>
+                </button>
+              );
+            })}
+      </div>
+    </section>
+  );
+}
+
 const FEATURES = [
   { Icon: IconZap, title: 'Live prices', desc: 'Every card scored against live comps — spreads, sales, and 7-day heat, all day.', target: '/analytics' },
   { Icon: IconSwap, title: 'Real trades', desc: 'Card-for-card deals with a fair-value meter. No guesswork, no getting fleeced.', target: '/market' },
@@ -298,6 +375,9 @@ export default function Landing() {
             </div>
           )}
         </section>
+
+        {/* 2.5 ── HOT BOARD */}
+        <HotBoard onOpen={enter} />
 
         {/* 3 ── FEATURES */}
         <section className="lp-features">

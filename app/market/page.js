@@ -90,8 +90,12 @@ export default function MarketplacePage() {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   useEffect(() => {
     try {
-      const cid = new URLSearchParams(window.location.search).get('card');
+      const sp = new URLSearchParams(window.location.search);
+      const cid = sp.get('card');
       if (cid && UUID_RE.test(cid)) setSelectedCard({ id: cid });
+      // Deep link from the landing Hot Board (and shares): /market?q=Player Name
+      const q = (sp.get('q') || '').slice(0, 120);
+      if (q) setSearchQuery(q);
     } catch {}
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -981,6 +981,78 @@ app.get('/api/market/heatmap', async (req, res) => {
   } catch(e) { console.error('Heatmap error:', e.message); res.json({ cards: [], count: 0 }); }
 });
 
+// Hot Board: trending players by real 7-day sales volume + price direction.
+// Landing-page hot path — aggregate over mv_card_feed, cached hard (15 min per
+// sport in-memory + CDN s-maxage). No index numbers, no external calls.
+app.get('/api/market/hot-board', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ players: [], sports: [] });
+    const sport = (req.query.sport && req.query.sport !== 'All') ? String(req.query.sport).slice(0, 40) : null;
+    const key = sport || 'All';
+    if (!app._hotBoard) app._hotBoard = {};
+    const hit = app._hotBoard[key];
+    if (hit && hit.expires > Date.now()) return res.json(hit.data);
+
+    // Sport tabs: real sports with 7-day sales, cached 1h
+    if (!app._hotBoardSports || app._hotBoardSports.expires < Date.now()) {
+      const { rows: sp } = await pool.query(
+        `SELECT sport, sum(COALESCE(sales_7d,0)) AS s7 FROM mv_card_feed
+         WHERE COALESCE(sales_7d,0) > 0 AND sport IS NOT NULL AND sport <> ''
+           AND sport !~ '^[0-9]+x[0-9]+$'
+         GROUP BY sport ORDER BY s7 DESC LIMIT 6`);
+      app._hotBoardSports = { data: sp.map(x => x.sport), expires: Date.now() + 60 * 60 * 1000 };
+    }
+
+    const params = [];
+    let sportClause = '';
+    if (sport) { params.push(sport); sportClause = ` AND sport = $1`; }
+    // Weighted 7-day move per player: only sane gains (thin-sale ±10,000% junk
+    // excluded from the average, but their volume still counts).
+    const { rows } = await pool.query(`
+      SELECT player, sport,
+             sum(COALESCE(sales_7d,0))::int AS s7,
+             sum(COALESCE(sales_30d,0))::int AS s30,
+             COALESCE(round((sum(CASE WHEN gain_7d BETWEEN -90 AND 500 THEN gain_7d * COALESCE(sales_7d,0) ELSE 0 END)
+               / NULLIF(sum(CASE WHEN gain_7d BETWEEN -90 AND 500 THEN COALESCE(sales_7d,0) ELSE 0 END), 0))::numeric, 1), 0) AS wgain,
+             count(*)::int AS families,
+             max(catalog_price) AS top_price
+      FROM mv_card_feed
+      WHERE COALESCE(sales_7d,0) > 0 AND player IS NOT NULL AND player <> ''
+        AND player !~ '^[0-9]+x[0-9]+$' AND sport !~ '^[0-9]+x[0-9]+$'${sportClause}
+      GROUP BY player, sport
+      ORDER BY s7 DESC LIMIT 12`, params);
+
+    // Face for each player row: their most-traded card with an image
+    let thumbs = new Map();
+    if (rows.length) {
+      const { rows: t } = await pool.query(`
+        SELECT DISTINCT ON (player, sport) player, sport, id, ebay_thumb, image_url
+        FROM mv_card_feed WHERE player = ANY($1)
+        ORDER BY player, sport, (ebay_thumb IS NOT NULL OR image_url IS NOT NULL) DESC,
+                 sales_7d DESC NULLS LAST`, [rows.map(x => x.player)]);
+      thumbs = new Map(t.map(x => [`${x.player}|${x.sport}`, x]));
+    }
+
+    const players = rows.map(p => {
+      const t = thumbs.get(`${p.player}|${p.sport}`) || {};
+      return {
+        player: p.player, sport: p.sport,
+        sales7d: Number(p.s7) || 0, sales30d: Number(p.s30) || 0,
+        gain7d: Number(p.wgain) || 0, families: Number(p.families) || 0,
+        topPrice: Number(p.top_price) || 0,
+        thumbnail: t.ebay_thumb || t.image_url || null,
+        topCardId: t.id || null,
+      };
+    });
+    const data = { players, sports: ['All', ...app._hotBoardSports.data] };
+    app._hotBoard[key] = { data, expires: Date.now() + 15 * 60 * 1000 };
+    res.json(data);
+  } catch (e) { console.error('hot-board:', e.message); res.json({ players: [], sports: [] }); }
+});
+
 // ── PUBLIC routes (no auth) ───────────────────────────────────────────────────
 // Normalize legacy grader pollution at read time ('Raw', 'NULL', 'null', empty → RAW)
 const normGrader = (g) => {
