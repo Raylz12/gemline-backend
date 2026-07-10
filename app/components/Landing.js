@@ -18,6 +18,13 @@ const gradeLabel = (c) => {
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/* Kick the hero fetch off at bundle-parse time — before React mounts — so the
+   stack paints as early as possible on a cold visit. Tiny (~2KB) endpoint,
+   CDN-cached 15 min server-side. */
+const heroPreload = (typeof window !== 'undefined' && window.location.pathname === '/')
+  ? fetch('/api/market/hero').then(r => r.json()).catch(() => null)
+  : null;
+
 /* Count-up for the live card total */
 function useCountUp(target, duration = 1600) {
   const [val, setVal] = useState(0);
@@ -40,47 +47,73 @@ function useCountUp(target, duration = 1600) {
 /* ── hero card stack — live trending cards ───────────────────────────────── */
 function HeroStack({ cards, onOpen }) {
   const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const [glare, setGlare] = useState({ x: 50, y: 50 });
-  const touchStart = useRef(null);
-  const timer = useRef(null);
+  const drag = useRef(null);        // { x, y, id } while a pointer is down
+  const swiped = useRef(false);     // suppress the click that follows a swipe
 
   const n = cards.length;
   const card = n ? cards[idx % n] : null;
 
+  /* Auto-cycle — pauses on hover/touch, off under prefers-reduced-motion
+     (manual swipe/arrows/dots always work). idx in deps = every manual move
+     resets the clock, so the next auto-flip is always a full beat away. */
   useEffect(() => {
-    if (n < 2 || reducedMotion()) return;
-    timer.current = setInterval(() => setIdx(i => (i + 1) % n), 4500);
-    return () => clearInterval(timer.current);
-  }, [n]);
+    if (n < 2 || paused || reducedMotion()) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % n), 5000);
+    return () => clearInterval(t);
+  }, [n, paused, idx]);
 
-  const goTo = useCallback((next) => {
-    clearInterval(timer.current);
-    setIdx(next);
-    if (n > 1 && !reducedMotion())
-      timer.current = setInterval(() => setIdx(i => (i + 1) % n), 4500);
-  }, [n]);
+  /* Once the front card is up, quietly warm the rest so cycling never flashes
+     an empty slab. */
+  useEffect(() => {
+    if (n < 2) return;
+    const t = setTimeout(() => cards.forEach(c => { const im = new window.Image(); im.src = c.thumbnail; }), 1200);
+    return () => clearTimeout(t);
+  }, [cards, n]);
 
-  const onTouchStart = (e) => { touchStart.current = e.touches[0].clientX; };
-  const onTouchEnd = (e) => {
-    if (touchStart.current === null || !n) return;
-    const diff = touchStart.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 40) goTo(diff > 0 ? (idx + 1) % n : (idx - 1 + n) % n);
-    touchStart.current = null;
+  const step = useCallback((dir) => { if (n) setIdx(i => (i + dir + n) % n); }, [n]);
+
+  /* Pointer events cover mouse drag AND touch swipe (stage has
+     touch-action:pan-y, so vertical scrolling stays native — horizontal
+     gestures reach us). */
+  const onPointerDown = (e) => {
+    drag.current = { x: e.clientX, y: e.clientY };
+    swiped.current = false;
+    setPaused(true);
   };
+  const onPointerUp = (e) => {
+    if (drag.current) {
+      const dx = e.clientX - drag.current.x;
+      if (Math.abs(dx) > 40) { step(dx < 0 ? 1 : -1); swiped.current = true; }
+    }
+    drag.current = null;
+    setPaused(false);
+  };
+  const onPointerCancel = () => { drag.current = null; setPaused(false); };
   const onPointerMove = (e) => {
-    if (reducedMotion()) return;
+    if (e.pointerType !== 'mouse' || reducedMotion()) return;
     const r = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
     setTilt({ x: (y - 0.5) * -22, y: (x - 0.5) * 22 });
     setGlare({ x: x * 100, y: y * 100 });
   };
-  const onPointerLeave = () => { setTilt({ x: 0, y: 0 }); setGlare({ x: 50, y: 50 }); };
+  const onPointerEnter = (e) => { if (e.pointerType === 'mouse') setPaused(true); };
+  const onPointerLeave = (e) => {
+    setTilt({ x: 0, y: 0 }); setGlare({ x: 50, y: 50 });
+    if (e.pointerType === 'mouse') setPaused(false);
+    drag.current = null;
+  };
+  const open = () => { if (!swiped.current && card) onOpen(`/card/${card.cardId}`); };
 
   if (!card) {
     return (
       <div className="nft-stage">
         <div className="nft-card"><div className="nft-glass lp-skel" /></div>
+        <div className="nft-dots" aria-hidden="true">
+          {Array.from({ length: 5 }).map((_, i) => <span key={i} className={`nft-dot ${i === 0 ? 'on' : ''}`} />)}
+        </div>
       </div>
     );
   }
@@ -90,8 +123,8 @@ function HeroStack({ cards, onOpen }) {
 
   return (
     <div className="nft-stage"
-      onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}
-      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
+      onPointerMove={onPointerMove} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave}>
       <div className="nft-glow" style={{ background: up ? 'rgba(22,199,132,.5)' : 'rgba(239,68,68,.4)' }} />
       {behind.map((b, i) => (
         <div key={`b${i}`} className={`nft-back b${i + 1}`} aria-hidden="true">
@@ -100,13 +133,22 @@ function HeroStack({ cards, onOpen }) {
       ))}
       <div className="nft-card"
         role="button" tabIndex={0} aria-label={`${card.player} — view card`}
-        onClick={() => onOpen(`/card/${card.cardId}`)}
-        onKeyDown={e => { if (e.key === 'Enter') onOpen(`/card/${card.cardId}`); }}
+        onClick={open}
+        onKeyDown={e => {
+          if (e.key === 'Enter') onOpen(`/card/${card.cardId}`);
+          if (e.key === 'ArrowRight') step(1);
+          if (e.key === 'ArrowLeft') step(-1);
+        }}
         style={{ transform: `perspective(800px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}>
         <div className="nft-glass">
           <div className="nft-slab">
             <img key={card.cardId} src={card.thumbnail} alt={card.player} className="nft-card-img"
-              onError={e => { e.target.style.opacity = '0'; }} />
+              width="260" height="390" decoding="async" fetchPriority="high"
+              onError={e => {
+                // r2.dev rate-limited or dead link → fall back to the ebay thumb once
+                if (card.thumbAlt && e.currentTarget.src !== card.thumbAlt) e.currentTarget.src = card.thumbAlt;
+                else e.currentTarget.style.opacity = '0';
+              }} />
           </div>
           <div className="nft-info-bar">
             <div className="nft-info-left">
@@ -127,12 +169,24 @@ function HeroStack({ cards, onOpen }) {
           }} />
         </div>
       </div>
+      {n > 1 && (
+        <>
+          <button className="nft-arrow prev" aria-label="Previous card"
+            onClick={e => { e.stopPropagation(); step(-1); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <button className="nft-arrow next" aria-label="Next card"
+            onClick={e => { e.stopPropagation(); step(1); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </>
+      )}
       <div className="nft-dots">
         {cards.map((_, i) => (
-          <button key={i} className={`nft-dot ${i === idx ? 'on' : ''}`} aria-label={`Card ${i + 1}`} onClick={() => goTo(i)} />
+          <button key={i} className={`nft-dot ${i === idx ? 'on' : ''}`} aria-label={`Card ${i + 1}`} onClick={() => setIdx(i)} />
         ))}
       </div>
-      <p className="nft-hint">Tap the card for the full breakdown</p>
+      <p className="nft-hint">Swipe to flip through · tap for the full breakdown</p>
     </div>
   );
 }
@@ -261,38 +315,51 @@ export default function Landing() {
   }, [router]);
 
   /* Live data — never blocks first paint; skeletons until it lands.
-     One feed call (top sellers by volume) powers both hero stack and movers:
-     high-volume cards = recognizable names with believable 7-day moves. */
+     Hero: tiny dedicated endpoint (fetch already in flight from module load) +
+     sessionStorage warm-start so a repeat visit paints instantly.
+     Movers: the heavier 100-card feed — the hero no longer waits on it. */
   useEffect(() => {
-    fetch('/api/market/feed?limit=100&sort=sales')
-      .then(r => r.json())
-      .then(d => {
-        const feed = d.feed || [];
-        const seen = new Set();
-        const hero = feed.filter(c => {
-          if (!c.thumbnail || Number(c.marketPrice) < 25 || seen.has(c.player)) return false;
-          seen.add(c.player);
-          return true;
-        }).slice(0, 5);
-        setHeroCards(hero);
+    let dead = false;
 
-        const heroIds = new Set(hero.map(c => c.cardId));
-        const seen2 = new Set();
-        const pool = feed.filter(c => {
-          const pct = Number(c.gain7d) || 0;
-          if (!c.thumbnail || Number(c.marketPrice) < 25 || pct === 0 || heroIds.has(c.cardId) || seen2.has(c.player)) return false; // sub-$25 junk never headlines the landing page
-          seen2.add(c.player);
-          return true;
-        }).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 8);
-        const gainers = pool.filter(c => c.gain7d > 0).sort((a, b) => b.gain7d - a.gain7d);
-        const losers = pool.filter(c => c.gain7d < 0).sort((a, b) => a.gain7d - b.gain7d);
-        setMovers([...gainers, ...losers]);
-      }).catch(() => setMovers([]));
+    try {
+      const warm = JSON.parse(sessionStorage.getItem('lp_hero') || 'null');
+      if (Array.isArray(warm) && warm.length) setHeroCards(warm);
+    } catch { /* private mode etc. */ }
+
+    const heroP = (heroPreload || fetch('/api/market/hero').then(r => r.json())).catch(() => null);
+    heroP.then(d => {
+      if (dead) return;
+      const cards = (d && d.cards) || [];
+      if (cards.length) {
+        setHeroCards(cards);
+        try { sessionStorage.setItem('lp_hero', JSON.stringify(cards)); } catch { /* ignore */ }
+      }
+    });
+
+    const feedP = fetch('/api/market/feed?limit=100&sort=sales').then(r => r.json()).catch(() => null);
+    Promise.all([heroP, feedP]).then(([h, d]) => {
+      if (dead) return;
+      if (!d) return setMovers([]);
+      const feed = d.feed || [];
+      const heroPlayers = new Set(((h && h.cards) || []).map(c => c.player));
+      const seen = new Set();
+      const pool = feed.filter(c => {
+        const pct = Number(c.gain7d) || 0;
+        if (!c.thumbnail || Number(c.marketPrice) < 25 || pct === 0 || heroPlayers.has(c.player) || seen.has(c.player)) return false; // sub-$25 junk never headlines the landing page
+        seen.add(c.player);
+        return true;
+      }).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 8);
+      const gainers = pool.filter(c => c.gain7d > 0).sort((a, b) => b.gain7d - a.gain7d);
+      const losers = pool.filter(c => c.gain7d < 0).sort((a, b) => a.gain7d - b.gain7d);
+      setMovers([...gainers, ...losers]);
+    });
 
     fetch('/api/stats/live')
       .then(r => r.json())
-      .then(d => setTotalCards(Number(d.totalCards) || 0))
+      .then(d => { if (!dead) setTotalCards(Number(d.totalCards) || 0); })
       .catch(() => {});
+
+    return () => { dead = true; };
   }, []);
 
   /* Scroll-reveal — landing scrolls via #landing itself, not window */
@@ -328,23 +395,23 @@ export default function Landing() {
         <section className="lp-hero">
           <div className="lp-copy">
             <span className="lp-badge"><span className="d"></span>
-              {counted > 0 ? `${counted.toLocaleString()} cards priced live` : 'Live market · every grade · every sport'}
+              {counted > 0 ? `${counted.toLocaleString()} cards priced live` : 'By collectors, for collectors'}
             </span>
             <h1 className="lp-h1">The Card Show,<br /><span className="accent">Online.</span></h1>
-            <p className="lp-sub">Buy, sell, and trade real cards with collectors who get it — every deal backed by live market prices.</p>
+            <p className="lp-sub">Gemline is where collectors buy, sell, and trade real cards — track your collection and check what anything is worth with a free Price Guide covering over a million cards.</p>
             <div className="lp-cta">
               <button className="btn-xl primary" onClick={() => enter('/market')}>
-                Browse the floor
+                Browse the market
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               </button>
               <button className="btn-xl" onClick={() => enter('/portfolio')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,.18)', color: 'var(--txt,#fff)' }}>
-                Start your collection — free
+                Create your free account
               </button>
             </div>
             <div className="lp-trust">
-              <span><IconZap size={13} /> Live comps 24/7</span>
-              <span><IconCheck size={13} /> Stripe-secured payouts</span>
-              <span><IconSwap size={13} /> Trade card-for-card</span>
+              <span><IconSwap size={13} /> Buy, sell &amp; trade real cards</span>
+              <span><IconCheck size={13} /> Track your collection — free</span>
+              <span><IconZap size={13} /> Live Price Guide · 1M+ cards</span>
             </div>
           </div>
           <HeroStack cards={heroCards} onOpen={enter} />
