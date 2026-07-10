@@ -2772,6 +2772,200 @@ app.post('/api/portfolio/:id/verify-cert', requireAuth, async (req, res) => {
   }
 });
 
+// ── Collection CSV — "bring your binder" ──────────────────────────────
+// Export: one-click CSV of the signed-in user's collection.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+app.get('/api/collection/export', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const { rows } = await pool.query(`
+      SELECT c.player, c.card_set, c.year, c.number, c.variant, c.grader, c.grade,
+             p.purchase_price, c.catalog_price, p.cert_number, p.notes, p.acquired_at,
+             (SELECT MIN(l.price) FROM listings l WHERE l.card_id = c.id AND l.status = 'active' AND l.kind = 'buy_now') AS ask_cents
+      FROM portfolios p JOIN cards c ON c.id = p.card_id
+      WHERE p.user_id = $1
+      ORDER BY c.catalog_price DESC NULLS LAST`, [req.userId]);
+    const header = 'player,set,year,number,variant,grader,grade,qty,paid_price,current_value,cert_number,notes';
+    const lines = rows.map(x => [
+      x.player, x.card_set, x.year, x.number, x.variant,
+      (x.grader || 'RAW'), x.grade, 1,
+      x.purchase_price != null ? Number(x.purchase_price).toFixed(2) : '',
+      x.ask_cents != null ? (Number(x.ask_cents) / 100).toFixed(2) : (x.catalog_price != null ? Number(x.catalog_price).toFixed(2) : ''),
+      x.cert_number, x.notes,
+    ].map(csvCell).join(','));
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="gemline-collection-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send([header, ...lines].join('\r\n'));
+  } catch (e) {
+    console.error('collection/export:', e.message);
+    res.status(500).json({ error: 'export failed' });
+  }
+});
+
+// Import step 1 — match a chunk of parsed CSV rows against the catalog.
+// Client sends ≤150 rows per call (wizard chunks + shows progress); nothing
+// is written here. Same tokenized-AND semantics as market search + tier pick
+// like cardResolve: grader+grade → the right grade-tier row.
+const normGraderIn = (g) => {
+  const v = String(g || '').trim().toUpperCase();
+  if (!v || v === 'RAW' || v === 'UNGRADED' || v === 'NONE') return 'RAW';
+  return v;
+};
+app.post('/api/collection/import/match', requireAuth, rateLimit({ max: 30, windowMs: 60_000 }), async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const rowsIn = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 150) : [];
+    const SEARCH_EXPR = `(coalesce(player,'') || ' ' || coalesce(card_set,'') || ' ' || coalesce(variant,'') || ' ' || coalesce(year,''))`;
+    const out = [];
+    for (const row of rowsIn) {
+      const player = String(row.player || '').trim().slice(0, 80);
+      const set = String(row.set || '').trim().slice(0, 120);
+      const year = String(row.year || '').trim().slice(0, 8);
+      const number = String(row.number || '').trim().replace(/^#/, '').slice(0, 20);
+      const variant = String(row.variant || '').trim().slice(0, 80);
+      const grader = normGraderIn(row.grader);
+      const grade = String(row.grade || '').trim().slice(0, 12);
+      if (!player) { out.push({ status: 'unmatched', reason: 'no player name' }); continue; }
+
+      // Tokenized AND over the indexed search expression (number handled as a rank boost)
+      const tokens = [...player.split(/\s+/), ...set.split(/\s+/), year].map(t => t.trim()).filter(t => t.length > 1).slice(0, 8);
+      const params = [];
+      const conds = tokens.map(t => { params.push(`%${t}%`); return `${SEARCH_EXPR} ILIKE $${params.length}`; });
+      if (!conds.length) { out.push({ status: 'unmatched', reason: 'not enough info' }); continue; }
+      params.push(number || null); const numIdx = params.length;
+      params.push(variant ? `%${variant}%` : null); const varIdx = params.length;
+      let { rows: cands } = await pool.query(`
+        SELECT id, player, card_set, year, variant, number, sport, grader, grade,
+               catalog_price, cardhedge_id, ebay_thumb, image_url, sales_30d,
+               (COALESCE(number,'') = COALESCE($${numIdx}, '\u0001'))::int AS num_hit,
+               (CASE WHEN $${varIdx}::text IS NOT NULL AND variant ILIKE $${varIdx} THEN 1 ELSE 0 END) AS var_hit
+        FROM cards WHERE ${conds.join(' AND ')}
+        ORDER BY num_hit DESC, var_hit DESC, (catalog_price IS NOT NULL AND catalog_price > 0) DESC,
+                 sales_30d DESC NULLS LAST
+        LIMIT 30`, params);
+      // Player-only fallback — set names in binder CSVs rarely match ours exactly
+      if (!cands.length) {
+        const pParams = player.split(/\s+/).filter(Boolean).slice(0, 4).map(t => `%${t}%`);
+        const pConds = pParams.map((_, i) => `player ILIKE $${i + 1}`);
+        pParams.push(number || null);
+        ({ rows: cands } = await pool.query(`
+          SELECT id, player, card_set, year, variant, number, sport, grader, grade,
+                 catalog_price, cardhedge_id, ebay_thumb, image_url, sales_30d,
+                 (COALESCE(number,'') = COALESCE($${pParams.length}, '\u0001'))::int AS num_hit, 0 AS var_hit
+          FROM cards WHERE ${pConds.join(' AND ')}
+          ORDER BY num_hit DESC, (catalog_price IS NOT NULL AND catalog_price > 0) DESC, sales_30d DESC NULLS LAST
+          LIMIT 30`, pParams));
+      }
+      if (!cands.length) { out.push({ status: 'unmatched' }); continue; }
+
+      // Group tier rows into families, score each family
+      const fams = new Map();
+      for (const c of cands) {
+        const key = c.cardhedge_id || `${c.player}|${c.card_set}|${c.variant}|${c.number}`;
+        if (!fams.has(key)) fams.set(key, []);
+        fams.get(key).push(c);
+      }
+      const scored = [...fams.values()].map(tiers => {
+        const f = tiers[0];
+        let score = 0;
+        if (number && Number(f.num_hit)) score += 3;
+        if (variant && Number(f.var_hit)) score += 2;
+        if (year && String(f.year || '').includes(year)) score += 1;
+        if (f.player.toLowerCase() === player.toLowerCase()) score += 2;
+        if (set && f.card_set && f.card_set.toLowerCase().includes(set.toLowerCase())) score += 2;
+        return { tiers, f, score };
+      }).sort((a, b) => b.score - a.score || (Number(b.f.catalog_price) || 0) - (Number(a.f.catalog_price) || 0));
+
+      // Pick the right grade-tier row inside a family
+      const pickTier = (tiers) => {
+        if (grader !== 'RAW' || grade) {
+          const exact = tiers.find(t =>
+            String(t.grader || '').toUpperCase() === grader &&
+            (!grade || String(t.grade || '').trim() === grade));
+          if (exact) return { row: exact, gradeMatched: true };
+        }
+        const raw = tiers.find(t => /^(raw)?$/i.test(String(t.grader || '').trim()));
+        return { row: raw || tiers[0], gradeMatched: grader === 'RAW' && !!raw };
+      };
+      const asCandidate = (fam) => {
+        const { row, gradeMatched } = pickTier(fam.tiers);
+        return {
+          cardId: row.id, player: row.player, set: row.card_set, year: row.year,
+          variant: row.variant, number: row.number, sport: row.sport,
+          grader: row.grader || 'RAW', grade: row.grade || '',
+          price: row.catalog_price != null ? Number(row.catalog_price) : null,
+          thumbnail: row.ebay_thumb || row.image_url || null,
+          gradeMatched,
+        };
+      };
+
+      const best = scored[0];
+      const second = scored[1];
+      const maxScore = 3 * (number ? 1 : 0) + 2 * (variant ? 1 : 0) + (year ? 1 : 0) + 4;
+      const strong = best.score >= Math.max(4, Math.round(maxScore * 0.6));
+      const clearWinner = !second || best.score - second.score >= 2;
+      if (strong && clearWinner) {
+        out.push({ status: 'matched', confidence: second ? 'high' : 'exact', best: asCandidate(best), candidates: [] });
+      } else {
+        out.push({
+          status: 'ambiguous',
+          confidence: 'low',
+          best: asCandidate(best),
+          candidates: scored.slice(0, 5).map(asCandidate),
+        });
+      }
+    }
+    res.json({ results: out });
+  } catch (e) {
+    console.error('collection/import/match:', e.message);
+    res.status(500).json({ error: 'match failed' });
+  }
+});
+
+// Import step 2 — commit only what the user confirmed on the review screen.
+app.post('/api/collection/import/commit', requireAuth, rateLimit({ max: 10, windowMs: 60_000 }), async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const items = Array.isArray(req.body.items) ? req.body.items.slice(0, 5000) : [];
+    if (!items.length) return res.status(400).json({ error: 'nothing to import' });
+    const UUIDRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ids = [], paids = [], certs = [], notes = [];
+    let total = 0;
+    for (const it of items) {
+      if (!it || !UUIDRE.test(String(it.cardId || ''))) continue;
+      const qty = Math.min(25, Math.max(1, parseInt(it.qty) || 1));
+      const paid = it.paid != null && it.paid !== '' && isFinite(Number(it.paid)) && Number(it.paid) >= 0 ? Number(it.paid) : null;
+      for (let q = 0; q < qty && total < 5000; q++, total++) {
+        ids.push(it.cardId);
+        paids.push(paid);
+        certs.push(it.certNumber ? String(it.certNumber).slice(0, 40) : null);
+        notes.push(it.notes ? String(it.notes).slice(0, 300) : 'CSV import');
+      }
+    }
+    if (!ids.length) return res.status(400).json({ error: 'no valid rows' });
+    // Only import cards that actually exist — never invent catalog rows here
+    const { rows: ins } = await pool.query(`
+      INSERT INTO portfolios (id, user_id, card_id, purchase_price, cert_number, notes, is_listed, acquired_at, created_at)
+      SELECT gen_random_uuid(), $1, v.card_id::uuid, v.paid::numeric, v.cert, v.note, false, NOW(), NOW()
+      FROM unnest($2::text[], $3::text[], $4::text[], $5::text[]) AS v(card_id, paid, cert, note)
+      WHERE EXISTS (SELECT 1 FROM cards c WHERE c.id = v.card_id::uuid)
+      RETURNING id`, [req.userId, ids, paids.map(p => p == null ? null : String(p)), certs, notes]);
+    res.json({ ok: true, imported: ins.length });
+  } catch (e) {
+    console.error('collection/import/commit:', e.message);
+    res.status(500).json({ error: 'import failed' });
+  }
+});
+
 // ── Marketplace listings CRUD (Sell UI + Market feed) ───────────────────────
 // Prices are stored in CENTS in the DB (matches for-card/buy flow); list
 // endpoints return DOLLARS for display.

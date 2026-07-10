@@ -14,6 +14,7 @@ import SellContent from '../components/SellContent';
 import OffersContent from '../components/OffersContent';
 import OrdersContent from '../components/OrdersContent';
 import WatchlistContent from '../components/WatchlistContent';
+import CollectionImport from '../components/CollectionImport';
 
 export default function PortfolioPage() {
   const { token, authFetch, user } = useAuth();
@@ -43,6 +44,7 @@ export default function PortfolioPage() {
   }, []);
   const [showSearch, setShowSearch] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [listingItem, setListingItem] = useState(null); // item to list for sale
   const [listingPrice, setListingPrice] = useState('');
   const [listingSubmitting, setListingSubmitting] = useState(false);
@@ -165,6 +167,21 @@ export default function PortfolioPage() {
     } catch { toast('Failed to save', true); }
     finally { setCostSaving(false); }
   }, [costItem, costValue, authFetch, fetchPortfolio]);
+
+  // Export collection as CSV (one click, auth'd fetch → browser download)
+  const exportCSV = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/collection/export');
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `gemline-collection-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast('Collection exported ✓');
+    } catch { toast('Export failed — try again', true); }
+  }, [authFetch]);
 
   // Share public collection link
   const shareCollection = useCallback(() => {
@@ -378,6 +395,14 @@ export default function PortfolioPage() {
         <button className="offer" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => setShowCamera(true)}>
           Scan Card
         </button>
+        <button className="offer" style={{ padding: '10px 20px', fontSize: 13 }} onClick={() => setShowImport(true)}>
+          ⬆ Import CSV
+        </button>
+        {items.length > 0 && (
+          <button className="offer" style={{ padding: '10px 20px', fontSize: 13 }} onClick={exportCSV}>
+            ⬇ Export CSV
+          </button>
+        )}
         {user?.handle && items.length > 0 && (
           <button className="offer" style={{ padding: '10px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }} onClick={shareCollection}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
@@ -751,6 +776,10 @@ export default function PortfolioPage() {
       )}
 
       {/* Camera Scanner Modal */}
+      {showImport && (
+        <CollectionImport onClose={() => setShowImport(false)} onDone={fetchPortfolio} />
+      )}
+
       {showCamera && (
         <CameraScanner onResult={handleScanResult} onClose={() => setShowCamera(false)} />
       )}
