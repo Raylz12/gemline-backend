@@ -218,7 +218,7 @@ async function refreshMvHandler(req, res) {
                  count(*)::int AS card_count,
                  count(DISTINCT (player, variant, number))::int AS family_count,
                  min(catalog_price) FILTER (WHERE catalog_price > 0) AS price_min,
-                 max(catalog_price) AS price_max,
+                 max(catalog_price) FILTER (WHERE catalog_price <= 5000000) AS price_max,
                  sum(COALESCE(sales_30d,0))::bigint AS sales_30d,
                  (array_agg(ebay_thumb ORDER BY sales_30d DESC NULLS LAST) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS thumbnail
           FROM cards WHERE card_set IS NOT NULL AND card_set <> ''
