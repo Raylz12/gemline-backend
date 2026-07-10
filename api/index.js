@@ -1035,6 +1035,52 @@ app.get('/api/market/heatmap', async (req, res) => {
 });
 
 // Hot Board: trending players by real 7-day sales volume + price direction.
+// Landing hero — tiny payload (~2KB) so the hero stack paints instantly instead
+// of waiting on the 100KB market feed. Top-selling recognizable cards, one per
+// player. In-memory 15 min + CDN s-maxage=900. Prefers r2_thumb (our bucket)
+// when the backfill has it, with the ebay/bubble thumb as a client-side
+// fallback (r2.dev is rate-limited — the CDN cache keeps this to one DB hit
+// per 15 min, and each visitor loads at most ~6 images).
+app.get('/api/market/hero', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    if (app._heroCache?.expires > Date.now()) return res.json(app._heroCache.data);
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ cards: [] });
+    const { rows } = await pool.query(`
+      WITH top AS (
+        SELECT id, player, sport, year, grader, grade, catalog_price, gain_7d,
+               ebay_thumb, image_url, sales_7d
+        FROM mv_card_feed
+        WHERE (ebay_thumb IS NOT NULL OR image_url IS NOT NULL)
+          AND catalog_price >= 25
+          AND player IS NOT NULL AND player <> '' AND player !~ '^[0-9]+x[0-9]+$'
+        ORDER BY sales_7d DESC NULLS LAST
+        LIMIT 60
+      ), dedup AS (
+        SELECT DISTINCT ON (player) * FROM top ORDER BY player, sales_7d DESC NULLS LAST
+      )
+      SELECT d.*, c.r2_thumb FROM dedup d LEFT JOIN cards c ON c.id = d.id
+      ORDER BY d.sales_7d DESC NULLS LAST
+      LIMIT 6`);
+    const cards = rows.map(x => {
+      const ebay = x.ebay_thumb || x.image_url || null;
+      return {
+        cardId: x.id, player: x.player, sport: x.sport || '', year: x.year || '',
+        grader: normGrader(x.grader), grade: normGrade(x.grade),
+        marketPrice: Number(x.catalog_price) || 0,
+        gain7d: Number(x.gain_7d) || 0,
+        thumbnail: x.r2_thumb || ebay,
+        thumbAlt: (x.r2_thumb && ebay) ? ebay : null,
+      };
+    });
+    const data = { cards };
+    app._heroCache = { data, expires: Date.now() + 15 * 60 * 1000 };
+    res.json(data);
+  } catch (e) { console.error('market/hero:', e.message); res.json({ cards: [] }); }
+});
+
 // Landing-page hot path — aggregate over mv_card_feed, cached hard (15 min per
 // sport in-memory + CDN s-maxage). No index numbers, no external calls.
 app.get('/api/market/hot-board', async (req, res) => {
