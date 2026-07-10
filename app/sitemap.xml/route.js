@@ -9,6 +9,7 @@ export async function GET() {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${chunks.map(c => `  <sitemap><loc>https://gemlinecards.com/api/sitemap/${c}</loc><lastmod>${now}</lastmod></sitemap>`).join('\n')}
+  <sitemap><loc>https://gemlinecards.com/api/sitemap/sets</loc><lastmod>${now}</lastmod></sitemap>
 </sitemapindex>`;
   return new Response(xml, {
     headers: {

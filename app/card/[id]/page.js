@@ -14,10 +14,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const getCard = cache(async (id) => {
   if (!UUID_RE.test(id)) return null;
   const { rows: [card] } = await db().query(
-    `SELECT id, player, year, card_set, variant, number, sport, grader, grade,
-            catalog_price, ch_price_lo, ch_price_hi, sales_7d, sales_30d, gain_7d,
-            rookie, psa_pop_10, psa_pop_total, ebay_thumb, image_url
-     FROM cards WHERE id = $1`, [id]
+    `SELECT c.id, c.player, c.year, c.card_set, c.variant, c.number, c.sport, c.grader, c.grade,
+            c.catalog_price, c.ch_price_lo, c.ch_price_hi, c.sales_7d, c.sales_30d, c.gain_7d,
+            c.rookie, c.psa_pop_10, c.psa_pop_total, c.ebay_thumb, c.image_url,
+            cs.slug AS set_slug
+     FROM cards c LEFT JOIN card_sets cs ON cs.name = c.card_set
+     WHERE c.id = $1`, [id]
   );
   return card || null;
 });
@@ -121,6 +123,7 @@ export default async function CardPage({ params }) {
           <Link href="/" style={{ color: 'var(--dim)' }}>GEMLINE</Link>
           {' / '}
           <Link href="/market" style={{ color: 'var(--dim)' }}>Market</Link>
+          {card.set_slug && <>{' / '}<Link href={`/sets/${card.set_slug}`} style={{ color: 'var(--dim)' }}>{card.card_set}</Link></>}
           {' / '}<span style={{ color: 'var(--muted)' }}>{card.player}</span>
         </div>
 

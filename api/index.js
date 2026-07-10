@@ -89,6 +89,27 @@ app.get('/health', (_req, res) => res.json({
 // /api/sitemap/:c where :c is a uuid first-hex-char chunk (0-f). Each chunk is
 // ~40K priced cards — under the 50K sitemap limit — selected by uuid range so
 // there are no OFFSET scans over 750K rows. Referenced from /sitemap.xml.
+// Set pages sitemap — one file (~6.4K URLs, under the 50K limit). Must be
+// declared BEFORE /api/sitemap/:c so 'sets' isn't eaten by the hex-chunk route.
+app.get('/api/sitemap/sets', async (_req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(503).send('No database');
+    const { rows } = await pool.query(`SELECT slug FROM card_sets WHERE card_count > 0 ORDER BY slug`);
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      `<url><loc>https://gemlinecards.com/sets</loc></url>\n` +
+      rows.map(x => `<url><loc>https://gemlinecards.com/sets/${x.slug}</loc></url>`).join('\n') +
+      `\n</urlset>`;
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+    res.send(xml);
+  } catch (e) {
+    console.error('sitemap sets error:', e.message);
+    res.status(500).send('sitemap error');
+  }
+});
+
 app.get('/api/sitemap/:c', async (req, res) => {
   try {
     const c = String(req.params.c).toLowerCase();
@@ -179,6 +200,38 @@ async function refreshMvHandler(req, res) {
     app._brandCounts = null;
     app._arbCache = null;
     console.log(`[admin] mv_card_feed refreshed in ${Date.now()-t0}ms`);
+    // Refresh card_sets summary (set pages) — best-effort, ~20s aggregate.
+    // Existing slugs are stable (keyed on name); brand-new sets get a slug,
+    // with a short hash suffix if it would collide with an existing one.
+    try {
+      const t1 = Date.now();
+      await pool.query(`
+        INSERT INTO card_sets (slug, name, sport, year, card_count, family_count, price_min, price_max, sales_30d, thumbnail, updated_at)
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM card_sets cs WHERE cs.slug = a.base AND cs.name <> a.name)
+                    THEN a.base || '-' || substr(md5(a.name), 1, 4) ELSE a.base END,
+               a.name, a.sport, a.year, a.card_count, a.family_count, a.price_min, a.price_max, a.sales_30d, a.thumbnail, now()
+        FROM (
+          SELECT card_set AS name,
+                 trim(both '-' from lower(regexp_replace(card_set, '[^a-zA-Z0-9]+', '-', 'g'))) AS base,
+                 mode() WITHIN GROUP (ORDER BY sport) FILTER (WHERE sport IS NOT NULL AND sport <> '' AND sport !~ '^[0-9]+x[0-9]+$') AS sport,
+                 mode() WITHIN GROUP (ORDER BY NULLIF(year,'')) AS year,
+                 count(*)::int AS card_count,
+                 count(DISTINCT (player, variant, number))::int AS family_count,
+                 min(catalog_price) FILTER (WHERE catalog_price > 0) AS price_min,
+                 max(catalog_price) AS price_max,
+                 sum(COALESCE(sales_30d,0))::bigint AS sales_30d,
+                 (array_agg(ebay_thumb ORDER BY sales_30d DESC NULLS LAST) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS thumbnail
+          FROM cards WHERE card_set IS NOT NULL AND card_set <> ''
+          GROUP BY card_set
+        ) a
+        WHERE a.base <> ''
+        ON CONFLICT (name) DO UPDATE SET
+          card_count = EXCLUDED.card_count, family_count = EXCLUDED.family_count,
+          price_min = EXCLUDED.price_min, price_max = EXCLUDED.price_max,
+          sales_30d = EXCLUDED.sales_30d, thumbnail = COALESCE(EXCLUDED.thumbnail, card_sets.thumbnail),
+          sport = EXCLUDED.sport, year = EXCLUDED.year, updated_at = now()`);
+      console.log(`[admin] card_sets refreshed in ${Date.now()-t1}ms`);
+    } catch (e) { console.error('[admin] card_sets refresh failed:', e.message); }
     const alerts = await sweepPriceAlerts(pool);
     res.json({ ok: true, refreshedMs: Date.now()-t0, priceAlerts: alerts });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
