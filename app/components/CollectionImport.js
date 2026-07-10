@@ -190,7 +190,12 @@ export default function CollectionImport({ onClose, onDone }) {
     <span style={{ fontSize: 9.5, fontFamily: 'var(--mono)', fontWeight: 700, letterSpacing: '.05em', padding: '2px 7px', borderRadius: 4, background: bg, color, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{text}</span>
   );
 
-  const candLabel = (c) => `${gradeLabel(c)} · ${[c.year, c.set].filter(Boolean).join(' ')}${c.variant && c.variant !== 'Base' ? ` · ${c.variant}` : ''}${c.number ? ` #${c.number}` : ''}${c.price != null ? ` — ${usd(c.price)}` : ''}`;
+  // Skip the year prefix when the set name already starts with it ("2023 2023 Panini Prizm…")
+  const candLabel = (c) => {
+    const setName = String(c.set || '').trim();
+    const yr = c.year && !setName.startsWith(String(c.year)) ? c.year : null;
+    return `${gradeLabel(c)} · ${[yr, setName].filter(Boolean).join(' ')}${c.variant && c.variant !== 'Base' ? ` · ${c.variant}` : ''}${c.number ? ` #${c.number}` : ''}${c.price != null ? ` — ${usd(c.price)}` : ''}`;
+  };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && step !== 'matching') onClose(); }}>
@@ -280,7 +285,7 @@ export default function CollectionImport({ onClose, onDone }) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 12.5, fontWeight: 700 }}>{r.input.player || '(no player)'}</span>
-                          <span style={{ fontSize: 10.5, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>
+                          <span style={{ fontSize: 10.5, color: 'var(--dim)', fontFamily: 'var(--mono)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                             {[r.input.year, r.input.set, r.input.number && `#${r.input.number}`, r.input.grader && `${r.input.grader} ${r.input.grade || ''}`.trim()].filter(Boolean).join(' · ')}
                           </span>
                           {st === 'matched' && pill('var(--up-soft, rgba(22,199,132,.12))', 'var(--up)', r.result.confidence === 'exact' ? 'Matched' : 'Matched · high')}
