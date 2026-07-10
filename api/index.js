@@ -40,6 +40,12 @@ app.use(cors({
 // BEFORE the global 128kb parser; express.json skips already-parsed bodies).
 app.use('/api/cards/analyze', express.json({ limit: '6mb' }));
 app.use('/api/portfolio/:id/verify-scan', express.json({ limit: '6mb' }));
+// Stripe webhook needs the RAW body for signature verification. This MUST run
+// before the global express.json() below, otherwise the body is parsed to an
+// object and constructEvent() fails ("payload must be a string or Buffer") —
+// which silently broke every webhook (orders, subscriptions). raw() sets
+// req._body=true so the json parser below skips it.
+app.use('/api/webhook/stripe', express.raw({ type: '*/*', limit: '1mb' }));
 app.use(express.json({ limit: '100kb' }));   // prevent large payload attacks
 app.use(express.static(join(__dirname, '..', 'public')));
 
