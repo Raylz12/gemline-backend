@@ -59,7 +59,7 @@ export default function Onboarding({ onClose }) {
 
   const next = () => {
     if (step === 0) {
-      if (sports.size === 0) { toast('Pick at least one to continue — or skip', true); return; }
+      if (sports.size === 0) { toast('Pick at least one to continue, or skip', true); return; }
       try { localStorage.setItem('gemline_fav_sports', JSON.stringify([...sports])); } catch {}
       loadPlayers(sports);
       setStep(1);
@@ -82,7 +82,7 @@ export default function Onboarding({ onClose }) {
       } catch { /* keep going */ }
     }
     setSaving(false);
-    if (added > 0) toast(`Watching ${added} card${added > 1 ? 's' : ''} — you'll get price + listing alerts`);
+    if (added > 0) toast(`Watching ${added} card${added > 1 ? 's' : ''}, you'll get price + listing alerts`);
     onClose();
     if (added > 0) router.push('/portfolio?tab=watchlist');
   };
@@ -125,7 +125,7 @@ export default function Onboarding({ onClose }) {
             {players === null ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>Finding the most-traded cards…</div>
             ) : players.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>Couldn&apos;t load suggestions — explore the market instead.</div>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>Couldn&apos;t load suggestions, explore the market instead.</div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
                 {players.map(p => {

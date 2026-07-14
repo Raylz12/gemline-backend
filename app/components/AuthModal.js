@@ -66,7 +66,7 @@ export default function AuthModal({ onClose }) {
       });
       setForgotSent(true);
     } catch {
-      setError('Network error — try again');
+      setError('Network error, try again');
     } finally {
       setForgotBusy(false);
     }
@@ -114,7 +114,7 @@ export default function AuthModal({ onClose }) {
 
           <div className="auth-title">{tab === 'login' ? 'Welcome back' : 'Create account'}</div>
           <div className="auth-sub">
-            {tab === 'login' ? 'Sign in to your GEMLINE account' : 'Join the show — free in 30 seconds'}
+            {tab === 'login' ? 'Sign in to your GEMLINE account' : 'Join the show, free in 30 seconds'}
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>

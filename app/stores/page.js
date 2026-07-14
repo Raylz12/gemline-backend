@@ -144,7 +144,7 @@ export default function StoresPage() {
         <div style={{ textAlign: 'center', padding: '70px 20px', background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 16 }}>
           <div style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--gold-soft)', color: 'var(--gold)', display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}><IconStore size={30} /></div>
           <div style={{ fontFamily: 'var(--disp)', fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Founding dealer spots open</div>
-          <p style={{ color: 'var(--muted)', marginBottom: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', fontSize: 13, lineHeight: 1.6 }}>Gemline stores get a verified storefront, bulk inventory tools, and direct access to collectors — no listing fees during launch.</p>
+          <p style={{ color: 'var(--muted)', marginBottom: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', fontSize: 13, lineHeight: 1.6 }}>Gemline stores get a verified storefront, bulk inventory tools, and direct access to collectors, no listing fees during launch.</p>
           <p style={{ color: 'var(--dim)', marginBottom: 22, fontSize: 12 }}>Card shop, show dealer, or high-volume collector? Claim your handle first.</p>
           <Link href="/sell" style={{ padding: '11px 26px', background: 'var(--gold)', color: '#000', borderRadius: 9, fontWeight: 700, textDecoration: 'none' }}>
             Apply to Sell →

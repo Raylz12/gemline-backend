@@ -53,7 +53,7 @@ export async function generateMetadata({ params }) {
   const title = `${name} Price & Market Value | GEMLINE`;
   const description = price
     ? `${name} current market value: ${usd(price)}. ${Number(card.sales_30d) > 0 ? `${card.sales_30d} sales in the last 30 days. ` : ''}Live price tracking, listings, and market data on GEMLINE.`
-    : `${name} — live price tracking, listings, and market data on GEMLINE, the card show online.`;
+    : `${name}, live price tracking, listings, and market data on GEMLINE, the card show online.`;
   // Dynamic dark-brand OG composition (player/set/grade/price) — rendered
   // by app/og/card/[id]/route.js with next/og.
   const img = `https://gemlinecards.com/og/card/${card.id}`;
@@ -137,7 +137,7 @@ export default async function CardPage({ params }) {
             <div className="eyebrow">{card.sport || 'Trading Card'}{card.rookie ? ' · Rookie' : ''}</div>
             <h1 className="page" style={{ fontSize: 30, lineHeight: 1.15, marginBottom: 8 }}>{name}</h1>
             <p className="sub" style={{ marginBottom: 18 }}>
-              Live market value, sales volume, and listings for this card on GEMLINE — the card show, online.
+              Live market value, sales volume, and listings for this card on GEMLINE, the card show, online.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>

@@ -36,7 +36,7 @@ function parseCSV(text) {
 }
 
 const FIELDS = [
-  { key: '', label: '— ignore —' },
+  { key: '', label: '(ignore this column)' },
   { key: 'player', label: 'Player' },
   { key: 'set', label: 'Set / Brand' },
   { key: 'year', label: 'Year' },
@@ -88,11 +88,11 @@ export default function CollectionImport({ onClose, onDone }) {
   const onFile = useCallback(async (file) => {
     setError('');
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) { setError('File too big — 4 MB max.'); return; }
+    if (file.size > 4 * 1024 * 1024) { setError('File too big. 4 MB max.'); return; }
     const text = await file.text();
     const parsed = parseCSV(text);
     if (parsed.length < 1) { setError('Could not read any rows from that file.'); return; }
-    if (parsed.length - 1 > MAX_ROWS) { setError(`That's ${(parsed.length - 1).toLocaleString()} rows — cap is ${MAX_ROWS.toLocaleString()} per import. Split the file and run it twice.`); return; }
+    if (parsed.length - 1 > MAX_ROWS) { setError(`That's ${(parsed.length - 1).toLocaleString()} rows, cap is ${MAX_ROWS.toLocaleString()} per import. Split the file and run it twice.`); return; }
     const header = parsed[0];
     const guessed = header.map(guessField);
     const looksLikeHeader = guessed.some(Boolean);
@@ -116,7 +116,7 @@ export default function CollectionImport({ onClose, onDone }) {
   }, [mapping]);
 
   const startMatch = useCallback(async () => {
-    if (!mapping.includes('player')) { setError('Map a column to Player — it\u2019s the one required field.'); return; }
+    if (!mapping.includes('player')) { setError('Map a column to Player, it\u2019s the one required field.'); return; }
     setError('');
     setStep('matching');
     setProgress(0);
@@ -145,7 +145,7 @@ export default function CollectionImport({ onClose, onDone }) {
       setRows(out);
       setStep('review');
     } catch (e) {
-      setError('Matching hit a snag — nothing was imported. Try again.');
+      setError('Matching hit a snag, nothing was imported. Try again.');
       setStep('map');
     }
   }, [authFetch, buildInput, dataRows, mapping]);
@@ -173,7 +173,7 @@ export default function CollectionImport({ onClose, onDone }) {
       setStep('done');
       onDone?.();
     } catch (e) {
-      setError(e.message || 'Import failed — nothing may have been saved. Check your collection.');
+      setError(e.message || 'Import failed, nothing may have been saved. Check your collection.');
     } finally {
       setCommitting(false);
     }
@@ -194,7 +194,7 @@ export default function CollectionImport({ onClose, onDone }) {
   const candLabel = (c) => {
     const setName = String(c.set || '').trim();
     const yr = c.year && !setName.startsWith(String(c.year)) ? c.year : null;
-    return `${gradeLabel(c)} · ${[yr, setName].filter(Boolean).join(' ')}${c.variant && c.variant !== 'Base' ? ` · ${c.variant}` : ''}${c.number ? ` #${c.number}` : ''}${c.price != null ? ` — ${usd(c.price)}` : ''}`;
+    return `${gradeLabel(c)} · ${[yr, setName].filter(Boolean).join(' ')}${c.variant && c.variant !== 'Base' ? ` · ${c.variant}` : ''}${c.number ? ` #${c.number}` : ''}${c.price != null ? ` · ${usd(c.price)}` : ''}`;
   };
 
   return (
@@ -208,8 +208,8 @@ export default function CollectionImport({ onClose, onDone }) {
           {step === 'upload' && (
             <>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 18px' }}>
-                Export a CSV from a spreadsheet or another tracker and bring it here. Up to {MAX_ROWS.toLocaleString()} rows —
-                we&apos;ll match every card against the price guide and you approve everything before it lands.
+                Export a CSV from a spreadsheet or another tracker and bring it here. Up to {MAX_ROWS.toLocaleString()} rows.
+                We&apos;ll match every card against the price guide and you approve everything before it lands.
               </p>
               <div
                 onClick={() => fileRef.current?.click()}
@@ -227,7 +227,7 @@ export default function CollectionImport({ onClose, onDone }) {
           {step === 'map' && (
             <>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 14px' }}>
-                {dataRows.length.toLocaleString()} rows found. Tell us what each column is — we guessed where we could.
+                {dataRows.length.toLocaleString()} rows found. Tell us what each column is, we guessed where we could.
               </p>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)', marginBottom: 12, cursor: 'pointer' }}>
                 <input type="checkbox" checked={hasHeader} onChange={e => setHasHeader(e.target.checked)} />
@@ -263,7 +263,7 @@ export default function CollectionImport({ onClose, onDone }) {
               <div style={{ height: 8, borderRadius: 4, background: 'var(--panel-2)', overflow: 'hidden', maxWidth: 380, margin: '0 auto' }}>
                 <div style={{ height: '100%', width: `${Math.round(progress * 100)}%`, background: 'var(--gold)', transition: 'width .3s' }} />
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--mono)', marginTop: 10 }}>{Math.round(progress * 100)}% — nothing is saved yet</div>
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--mono)', marginTop: 10 }}>{Math.round(progress * 100)}%, nothing is saved yet</div>
             </div>
           )}
 
@@ -310,12 +310,12 @@ export default function CollectionImport({ onClose, onDone }) {
                             style={{ marginTop: 6, width: '100%', padding: '7px 10px', fontSize: 11.5, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 7, color: r.chosen ? 'var(--txt)' : 'var(--muted)' }}>
                             <option value="">Choose the right card…</option>
                             {r.result.candidates.map(c => (
-                              <option key={c.cardId} value={c.cardId}>{`${c.player} — ${candLabel(c)}`}</option>
+                              <option key={c.cardId} value={c.cardId}>{`${c.player}, ${candLabel(c)}`}</option>
                             ))}
                           </select>
                         )}
                         {st === 'unmatched' && (
-                          <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>Not in the price guide yet — add it manually with Search &amp; Add.</div>
+                          <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>Not in the price guide yet, add it manually with Search &amp; Add.</div>
                         )}
                       </div>
                     </div>
@@ -338,7 +338,7 @@ export default function CollectionImport({ onClose, onDone }) {
             <div style={{ padding: '30px 0', textAlign: 'center' }}>
               <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
               <div style={{ fontSize: 16, fontWeight: 800 }}>{doneCount.toLocaleString()} card{doneCount === 1 ? '' : 's'} added to your collection</div>
-              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 8 }}>Values are live — check the P&amp;L on anything you set a paid price for.</p>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 8 }}>Values are live, check the P&amp;L on anything you set a paid price for.</p>
               <button className="buy" style={{ padding: '10px 24px', fontSize: 13, marginTop: 16 }} onClick={onClose}>Done</button>
             </div>
           )}

@@ -76,7 +76,7 @@ function HeroStack({ cards, onOpen }) {
   const step = useCallback((dir) => { if (n) setIdx(i => (i + dir + n) % n); }, [n]);
 
   /* Pointer events cover mouse drag AND touch swipe (stage has
-     touch-action:pan-y, so vertical scrolling stays native — horizontal
+     touch-action:pan-y, so vertical scrolling stays native, horizontal
      gestures reach us). */
   const onPointerDown = (e) => {
     drag.current = { x: e.clientX, y: e.clientY };
@@ -132,7 +132,7 @@ function HeroStack({ cards, onOpen }) {
         </div>
       ))}
       <div className="nft-card"
-        role="button" tabIndex={0} aria-label={`${card.player} — view card`}
+        role="button" tabIndex={0} aria-label={`${card.player}, view card`}
         onClick={open}
         onKeyDown={e => {
           if (e.key === 'Enter') onOpen(`/card/${card.cardId}`);
@@ -253,7 +253,7 @@ function HotBoard({ onOpen }) {
     return () => { dead = true; clearInterval(poll); clearInterval(tick); };
   }, [sport]);
 
-  if (players && players.length === 0 && sport === 'All') return null; // nothing hot — hide the section
+  if (players && players.length === 0 && sport === 'All') return null; // nothing hot, hide the section
 
   return (
     <section className="lp-hotboard">
@@ -275,7 +275,7 @@ function HotBoard({ onOpen }) {
               return (
                 <button key={`${p.player}|${p.sport}`} className="lp-hot-row reveal in"
                   onClick={() => onOpen(`/market?q=${encodeURIComponent(p.player)}`)}
-                  aria-label={`${p.player} — see their cards`}>
+                  aria-label={`${p.player}, see their cards`}>
                   <span className="lp-hot-rank">{i + 1}</span>
                   <span className="lp-hot-thumb">
                     {p.thumbnail && !imgDead[p.player] ? (
@@ -303,13 +303,13 @@ function HotBoard({ onOpen }) {
 }
 
 const FEATURES = [
-  { Icon: IconZap, title: 'Live prices', desc: 'Every card scored against live comps — spreads, sales, and 7-day heat, all day.', target: '/analytics' },
+  { Icon: IconZap, title: 'Live prices', desc: 'Every card scored against live comps. Spreads, sales, and 7-day heat, all day.', target: '/market' },
   { Icon: IconSwap, title: 'Real trades', desc: 'Card-for-card deals with a fair-value meter. No guesswork, no getting fleeced.', target: '/market' },
   { Icon: IconDollar, title: 'Get paid', desc: 'List in seconds. Stripe-secured payouts land when the buyer confirms.', target: '/sell' },
 ];
 
 const STEPS = [
-  { Icon: IconPackage, title: 'Bring your cards', desc: 'Your binder, eBay grabs, LCS pickups — if you own it, it belongs here.' },
+  { Icon: IconPackage, title: 'Bring your cards', desc: 'Your binder, eBay grabs, LCS pickups, if you own it, it belongs here.' },
   { Icon: IconSwap, title: 'List or trade', desc: 'Name your price, run an auction, or swap straight up.' },
   { Icon: IconDollar, title: 'Get paid', desc: 'Funds release when the buyer confirms. Real cards, real money.' },
 ];
@@ -331,7 +331,7 @@ export default function Landing() {
   /* Live data — never blocks first paint; skeletons until it lands.
      Hero: tiny dedicated endpoint (fetch already in flight from module load) +
      sessionStorage warm-start so a repeat visit paints instantly.
-     Movers: the heavier 100-card feed — the hero no longer waits on it. */
+     Movers: the heavier 100-card feed, the hero no longer waits on it. */
   useEffect(() => {
     let dead = false;
 
@@ -412,7 +412,7 @@ export default function Landing() {
               {counted > 0 ? `${counted.toLocaleString()} cards priced live` : 'By collectors, for collectors'}
             </span>
             <h1 className="lp-h1">The Card Show,<br /><span className="accent">Online.</span></h1>
-            <p className="lp-sub">Gemline is where collectors buy, sell, and trade real cards — track your collection and check what anything is worth with a free Price Guide covering over a million cards.</p>
+            <p className="lp-sub">Gemline is where collectors buy, sell, and trade real cards, track your collection and check what anything is worth with a free Price Guide covering over a million cards.</p>
             <div className="lp-cta">
               <button className="btn-xl primary" onClick={() => enter('/market')}>
                 Browse the market
@@ -424,7 +424,7 @@ export default function Landing() {
             </div>
             <div className="lp-trust">
               <span><IconSwap size={13} /> Buy, sell &amp; trade real cards</span>
-              <span><IconCheck size={13} /> Track your collection — free</span>
+              <span><IconCheck size={13} /> Track your collection, free</span>
               <span><IconZap size={13} /> Live Price Guide · 1M+ cards</span>
             </div>
           </div>
@@ -447,7 +447,7 @@ export default function Landing() {
                 {movers.map((c, i) => <MoverTile key={c.cardId} c={c} onOpen={enter} delay={(i % 4) * 70} />)}
               </div>
               <div className="lp-pulse-more reveal">
-                <button onClick={() => enter('/analytics')}>See the full price guide →</button>
+                <button onClick={() => enter('/market')}>See the full price guide →</button>
               </div>
             </>
           ) : (
@@ -498,7 +498,7 @@ export default function Landing() {
         {/* 5 ── CLOSER */}
         <section className="lp-closer reveal">
           <h2>Pull up a table.</h2>
-          <p>The floor never closes. Know what your cards are worth — and trade with people who love them as much as you do.</p>
+          <p>The floor never closes. Know what your cards are worth, and trade with people who love them as much as you do.</p>
           <button className="btn-xl primary" onClick={() => enter('/market')}>
             Enter the show
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>

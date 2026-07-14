@@ -276,34 +276,39 @@ export default function MarketplacePage() {
 
   const boosted = enrichedCards.filter(c => c.boost).sort((a, b) => b.boost.rank - a.boost.rank);
 
+  // One page header for all three views — the tab bar lives INSIDE it, right
+  // under the title, so it reads as part of the page instead of a floating pill.
+  const HERO = {
+    browse: ['Every card, priced live.', 'Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence. Every price is verified against live market data.'],
+    deals: ['Deal Finder', 'Cards priced below fair value, fees already counted. Live across the whole market, refreshed all day.'],
+    grading: ['Worth grading?', 'Run the numbers before you send a card in. Raw price, graded price, and grading cost, all in one view.'],
+  };
+
   return (
     <>
-      {/* Unified segmented control — Browse (price guide) | Deals | Worth Grading.
-          Sticky + horizontally scrollable so it stays thumb-reachable on iOS. */}
-      <div className="market-seg-wrap">
-        <div className="market-seg" role="tablist" aria-label="Market views">
-          {MARKET_TABS.map(([k, label]) => (
-            <button key={k} type="button" role="tab" aria-selected={activeTab === k}
-              className={`market-seg-btn ${activeTab === k ? 'on' : ''}`}
-              onClick={() => selectTab(k)}>{label}</button>
-          ))}
-        </div>
+      {/* Unified page header — title + native tab bar (Browse | Deals | Worth
+          Grading). The tab bar sticks under the site header while scrolling.
+          .market-hero collapses on mobile so cards land in the first viewport. */}
+      <div className="market-hero">
+        <div className="eyebrow">Marketplace</div>
+        <h1 className="page">{HERO[activeTab][0]}</h1>
+        <p className="sub">{HERO[activeTab][1]}</p>
+      </div>
+      <div className="market-tabs" role="tablist" aria-label="Market views">
+        {MARKET_TABS.map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={activeTab === k}
+            className={`market-tab ${activeTab === k ? 'on' : ''}`}
+            onClick={() => selectTab(k)}>{label}</button>
+        ))}
       </div>
 
       {activeTab !== 'browse' && <DealFinder view={activeTab} />}
 
       {activeTab === 'browse' && <>
-      {/* .market-hero collapses on mobile so cards land in the first viewport */}
-      <div className="market-hero">
-        <div className="eyebrow">Marketplace</div>
-        <h1 className="page">Every card, priced live.</h1>
-        <p className="sub">Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence — every price is verified against live market data.</p>
-      </div>
-
       {/* Scout — AI Card Search (collapsed behind a toggle on mobile) */}
       <div className={`scout-wrap ${scoutOpen ? 'open' : ''}`} style={{ marginBottom: 24 }}>
         <button className="scout-toggle" onClick={() => setScoutOpen(o => !o)}>
-          <span>✨ Scout — AI search: describe any card</span>
+          <span>✨ Scout. AI search: describe any card</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: scoutOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div className="scout-body">
@@ -429,7 +434,7 @@ export default function MarketplacePage() {
           <div className="toolbar">
             <span className="count">
               {filtered.length > 0
-                ? `Showing ${showStart}–${showEnd} of ${totalCards > filtered.length ? totalCards.toLocaleString() + ' total' : filtered.length + ' result' + (filtered.length !== 1 ? 's' : '')}`
+                ? `Showing ${showStart} to ${showEnd} of ${totalCards > filtered.length ? totalCards.toLocaleString() + ' total' : filtered.length + ' result' + (filtered.length !== 1 ? 's' : '')}`
                 : '0 results'}
             </span>
             <div className="spacer" />
@@ -455,7 +460,7 @@ export default function MarketplacePage() {
               <option value="trending">Trending</option>
               <option value="hi">Price: High → Low</option>
               <option value="lo">Price: Low → High</option>
-              <option value="az">Player A–Z</option>
+              <option value="az">Player A to Z</option>
               <option value="newest">Newest First</option>
               <option value="gain">Biggest Movers</option>
               <option value="volume">Most Traded</option>

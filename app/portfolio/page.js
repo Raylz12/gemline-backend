@@ -180,7 +180,7 @@ export default function PortfolioPage() {
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       toast('Collection exported ✓');
-    } catch { toast('Export failed — try again', true); }
+    } catch { toast('Export failed, try again', true); }
   }, [authFetch]);
 
   // Share public collection link
@@ -230,7 +230,7 @@ export default function PortfolioPage() {
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast(d.verified ? 'Card verified ✓' : (d.message || 'Cert saved - pending review'));
+        toast(d.verified ? 'Card verified ✓' : (d.message || 'Cert saved, pending review'));
         setVerifyItem(null);
         setCertValue('');
         fetchPortfolio();
@@ -270,7 +270,7 @@ export default function PortfolioPage() {
   const handleScanResult = useCallback(async (cardInfo) => {
     setShowCamera(false);
     if (!cardInfo || !cardInfo.player) {
-      toast('Could not identify the card - try a clearer, well-lit photo', true);
+      toast('Could not identify the card. Try a clearer, well-lit photo', true);
       return;
     }
     setScanInfo(cardInfo);
@@ -353,7 +353,7 @@ export default function PortfolioPage() {
       <>
         <div className="eyebrow">Your Collection</div>
         <h1 className="page">My Collection</h1>
-        <p className="sub">Every card you own, valued live - what it's worth, what you paid, and where the value sits.</p>
+        <p className="sub">Every card you own, valued live. What it's worth, what you paid, and where the value sits.</p>
         {subTabBar}
         {subTab === 'trades' && <TradesContent />}
         {subTab === 'sell' && <SellContent />}
@@ -376,7 +376,7 @@ export default function PortfolioPage() {
     <>
       <div className="eyebrow">Your Collection</div>
       <h1 className="page">My Collection</h1>
-      <p className="sub">Every card you own, valued live - what it's worth, what you paid, and where the value sits.</p>
+      <p className="sub">Every card you own, valued live. What it's worth, what you paid, and where the value sits.</p>
 
       {subTabBar}
 
@@ -510,11 +510,11 @@ export default function PortfolioPage() {
                 {item.verificationStatus === 'verified' ? (
                   <span title={`Verified via ${item.verificationMethod || 'scan'}`} style={{ fontSize: 10, color: 'var(--gold)', fontFamily: 'var(--mono)', padding: '2px 6px', background: 'var(--gold-soft)', borderRadius: 4, whiteSpace: 'nowrap' }}>✓ VERIFIED</span>
                 ) : item.verificationStatus === 'pending' ? (
-                  <span title="Cert submitted - pending review. Scan the card for instant verification." style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', padding: '2px 6px', border: '1px dashed var(--line-2)', borderRadius: 4, whiteSpace: 'nowrap' }}>CERT PENDING</span>
+                  <span title="Cert submitted, pending review. Scan the card for instant verification." style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', padding: '2px 6px', border: '1px dashed var(--line-2)', borderRadius: 4, whiteSpace: 'nowrap' }}>CERT PENDING</span>
                 ) : (
                   <button
                     onClick={() => { setVerifyItem(item); setCertValue(item.certNumber || ''); }}
-                    title="Verify ownership - required before selling"
+                    title="Verify ownership, required before selling"
                     style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', padding: '3px 8px', borderRadius: 5, border: '1px dashed var(--line-2)', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >VERIFY</button>
                 )}
@@ -640,10 +640,10 @@ export default function PortfolioPage() {
                   {scanInfo.cardNumber ? ` #${scanInfo.cardNumber}` : ''}
                   {scanInfo.grader ? ` ${scanInfo.grader} ${scanInfo.grade || ''}`.trimEnd() : ''}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pick the exact card and version below - nothing is added until you choose.</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pick the exact card and version below. Nothing is added until you choose.</div>
               </div>
             ) : (
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like - the search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Add as many cards as you like. The search stays open.{addedIds.size > 0 && <span style={{ color: 'var(--up)', fontWeight: 600 }}> {addedIds.size} added this session ✓</span>}</p>
             )}
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <input
@@ -803,8 +803,8 @@ export default function PortfolioPage() {
               onClick={() => { setVerifyScanItem(verifyItem); setVerifyItem(null); }}
               className="btn-primary"
               style={{ width: '100%', padding: '12px 0', fontSize: 14, marginBottom: 14 }}
-            >📷 Scan the card - instant verification</button>
-            <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--dim)', margin: '4px 0 6px' }}>OR - GRADED SLAB CERT NUMBER</div>
+            >📷 Scan the card, instant verification</button>
+            <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.08em', color: 'var(--dim)', margin: '4px 0 6px' }}>OR ENTER A GRADED SLAB CERT NUMBER</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 type="text"
@@ -830,7 +830,7 @@ export default function PortfolioPage() {
       {verifyScanItem && (
         <CameraScanner
           verifyItemId={verifyScanItem.id}
-          onResult={() => { setVerifyScanItem(null); toast('Card verified ✓ - it can now be listed'); fetchPortfolio(); }}
+          onResult={() => { setVerifyScanItem(null); toast('Card verified ✓, it can now be listed'); fetchPortfolio(); }}
           onClose={() => setVerifyScanItem(null)}
         />
       )}

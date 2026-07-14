@@ -157,7 +157,7 @@ export default function StorePage() {
       )}
 
       {tab === 'reviews' && (
-        <SellerReviews sellerId={store.id} emptyText="No reviews yet — reviews come from verified completed orders." />
+        <SellerReviews sellerId={store.id} emptyText="No reviews yet, reviews come from verified completed orders." />
       )}
 
       {tab === 'about' && (

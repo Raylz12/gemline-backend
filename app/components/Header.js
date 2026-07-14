@@ -89,7 +89,7 @@ function NotificationBell() {
         <div className="notif-dropdown">
           <div className="notif-dd-head">Notifications</div>
           {items.length === 0 ? (
-            <div className="notif-empty">Nothing yet — bids, offers, and wins land here.</div>
+            <div className="notif-empty">Nothing yet, bids, offers, and wins land here.</div>
           ) : items.map(n => (
             <div key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`}
                  style={{ cursor: notifHref(n) ? 'pointer' : 'default' }}
@@ -111,7 +111,9 @@ function NotificationBell() {
 }
 
 // Display-layer nav: Sell + Trades promoted to top level (supply funnel);
-// Portfolio reads as "Collection", Analytics as "Price Guide" (routes unchanged).
+// Portfolio reads as "Collection" (route unchanged). Pricing has ONE front
+// door: Market — the Price Guide feed (Browse), Deal Finder (Deals), and
+// Worth Grading all live as tabs inside /market. No duplicate pricing tabs.
 // `low: true` items hide first on narrow desktop widths (see globals.css).
 const NAV_ITEMS = [
   { href: '/market', label: 'Market', key: 'market', public: true },
@@ -119,8 +121,6 @@ const NAV_ITEMS = [
   { href: '/sell', label: 'Sell', key: 'sell', public: true },
   { href: '/trades', label: 'Trades', key: 'trades', public: true },
   { href: '/portfolio', label: 'Collection', key: 'portfolio', public: true },
-  { href: '/analytics', label: 'Price Guide', key: 'analytics', public: true, low: true },
-  { href: '/market?tab=deals', label: 'Deal Finder', key: 'arbitrage', public: true, low: true },
   { href: '/community', label: 'Community', key: 'community', public: true, low: true },
 ];
 
@@ -348,7 +348,7 @@ export default function Header() {
 
         {menuOpen && (
           <div style={{ padding: '8px 22px 14px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[...NAV_ITEMS, { href: '/stores', label: 'Stores', key: 'stores' }].map(item => (
+            {[...NAV_ITEMS, { href: '/market?tab=deals', label: 'Deal Finder', key: 'deals' }, { href: '/stores', label: 'Stores', key: 'stores' }].map(item => (
               <Link key={item.key} href={item.href} onClick={e => { handleNavClick(e, item); setMenuOpen(false); }}
                 className={`navbtn ${pathname === item.href ? 'on' : ''}`} style={{ fontSize: 13, padding: '8px 14px' }}>
                 {item.label}

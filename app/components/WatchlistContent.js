@@ -105,7 +105,7 @@ export default function WatchlistContent() {
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 14 }}>{usd(item.price)}</div>
                 <div style={{ fontSize: 11, color: deltaCol, fontFamily: 'var(--mono)' }}>
-                  {delta == null ? 'since watch —' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% since watch`}
+                  {delta == null ? 'no change since watch' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% since watch`}
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>

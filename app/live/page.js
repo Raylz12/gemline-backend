@@ -562,7 +562,7 @@ export default function LivePage() {
             <div className="live-empty2">
               <div className="live-empty2-icon"><IconGavel size={30} /></div>
               <h2 className="live-empty2-title">No Live Auctions</h2>
-              <p className="live-empty2-sub">The floor is open - be the first to list and every collector here sees your card.</p>
+              <p className="live-empty2-sub">The floor is open. Be the first to list and every collector here sees your card.</p>
               <div className="live-empty2-steps">
                 {[
                   ['1', 'List', 'a card from your collection'],

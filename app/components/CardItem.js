@@ -43,7 +43,7 @@ export default function CardItem({ card: c, onClick }) {
         e.stopPropagation();
         const ok = toggleWatch(c.id);
         if (!ok) toast('Sign in to watch cards and get price alerts');
-        else toast(w ? 'Removed from watchlist' : 'Watching — price + listing alerts on ✓');
+        else toast(w ? 'Removed from watchlist' : 'Watching, price + listing alerts on ✓');
       }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill={w ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
           <path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .9-4 2-1-1.1-2.3-2-4-2A5.5 5.5 0 0 0 3 8.5c0 2.3 1.5 4 3 5.5l6 6Z" />

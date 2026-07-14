@@ -58,7 +58,7 @@ export default function OffersContent() {
       const res = await authFetch(`/api/offers/${offer.id}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || `${action} failed`);
-      toast(action === 'accept' ? `Offer accepted — ${fmt(offer.amount)} in escrow ✓` : 'Offer declined');
+      toast(action === 'accept' ? `Offer accepted, ${fmt(offer.amount)} in escrow ✓` : 'Offer declined');
       load();
     } catch (e) { toast(e.message, true); }
     finally { setActing(null); }
@@ -75,7 +75,7 @@ export default function OffersContent() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Counter failed');
-      toast(`Countered at ${fmt(amt)} — buyer notified ✓`);
+      toast(`Countered at ${fmt(amt)}, buyer notified ✓`);
       setCounterId(null); setCounterAmt('');
       load();
     } catch (e) { toast(e.message, true); }
@@ -133,7 +133,7 @@ export default function OffersContent() {
           <div style={{ color: 'var(--muted)', fontSize: 12, maxWidth: 380, margin: '0 auto' }}>
             {view === 'received'
               ? 'When buyers make offers on your listings, they show up here to accept or decline.'
-              : 'Find a card you want and hit Offer on any listing — sellers respond here.'}
+              : 'Find a card you want and hit Offer on any listing, sellers respond here.'}
           </div>
         </div>
       ) : (

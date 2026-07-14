@@ -11,17 +11,17 @@ const SPORT_COLORS = {
 export const PRICE_RANGES = [
   { key: 'all', label: 'Any price', min: 0, max: Infinity },
   { key: 'u10', label: 'Under $10', min: 0, max: 10 },
-  { key: '10-50', label: '$10 – $50', min: 10, max: 50 },
-  { key: '50-250', label: '$50 – $250', min: 50, max: 250 },
-  { key: '250-1k', label: '$250 – $1K', min: 250, max: 1000 },
+  { key: '10-50', label: '$10 to $50', min: 10, max: 50 },
+  { key: '50-250', label: '$50 to $250', min: 50, max: 250 },
+  { key: '250-1k', label: '$250 to $1K', min: 250, max: 1000 },
   { key: '1k+', label: '$1,000+', min: 1000, max: Infinity },
 ];
 
 export const ERAS = [
   { key: 'all', label: 'All eras' },
   { key: 'ultra', label: 'Ultra-Modern', sub: '2020+', min: 2020, max: 9999 },
-  { key: 'modern', label: 'Modern', sub: '2015–19', min: 2015, max: 2019 },
-  { key: 'classic', label: 'Classic', sub: '1990–2014', min: 1990, max: 2014 },
+  { key: 'modern', label: 'Modern', sub: '2015 to 2019', min: 2015, max: 2019 },
+  { key: 'classic', label: 'Classic', sub: '1990 to 2014', min: 1990, max: 2014 },
   { key: 'vintage', label: 'Vintage', sub: 'Pre-1990', min: 0, max: 1989 },
 ];
 

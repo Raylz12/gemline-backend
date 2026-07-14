@@ -244,7 +244,7 @@ export default function PaymentModal({ payment, onPaid, onClose, authFetch, canc
           <AddressStep orderId={payment?.orderId} authFetch={authFetch} onConfirmed={() => setAddressDone(true)} />
         ) : !PUBLISHABLE_KEY ? (
           <div style={{ color: '#f0b429', fontSize: 13, lineHeight: 1.6, background: '#1a1508', border: '1px solid #3a2f10', borderRadius: 8, padding: 14 }}>
-            Payments aren’t configured yet (missing publishable key). Your order is reserved — an admin will enable checkout shortly.
+            Payments aren’t configured yet (missing publishable key). Your order is reserved, an admin will enable checkout shortly.
           </div>
         ) : !clientSecret ? (
           <div style={{ color: '#9ca3af', fontSize: 13 }}>Preparing secure checkout…</div>

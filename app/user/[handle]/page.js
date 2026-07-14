@@ -69,7 +69,7 @@ export default function UserPortfolioPage() {
 
   const toggleBlock = useCallback(async () => {
     if (!token || !profileUser) return;
-    if (!isBlocked && !confirm(`Block @${profileUser.handle}? They won't be able to offer on your listings, trade with you, or follow you — and their posts disappear from your feed.`)) return;
+    if (!isBlocked && !confirm(`Block @${profileUser.handle}? They won't be able to offer on your listings, trade with you, or follow you, and their posts disappear from your feed.`)) return;
     try {
       const res = await authFetch(`/api/users/${profileUser.id}/block`, {
         method: 'POST',

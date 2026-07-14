@@ -15,10 +15,12 @@ const COLUMNS = [
   },
   {
     title: 'Toolkit',
-    blurb: 'Know what your cards are worth — live data, every grade.',
+    blurb: 'Know what your cards are worth. Live data, every grade.',
     links: [
-      { href: '/analytics', label: 'Price Guide' },
+      { href: '/market', label: 'Price Guide' },
       { href: '/market?tab=deals', label: 'Deal Finder' },
+      { href: '/market?tab=grading', label: 'Worth Grading' },
+      { href: '/analytics', label: 'Market Movers' },
       { href: '/portfolio', label: 'My Collection' },
       { href: '/community', label: 'Community' },
     ],
@@ -51,7 +53,7 @@ export default function Footer() {
             <div className="wordmark">GEM<span>LINE</span></div>
           </div>
           <p className="ft-dis">
-            GEMLINE is the card show, online — by collectors, for collectors.
+            GEMLINE is the card show, online, by collectors, for collectors.
             Prices sourced from Card Hedge. Collectibles carry risk; prices are
             estimates, not guarantees.
           </p>
@@ -71,7 +73,7 @@ export default function Footer() {
         </div>
       </div>
       <div className="ft-base">
-        <span>© {new Date().getFullYear()} GEMLINE — The Card Show, Online. Prices powered by Card Hedge.</span>
+        <span>© {new Date().getFullYear()} GEMLINE | The Card Show, Online. Prices powered by Card Hedge.</span>
         <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 14, marginLeft: 14 }}>
           {LEGAL_LINKS.map(l => (
             <Link key={l.href} href={l.href} style={{ color: 'inherit' }}>{l.label}</Link>

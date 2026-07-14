@@ -71,7 +71,7 @@ export default function CameraScanner({ onResult, onClose, verifyItemId = null }
           setCardInfo(data.scan || null);
           setState('verified');
         } else {
-          setError(data.error || 'Verification failed — try a clearer photo');
+          setError(data.error || 'Verification failed, try a clearer photo');
           setState('error');
         }
       } else if (data.error && !data.player) {
@@ -168,7 +168,7 @@ export default function CameraScanner({ onResult, onClose, verifyItemId = null }
               </div>
             </div>
             <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 12px', textAlign: 'center' }}>
-              Next you’ll confirm the exact catalog card — nothing is added yet.
+              Next you’ll confirm the exact catalog card, nothing is added yet.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={retake} className="offer" style={{ flex: 1, padding: '11px 0' }}>Retake</button>

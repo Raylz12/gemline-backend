@@ -47,13 +47,13 @@ function InviteSection({ authFetch }) {
       await navigator.clipboard.writeText(data.url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch { toast('Copy failed — long-press the link instead', true); }
+    } catch { toast('Copy failed, long-press the link instead', true); }
   };
 
   return (
     <div className="panel" style={{ padding: 16 }}>
       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
-        Share your link — when a collector signs up through it, they count as your referral.
+        Share your link, when a collector signs up through it, they count as your referral.
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input readOnly value={data.url} onFocus={e => e.target.select()}
@@ -175,7 +175,7 @@ function ShippingSection({ authFetch }) {
         <>
           {addresses.length === 0 ? (
             <div style={{ padding: '14px 12px', background: 'var(--ink)', border: '1px dashed var(--line-2)', borderRadius: 10, fontSize: 12.5, color: 'var(--dim)', marginBottom: 12, textAlign: 'center' }}>
-              No shipping address yet — add one so sellers know where to send your cards.
+              No shipping address yet, add one so sellers know where to send your cards.
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -366,7 +366,7 @@ function ShowcaseSection({ user, authFetch }) {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.player}</div>
                   <div style={{ fontSize: 10.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {`${c.grader || 'RAW'} ${c.grade || ''}`.trim()} — {c.set}
+                    {`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}, {c.set}
                   </div>
                 </div>
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--gold)', flexShrink: 0 }}>
@@ -385,7 +385,7 @@ function ShowcaseSection({ user, authFetch }) {
         </span>
       </div>
       {badges.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 14 }}>No badges earned yet — trade, sell, and collect to earn them.</div>
+        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 14 }}>No badges earned yet, trade, sell, and collect to earn them.</div>
       ) : (
         <div style={{ display: 'grid', gap: 6, maxHeight: 180, overflowY: 'auto', marginBottom: 14 }}>
           {badges.map(b => {
@@ -632,7 +632,7 @@ export default function SettingsModal({ onClose }) {
               </div>
               {stripeStatus === 'connected' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--up-soft)', borderRadius: 8, color: 'var(--up)', fontWeight: 600, fontSize: 13 }}>
-                  <IconCheck size={16} /> Connected — payouts enabled
+                  <IconCheck size={16} /> Connected, payouts enabled
                 </div>
               ) : (
                 <>

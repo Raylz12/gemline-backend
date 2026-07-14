@@ -410,15 +410,15 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      <div className="eyebrow">Price Guide</div>
+      <div className="eyebrow">Market Movers</div>
       <h1 className="page">Know what it’s worth.</h1>
-      <p className="sub">Live prices across 287K+ cards — movers, heat, and deals, refreshed all day.</p>
+      <p className="sub">Live prices across 287K+ cards. Movers, heat, and deals, refreshed all day.</p>
 
       <ProGate
         page
         allowed={hasCapability(user || (token ? {} : null), 'analytics')}
-        title="Create a free account to unlock the Price Guide"
-        sub="Movers, the heat map, and the deal screener — live across 287K+ cards, free with a GEMLINE account."
+        title="Create a free account to unlock Market Movers"
+        sub="Movers, the heat map, and the deal screener, live across 287K+ cards, free with a GEMLINE account."
         cta="Create a free account"
         onUnlock={() => setShowAuth(true)}
       >

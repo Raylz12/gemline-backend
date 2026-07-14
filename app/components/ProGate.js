@@ -31,8 +31,8 @@ export function hasCapability(user, capability) {
 export default function ProGate({
   allowed,
   title = 'Sign in to unlock market intelligence',
-  sub = 'Market score, liquidity, 7-day trend, and FMV spread — free with a GEMLINE account.',
-  cta = 'Sign in — it’s free',
+  sub = 'Market score, liquidity, 7-day trend, and FMV spread, free with a GEMLINE account.',
+  cta = 'Sign in, it’s free',
   onUnlock,
   page = false, // full-page gate: cap the blurred teaser height, fade bottom
   children,

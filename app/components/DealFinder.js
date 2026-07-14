@@ -569,7 +569,7 @@ export default function DealFinder({ view = 'deals' }) {
         page
         allowed={hasCapability(user || (token ? {} : null), 'arbitrage')}
         title="Create a free account to unlock the Deal Finder"
-        sub="Cards priced below fair value — fees already counted — plus movers and full-market search, free with a GEMLINE account."
+        sub="Cards priced below fair value, fees already counted, plus movers and full-market search, free with a GEMLINE account."
         cta="Create a free account"
         onUnlock={() => setShowAuth(true)}
       >
@@ -741,7 +741,7 @@ export default function DealFinder({ view = 'deals' }) {
             <SpreadMatrix cards={cardsWithEdge.slice(0, 100)} onSelect={setSelected} />
           ) : (
             <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>
-              NO DEAL DATA — CARDS NEED LO/HI RANGE FROM CARDHEDGE
+              NO DEAL DATA. CARDS NEED LO/HI RANGE FROM CARDHEDGE
             </div>
           )}
         </Panel>

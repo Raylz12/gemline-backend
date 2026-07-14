@@ -105,7 +105,7 @@ export function fmtDisplay(n) {
 }
 export function fmtRange(lo, hi) {
   if (!lo && !hi) return null;
-  if (lo && hi && lo !== hi) return `${fmt(lo)} – ${fmt(hi)}`;
+  if (lo && hi && lo !== hi) return `${fmt(lo)} to ${fmt(hi)}`;
   return fmt(lo || hi);
 }
 export const popFmt = n => n == null ? '—' : Number(n).toLocaleString();

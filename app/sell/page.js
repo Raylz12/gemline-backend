@@ -40,12 +40,12 @@ function ShopSubscriptionBanner({ token }) {
     }}>
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--txt)' }}>
-          Gemline Shop {active ? (info.inGrace ? '— payment past due' : '— active') : 'subscription'}
+          Gemline Shop {active ? (info.inGrace ? '· payment past due' : '· active') : 'subscription'}
         </div>
         <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 3, lineHeight: 1.5 }}>
           {active
             ? (info.inGrace
-                ? 'Your last payment failed — update your card to keep listing new cards.'
+                ? 'Your last payment failed, update your card to keep listing new cards.'
                 : 'Your shop can list unlimited cards. $9.99/mo.')
             : 'Shop accounts need an active $9.99/mo subscription to list new cards. Existing listings stay live.'}
         </div>
@@ -55,7 +55,7 @@ function ShopSubscriptionBanner({ token }) {
           style={{ padding: '9px 16px' }}>{busy ? '…' : 'Manage billing'}</button>
       ) : (
         <button className="chip on" disabled={busy} onClick={() => go('/api/shop/subscription/checkout')}
-          style={{ padding: '9px 18px', fontWeight: 700 }}>{busy ? '…' : 'Subscribe — $9.99/mo'}</button>
+          style={{ padding: '9px 18px', fontWeight: 700 }}>{busy ? '…' : 'Subscribe for $9.99/mo'}</button>
       )}
     </div>
   );
@@ -195,14 +195,14 @@ export default function SellPage() {
           };
           selectCard(fakeCard);
           setPhotoIdResult('success');
-          toast(`Found: ${data.card.player} — please verify the details below`);
+          toast(`Found: ${data.card.player}, please verify the details below`);
         } else {
           setPhotoIdResult('failed');
-          toast("We couldn't identify this card — fill in manually", true);
+          toast("We couldn't identify this card, fill in manually", true);
         }
       } catch {
         setPhotoIdResult('failed');
-        toast("Identification failed — fill in manually", true);
+        toast("Identification failed, fill in manually", true);
       } finally {
         setPhotoIdentifying(false);
       }
@@ -287,11 +287,11 @@ export default function SellPage() {
       <>
         <div className="eyebrow">Sell</div>
         <h1 className="page">List your cards.</h1>
-        <p className="sub">Set your price backed by real market data. Listing is free — and your first five sales are just 5% (7.5% after), only when your card sells.</p>
+        <p className="sub">Set your price backed by real market data. Listing is free, and your first five sales are just 5% (7.5% after), only when your card sells.</p>
         <PreviewGate
           icon=""
           cta="Start selling on GEMLINE"
-          subtitle="List cards at your price. Buy now, make offers, or auction. Free to list — just 5% on your first five sales, 7.5% after."
+          subtitle="List cards at your price. Buy now, make offers, or auction. Free to list, just 5% on your first five sales, 7.5% after."
           preview={<SampleCardGrid count={8} />}
         />
       </>
@@ -330,7 +330,7 @@ export default function SellPage() {
                   fontSize: 10, fontWeight: 700,
                 }}>{i < step ? '✓' : i + 1}</span>
                 <span className="step-label">{s}</span>
-                {i < STEPS.length - 1 && <span className="step-sep" style={{ color: 'var(--line)', margin: '0 2px' }}>—</span>}
+                {i < STEPS.length - 1 && <span className="step-sep" style={{ color: 'var(--line)', margin: '0 2px' }}>›</span>}
               </div>
             ))}
           </div>
@@ -369,7 +369,7 @@ export default function SellPage() {
               </div>
               {photoIdResult === 'failed' && (
                 <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,92,108,.1)', border: '1px solid rgba(255,92,108,.3)', color: 'var(--down)', fontSize: 12 }}>
-                  We couldn't identify this card — fill in the details manually below.
+                  We couldn't identify this card, fill in the details manually below.
                 </div>
               )}
               {photoIdResult === 'success' && (
@@ -450,7 +450,7 @@ export default function SellPage() {
                   fontSize: 13, color: 'var(--gold)',
                 }}>
                   <span></span>
-                  <span>Market value: {fmv.lo ? `${fmt(fmv.lo)} – ${fmt(fmv.hi)}` : fmt(fmv.avg || fmv.median || 0)}</span>
+                  <span>Market value: {fmv.lo ? `${fmt(fmv.lo)} to ${fmt(fmv.hi)}` : fmt(fmv.avg || fmv.median || 0)}</span>
                   {fmv.avg && <span style={{ color: 'var(--muted)', fontSize: 11 }}>· Avg {fmt(fmv.avg)}</span>}
                 </div>
               )}
@@ -471,7 +471,7 @@ export default function SellPage() {
 
               {price && fmv?.avg && (
                 <div style={{ fontSize: 12, color: Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'var(--up)' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'var(--down)' : 'var(--muted)', marginBottom: 10 }}>
-                  {Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'Below market — will sell fast' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'Above market range' : 'Fair market price'}
+                  {Number(price) < (fmv.lo || fmv.avg * 0.85) ? 'Below market, will sell fast' : Number(price) > (fmv.hi || fmv.avg * 1.15) ? 'Above market range' : 'Fair market price'}
                 </div>
               )}
 
@@ -537,7 +537,7 @@ export default function SellPage() {
           {step === 3 && (
             <div className="sell-card-panel" style={{ background: 'var(--panel)', borderRadius: 'var(--r)', padding: 24 }}>
               <h3 style={{ fontFamily: 'var(--disp)', marginBottom: 6 }}>Add photos</h3>
-              <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Optional — add up to 8 photos of your card.</p>
+              <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Optional, add up to 8 photos of your card.</p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10, marginBottom: 16 }}>
                 {photos.map((p, i) => (
@@ -566,7 +566,7 @@ export default function SellPage() {
                 onChange={handlePhoto} style={{ display: 'none' }} />
 
               <textarea
-                placeholder="Description (optional) — mention any flaws, centering notes, etc."
+                placeholder="Description (optional), mention any flaws, centering notes, etc."
                 value={description} onChange={e => setDescription(e.target.value)}
                 rows={3}
                 style={{
@@ -637,7 +637,7 @@ export default function SellPage() {
 
               <div style={{ background: 'var(--ink)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span>Platform fee ({feeLabel}{feeInfo.introRemaining > 0 ? ' — intro rate' : ''})</span>
+                  <span>Platform fee ({feeLabel}{feeInfo.introRemaining > 0 ? ', intro rate' : ''})</span>
                   <span className="mono">${(Number(price) * feeRate).toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--txt)' }}>
@@ -759,7 +759,7 @@ export default function SellPage() {
               <div>
                 <label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 6 }}>About Your Store</label>
                 <textarea value={storeForm.store_description} onChange={e => setStoreForm(f => ({ ...f, store_description: e.target.value }))}
-                  placeholder="Tell collectors what you specialize in — sports, eras, brands, grades..."
+                  placeholder="Tell collectors what you specialize in, sports, eras, brands, grades..."
                   rows={3} style={{ width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13, outline: 'none', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
               </div>
               <button onClick={async () => {

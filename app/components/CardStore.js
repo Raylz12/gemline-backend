@@ -159,7 +159,7 @@ export function CardStoreProvider({ children }) {
   // Market page calls this on mount so revisits never show a stale in-memory
   // feed from the initial app load (CDN s-maxage still absorbs the traffic).
   const refreshFeed = useRef(() => {
-    if (Date.now() - lastFetchAt.current < 15_000) return; // just fetched — skip
+    if (Date.now() - lastFetchAt.current < 15_000) return; // just fetched, skip
     fetchFeed({ page: 1 });
   }).current;
 

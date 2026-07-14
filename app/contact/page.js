@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Contact — GEMLINE',
+  title: 'Contact | GEMLINE',
   description: 'Get in touch with the GEMLINE team for support, partnerships, or press.',
   alternates: { canonical: '/contact' },
 };

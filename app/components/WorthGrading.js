@@ -19,7 +19,7 @@ const fmtNet = (n) => (n >= 0 ? '+' : '\u2212') + fmtP(Math.abs(n)).slice(0);
 const CHIPS = [
   { key: 'all', label: 'All candidates', hint: 'Raw + PSA 10 priced in our guide' },
   { key: 'safe', label: '🛡 Safe Grades', hint: 'Still profitable even if it comes back a PSA 9' },
-  { key: 'longshot', label: '🎯 Long Shots', hint: 'Big PSA 10 payoff — but a 9 loses money' },
+  { key: 'longshot', label: '🎯 Long Shots', hint: 'Big PSA 10 payoff, but a 9 loses money' },
   { key: 'quick', label: '⚡ Quick Wins', hint: 'Cheap raws ($25 or less) with fast ROI' },
 ];
 const SPORTS = ['All', 'Basketball', 'Football', 'Baseball', 'Pokemon', 'Hockey', 'Soccer'];
@@ -109,7 +109,7 @@ export default function WorthGrading({ onSelect }) {
         ))}
       </div>
       {activeChip && chip !== 'all' && (
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', padding: '0 6px 10px' }}>{activeChip.hint} — at ${g} grading cost</div>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', padding: '0 6px 10px' }}>{activeChip.hint}, at ${g} grading cost</div>
       )}
 
       {/* Column header (desktop) */}
@@ -128,7 +128,7 @@ export default function WorthGrading({ onSelect }) {
         <div style={{ padding: 30, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)' }}>PRICING THE SUBMISSION BOX…</div>
       ) : rows.length === 0 ? (
         <div style={{ padding: 30, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)' }}>
-          NOTHING CLEARS ${g} GRADING COST HERE — TRY A LOWER COST OR ANOTHER FILTER
+          NOTHING CLEARS ${g} GRADING COST HERE. TRY A LOWER COST OR ANOTHER FILTER
         </div>
       ) : (
         <>
@@ -167,7 +167,7 @@ export default function WorthGrading({ onSelect }) {
       )}
 
       <p style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--dim)', padding: '12px 6px 4px', letterSpacing: '.04em', lineHeight: 1.6 }}>
-        NET = GRADE PRICE − RAW PRICE − ${g} GRADING COST. ASSUMES THE CARD GEMS — CONDITION IS YOUR CALL.
+        NET = GRADE PRICE − RAW PRICE − ${g} GRADING COST. ASSUMES THE CARD GEMS. CONDITION IS YOUR CALL.
       </p>
 
       <style>{`

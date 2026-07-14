@@ -25,7 +25,7 @@ export async function GET() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 88, fontWeight: 800, color: TXT, lineHeight: 1.05, display: 'flex' }}>The Marketplace</div>
-          <div style={{ fontSize: 32, color: MUTED, display: 'flex' }}>Every card, priced live — 287,000+ cards with real market data.</div>
+          <div style={{ fontSize: 32, color: MUTED, display: 'flex' }}>Every card, priced live. 287,000+ cards with real market data.</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 24, color: MUTED, display: 'flex' }}>Buy · Sell · Trade · Escrow-protected</div>

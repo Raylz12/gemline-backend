@@ -35,7 +35,7 @@ export default function Error({ error, reset }) {
         margin: '0 0 24px',
         lineHeight: 1.6,
       }}>
-        {error?.message?.includes('fetch') ? 'Network error — check your connection and try again.' : 'An unexpected error occurred. Try refreshing.'}
+        {error?.message?.includes('fetch') ? 'Network error, check your connection and try again.' : 'An unexpected error occurred. Try refreshing.'}
       </p>
       <button
         onClick={() => reset()}

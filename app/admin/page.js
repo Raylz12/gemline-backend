@@ -47,7 +47,7 @@ export default function AdminPage() {
   }, [token, api]);
 
   if (!token) return <Empty msg="Sign in with an admin account to use the panel." />;
-  if (denied) return <Empty msg="Not authorized — this area is for GEMLINE moderators." />;
+  if (denied) return <Empty msg="Not authorized, this area is for GEMLINE moderators." />;
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px 60px' }}>
@@ -377,7 +377,7 @@ function FlagsTab({ api }) {
   return (
     <div className="panel" style={{ padding: 16 }}>
       <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 14px' }}>
-        Kill switches — flip one off and the feature is gently disabled site-wide (changes take up to 60s to propagate).
+        Kill switches, flip one off and the feature is gently disabled site-wide (changes take up to 60s to propagate).
       </p>
       {!flags ? <Empty msg="Loading…" /> : flags.map(f => (
         <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>

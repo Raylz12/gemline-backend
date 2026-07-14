@@ -303,7 +303,7 @@ function CommentSection({ post, authFetch, token, onRequireAuth, onCountChange, 
           {comments === null ? (
             <div style={{ fontSize: 12, color: 'var(--dim)' }}>Loading…</div>
           ) : comments.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>No comments yet — be the first.</div>
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>No comments yet, be the first.</div>
           ) : comments.map(c => (
             <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <Link href={`/user/${c.user?.handle}`} style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
@@ -588,7 +588,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
               onFocus={(e) => { if (user) { setComposing(true); } else { e.target.blur(); onRequireAuth?.(); } }}
               onClick={() => { if (!user) onRequireAuth?.(); }}
               readOnly={!user}
-              placeholder={user ? 'Share a pull, trade, or find...' : 'Sign in to post — join the conversation...'}
+              placeholder={user ? 'Share a pull, trade, or find...' : 'Sign in to post, join the conversation...'}
               style={{
                 width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line)',
                 borderRadius: 9, padding: '10px 12px', color: 'var(--txt)', fontSize: 13,
@@ -694,7 +694,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
           <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 300, margin: '0 auto 18px', lineHeight: 1.5 }}>
             {feedTab === 'following'
               ? 'When people you follow post pulls, trades, and finds, they show up here.'
-              : 'Be the first to post your latest pickup — a new slab, a trade win, or a card you\u2019re hunting.'}
+              : 'Be the first to post your latest pickup, a new slab, a trade win, or a card you\u2019re hunting.'}
           </div>
           {feedTab !== 'following' && (
             <button
@@ -725,7 +725,7 @@ function CommunityFeed({ user, authFetch, token, onRequireAuth }) {
 /* ─── /Community Feed ─── */
 
 export default function CommunityPage() {
-  useDarkPage(); // real social feed — dark panels, not a light marketing page
+  useDarkPage(); // real social feed, dark panels, not a light marketing page
   const { user, token, authFetch } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);

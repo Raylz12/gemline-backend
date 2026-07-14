@@ -48,7 +48,7 @@ export default function ListingQA({ cardId, listings = [], onNeedAuth }) {
       });
       const d = await res.json();
       if (!res.ok) setMsg(d.error || 'Failed to post question');
-      else { setText(''); setMsg('Question sent — the seller has been notified ✓'); load(); }
+      else { setText(''); setMsg('Question sent, the seller has been notified ✓'); load(); }
     } catch { setMsg('Failed to post question'); }
     setPosting(false);
   };
@@ -116,7 +116,7 @@ export default function ListingQA({ cardId, listings = [], onNeedAuth }) {
         </div>
       ) : (
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
-          No questions yet — ask the seller anything before you buy.
+          No questions yet, ask the seller anything before you buy.
         </div>
       )}
 

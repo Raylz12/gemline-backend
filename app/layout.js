@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 export const metadata = {
   metadataBase: new URL('https://gemlinecards.com'),
-  title: 'GEMLINE — The Card Show, Online',
+  title: 'GEMLINE | The Card Show, Online',
   description: 'Buy, sell, and trade sports cards and Pokémon with collectors who get it. Live pricing, real trades, and AI-powered search across 500K+ cards.',
   robots: { index: true, follow: true },
   manifest: '/manifest.webmanifest',
@@ -21,18 +21,18 @@ export const metadata = {
     shortcut: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
-  alternates: { canonical: './' },   // resolves per-page against metadataBase — do not hardcode the homepage
+  alternates: { canonical: './' },   // resolves per-page against metadataBase, do not hardcode the homepage
   openGraph: {
-    title: 'GEMLINE — The Card Show, Online',
+    title: 'GEMLINE | The Card Show, Online',
     description: 'Buy, sell, and trade sports cards and Pokémon with collectors who get it. Live pricing, real trades, and AI-powered search across 500K+ cards.',
     url: 'https://gemlinecards.com',
     siteName: 'GEMLINE',
-    images: [{ url: 'https://gemlinecards.com/og-image.png', width: 1200, height: 630, alt: 'GEMLINE — The Card Show, Online' }],
+    images: [{ url: 'https://gemlinecards.com/og-image.png', width: 1200, height: 630, alt: 'GEMLINE | The Card Show, Online' }],
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'GEMLINE — The Card Show, Online',
+    title: 'GEMLINE | The Card Show, Online',
     description: 'Buy, sell, and trade sports cards and Pokémon with collectors who get it. Live pricing, real trades, and AI-powered search across 500K+ cards.',
     images: ['https://gemlinecards.com/og-image.png'],
   },
@@ -49,7 +49,7 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>

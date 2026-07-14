@@ -98,7 +98,7 @@ export function AuthProvider({ children }) {
       try {
         const check = await fetch('/api/state', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
         if (check.status === 401) logout();
-      } catch { /* network blip — keep the session */ }
+      } catch { /* network blip, keep the session */ }
     }
     return res;
   }, [logout]);

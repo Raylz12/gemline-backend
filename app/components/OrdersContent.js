@@ -58,13 +58,13 @@ function ShipTo({ order }) {
   return (
     <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
       <div style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6 }}>
-        Ship to — @{order.buyerHandle}
+        Ship to @{order.buyerHandle}
       </div>
       {addr ? (
         <AddressBlock address={addr} copyable />
       ) : (
         <div style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.5 }}>
-          Address not collected (legacy order) — message the buyer @{order.buyerHandle} for their shipping address.
+          Address not collected (legacy order), message the buyer @{order.buyerHandle} for their shipping address.
         </div>
       )}
     </div>
@@ -86,7 +86,7 @@ function ShipForm({ order, onDone, authFetch }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Ship failed');
-      toast('Marked shipped — buyer notified with tracking ✓');
+      toast('Marked shipped, buyer notified with tracking ✓');
       onDone();
     } catch (e) { toast(e.message, true); }
     finally { setSubmitting(false); }
@@ -123,7 +123,7 @@ function OrderTimeline({ o }) {
   if (['cancelled', 'refunded'].includes(o.status)) {
     return (
       <div style={{ marginTop: 8, fontSize: 11, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>
-        {o.status === 'cancelled' ? 'ORDER CANCELLED — PAYMENT HOLD RELEASED' : 'ORDER REFUNDED'}
+        {o.status === 'cancelled' ? 'ORDER CANCELLED. PAYMENT HOLD RELEASED' : 'ORDER REFUNDED'}
       </div>
     );
   }
@@ -134,7 +134,7 @@ function OrderTimeline({ o }) {
     return ev?.at || null;
   };
   const cur = o.status === 'disputed'
-    ? 3 // dispute happens post-delivery — show progress up to Delivered
+    ? 3 // dispute happens post-delivery, show progress up to Delivered
     : stepIndexOf(o.status);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--line)', overflowX: 'auto' }}>
@@ -155,7 +155,7 @@ function OrderTimeline({ o }) {
         );
       })}
       {o.status === 'disputed' && (
-        <span style={{ marginLeft: 10, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--down)', whiteSpace: 'nowrap' }}>⚠ DISPUTED — UNDER REVIEW</span>
+        <span style={{ marginLeft: 10, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--down)', whiteSpace: 'nowrap' }}>⚠ DISPUTED. UNDER REVIEW</span>
       )}
     </div>
   );
@@ -178,7 +178,7 @@ function ReviewForm({ order, authFetch, onDone }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to post review');
-      toast('Review posted — thanks!');
+      toast('Review posted, thanks!');
       onDone?.();
     } catch (e) { toast(e.message, true); }
     finally { setSubmitting(false); }
@@ -247,7 +247,7 @@ function MessageThread({ order, authFetch, onRead }) {
       {messages === null ? (
         <div style={{ fontSize: 12, color: 'var(--dim)', padding: '6px 0' }}>Loading…</div>
       ) : messages.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--dim)', padding: '6px 0' }}>No messages yet — say hi or ask about shipping.</div>
+        <div style={{ fontSize: 12, color: 'var(--dim)', padding: '6px 0' }}>No messages yet, say hi or ask about shipping.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto', marginBottom: 8 }}>
           {messages.map(m => (
@@ -337,13 +337,13 @@ export default function OrdersContent() {
       : 'Why do you want to cancel? The seller will review your request:');
     if (reason === null) return;
     orderAction(order, 'cancel-request', { reason },
-      isSale ? 'Order cancelled — buyer\u2019s hold released' : 'Cancel request sent to the seller');
+      isSale ? 'Order cancelled, buyer\u2019s hold released' : 'Cancel request sent to the seller');
   };
 
   const openDispute = (order) => {
     const reason = window.prompt('What\u2019s wrong with this order? (e.g. not as described, damaged, never arrived)');
     if (!reason || !reason.trim()) return;
-    orderAction(order, 'dispute', { reason }, 'Dispute opened — payout paused while GEMLINE reviews');
+    orderAction(order, 'dispute', { reason }, 'Dispute opened, payout paused while GEMLINE reviews');
   };
 
   const confirmReceipt = async (order) => {
@@ -352,7 +352,7 @@ export default function OrdersContent() {
       const res = await authFetch(`/api/orders/${order.id}/confirm-receipt`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Confirm failed');
-      toast('Receipt confirmed — order complete ✓');
+      toast('Receipt confirmed, order complete ✓');
       load();
     } catch (e) { toast(e.message, true); }
     finally { setConfirming(null); }
@@ -396,7 +396,7 @@ export default function OrdersContent() {
           <div style={{ color: 'var(--muted)', fontSize: 12, maxWidth: 380, margin: '0 auto' }}>
             {view === 'purchases'
               ? 'When you buy a card or win an auction, the order shows up here with shipping and tracking.'
-              : 'When your listings sell, orders land here — mark them shipped with tracking to get paid.'}
+              : 'When your listings sell, orders land here, mark them shipped with tracking to get paid.'}
           </div>
         </div>
       ) : (
@@ -483,16 +483,16 @@ export default function OrdersContent() {
                 {o.cancelRequestedBy && !['cancelled', 'refunded'].includes(o.status) && (
                   <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(240,180,41,.08)', border: '1px solid rgba(240,180,41,.3)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 180, fontSize: 12, color: '#f0b429' }}>
-                      {isSale ? 'Buyer requested cancellation' : 'Cancellation requested — waiting on the seller'}
-                      {o.cancelReason && <span style={{ color: 'var(--muted)' }}> — “{o.cancelReason}”</span>}
+                      {isSale ? 'Buyer requested cancellation' : 'Cancellation requested, waiting on the seller'}
+                      {o.cancelReason && <span style={{ color: 'var(--muted)' }}>, “{o.cancelReason}”</span>}
                     </div>
                     {isSale && (
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => orderAction(o, 'cancel-respond', { approve: true }, 'Cancelled — buyer\u2019s hold released')} disabled={acting === o.id}
+                        <button onClick={() => orderAction(o, 'cancel-respond', { approve: true }, 'Cancelled, buyer\u2019s hold released')} disabled={acting === o.id}
                           style={{ padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, background: 'var(--down)', color: '#fff', border: 'none', cursor: 'pointer' }}>
                           Approve &amp; Refund
                         </button>
-                        <button onClick={() => orderAction(o, 'cancel-respond', { approve: false }, 'Declined — order proceeds')} disabled={acting === o.id}
+                        <button onClick={() => orderAction(o, 'cancel-respond', { approve: false }, 'Declined, order proceeds')} disabled={acting === o.id}
                           style={{ padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: 'var(--panel-2)', color: 'var(--muted)', border: '1px solid var(--line-2)', cursor: 'pointer' }}>
                           Keep Order
                         </button>

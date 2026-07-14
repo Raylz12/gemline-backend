@@ -27,7 +27,7 @@ export async function generateMetadata({ params }) {
   if (!set) return { title: 'Set Not Found | GEMLINE' };
   const title = `${set.name} Checklist & Card Values | GEMLINE`;
   const range = Number(set.price_max) > 0 ? ` Values from ${usd(set.price_min)} to ${usd(set.price_max)}.` : '';
-  const description = `${set.name} — full checklist of ${Number(set.family_count).toLocaleString()} cards with live market prices.${range} ${set.sport || 'Trading cards'} price guide on GEMLINE.`;
+  const description = `${set.name}, full checklist of ${Number(set.family_count).toLocaleString()} cards with live market prices.${range} ${set.sport || 'Trading cards'} price guide on GEMLINE.`;
   const url = `https://gemlinecards.com/sets/${set.slug}`;
   return {
     title, description,
@@ -124,12 +124,12 @@ export default async function SetPage({ params, searchParams }) {
         <div className="eyebrow">{[set.year, set.sport].filter(Boolean).join(' · ') || 'Trading Cards'}</div>
         <h1 className="page" style={{ fontSize: 28, lineHeight: 1.15, marginBottom: 8 }}>{set.name}</h1>
         <p className="sub" style={{ marginBottom: 16 }}>
-          Full checklist with live market values — every card, every parallel, priced like the show floor.
+          Full checklist with live market values, every card, every parallel, priced like the show floor.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 24 }}>
           {stat('Cards', Number(set.family_count).toLocaleString())}
-          {Number(set.price_max) > 0 && stat('Price Range', `${usd(set.price_min)} – ${usd(set.price_max)}`)}
+          {Number(set.price_max) > 0 && stat('Price Range', `${usd(set.price_min)} to ${usd(set.price_max)}`)}
           {Number(set.sales_30d) > 0 && stat('Sales (30d)', Number(set.sales_30d).toLocaleString())}
         </div>
 
@@ -157,7 +157,7 @@ export default async function SetPage({ params, searchParams }) {
         )}
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>
-          Checklist{variant ? ` — ${variant}` : ''} <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)', fontWeight: 400 }}>({(variant ? totalFamilies : Number(set.family_count)).toLocaleString()} cards)</span>
+          Checklist{variant ? `, ${variant}` : ''} <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)', fontWeight: 400 }}>({(variant ? totalFamilies : Number(set.family_count)).toLocaleString()} cards)</span>
         </h2>
 
         {variants.length > 1 && (
@@ -185,7 +185,7 @@ export default async function SetPage({ params, searchParams }) {
                 </span>
                 {c.variant !== 'Base' && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.variant}</span>}
                 <span className="mono" style={{ fontWeight: 700, color: Number(c.price_max) > 0 ? 'var(--gold)' : 'var(--dim)', whiteSpace: 'nowrap' }}>
-                  {Number(c.price_max) > 0 ? (Number(c.price_min) < Number(c.price_max) ? `${usd(c.price_min)} – ${usd(c.price_max)}` : usd(c.price_max)) : 'Price TBD'}
+                  {Number(c.price_max) > 0 ? (Number(c.price_min) < Number(c.price_max) ? `${usd(c.price_min)} to ${usd(c.price_max)}` : usd(c.price_max)) : 'Price TBD'}
                 </span>
               </Link>
             ))}

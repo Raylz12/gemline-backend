@@ -32,7 +32,7 @@ function ResetForm() {
       setDone(true);
       setTimeout(() => router.push('/market'), 2500);
     } catch {
-      setError('Network error — try again');
+      setError('Network error, try again');
       setLoading(false);
     }
   };
@@ -50,7 +50,7 @@ function ResetForm() {
     return (
       <div style={{ maxWidth: 420, margin: '60px auto', textAlign: 'center' }}>
         <h1 className="page">Password updated ✅</h1>
-        <p className="sub">You&apos;re signed in — taking you to the floor…</p>
+        <p className="sub">You&apos;re signed in, taking you to the floor…</p>
       </div>
     );
   }

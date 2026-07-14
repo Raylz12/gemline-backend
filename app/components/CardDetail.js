@@ -12,7 +12,7 @@ import SellerTrust from './SellerTrust';
 import ListingQA from './ListingQA';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CH_ID_RE = /^\d{6,}x[\d.]+$/; // CardHedge (Bubble) card_id — Scout passthrough
+const CH_ID_RE = /^\d{6,}x[\d.]+$/; // CardHedge (Bubble) card_id. Scout passthrough
 
 // CardHedge grade string — raw cards have grader='RAW' + empty grade; the API
 // wants 'Raw' for them (falling back to 'PSA 10' returned nothing for raws,
@@ -43,10 +43,10 @@ function WhyCheap({ cardhedgeId, grade, market }) {
         const methods = {
           direct: 'Priced from direct recent sales data.',
           direct_indexed: 'Based on sales data, adjusted by a market movement index to account for staleness.',
-          card_interpolation: 'No direct sales at this grade — price interpolated from other grades of the same card.',
+          card_interpolation: 'No direct sales at this grade, price interpolated from other grades of the same card.',
           cross_provider: 'Price derived from a different grading company\'s data (e.g., BGS → PSA conversion).',
           anchor_multiplier: 'Estimated using a grade multiplier from a related grade of this card.',
-          segment_fallback: 'No card-specific data available — using segment baseline (set × year × category average).',
+          segment_fallback: 'No card-specific data available, using segment baseline (set × year × category average).',
           no_data: 'Insufficient market data to generate a price estimate.',
         };
         const conf = data.confidence_grade ? ` Confidence: ${data.confidence_grade} (${(data.confidence * 100).toFixed(0)}%).` : '';
@@ -317,7 +317,7 @@ const CONFIDENCE_LABELS = {
   catalog: 'Estimated',
   low: 'Low confidence',
   medium: 'Moderate confidence',
-  high: 'High confidence — recent sales',
+  high: 'High confidence, recent sales',
   very_high: 'Very high confidence',
 };
 function confidenceLabel(raw) {
@@ -327,7 +327,7 @@ function confidenceLabel(raw) {
   const n = Number(s);
   if (!isNaN(n)) {
     if (n >= 0.8) return 'Very high confidence';
-    if (n >= 0.65) return 'High confidence — recent sales';
+    if (n >= 0.65) return 'High confidence, recent sales';
     if (n >= 0.35) return 'Moderate confidence';
     return 'Low confidence';
   }
@@ -438,7 +438,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
       const prev = JSON.parse(localStorage.getItem('gemline_recent') || '[]');
       const next = [entry, ...prev.filter(x => x && x.id !== id)].slice(0, 8);
       localStorage.setItem('gemline_recent', JSON.stringify(next));
-    } catch { /* private mode etc. — not worth surfacing */ }
+    } catch { /* private mode etc., not worth surfacing */ }
   }, [fam?.id, fam?.thumbnail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Grade-tier switcher ──
@@ -749,7 +749,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
               {c.num && <div className="cd-fact"><span>Card #</span><b>{c.num}</b></div>}
               {c.variant && <div className="cd-fact"><span>Variant</span><b>{c.variant}</b></div>}
               <div className="cd-fact"><span>Grade</span><b>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</b></div>
-              {isRC && <div className="cd-fact"><span>Rookie</span><b style={{ color: 'var(--gold)' }}>Yes — RC</b></div>}
+              {isRC && <div className="cd-fact"><span>Rookie</span><b style={{ color: 'var(--gold)' }}>Yes, RC</b></div>}
             </div>
           </aside>
 
@@ -858,7 +858,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
                       <div className="cd-chartwrap">
                         {widened && (
                           <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
-                            {widened.points === 0 ? 'No sales' : `${widened.points} sale${widened.points === 1 ? '' : 's'}`} in last {widened.from}D — showing 1Y
+                            {widened.points === 0 ? 'No sales' : `${widened.points} sale${widened.points === 1 ? '' : 's'}`} in last {widened.from}D, showing 1Y
                           </div>
                         )}
                         <PriceChart prices={priceHistory} comps={priceComps} lo={c.lo || null} hi={c.hi || null} currentPrice={c.market || null} />
@@ -889,7 +889,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
                       <div className="cd-empty" style={{ height: 64, flexDirection: 'column', gap: 4 }}>
                         <span>
                           {priceComps.length === 1
-                            ? '1 recorded sale in the last year — details in the Comps tab'
+                            ? '1 recorded sale in the last year, details in the Comps tab'
                             : 'No recorded sales in the last year for this grade'}
                         </span>
                         {priceComps.length === 1 && (
@@ -903,7 +903,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
                 {/* Grade ladder */}
                 {c.grades && c.grades.length > 0 && (
                   <div className="cd-block">
-                    <h4 className="cd-h4">Grade Ladder ({c.grades.length}) <span style={{ fontWeight: 400, fontSize: 10.5, color: 'var(--dim)', textTransform: 'none', letterSpacing: 0 }}>— tap a grade to switch</span></h4>
+                    <h4 className="cd-h4">Grade Ladder ({c.grades.length}) <span style={{ fontWeight: 400, fontSize: 10.5, color: 'var(--dim)', textTransform: 'none', letterSpacing: 0 }}>tap a grade to switch</span></h4>
                     <div className="cd-ladder">
                       <div className="cd-ladder-head">
                         <span>Grade</span><span>Price</span><span>Range</span><span>Sales 7/30</span>
@@ -1106,7 +1106,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
                 </div>
               ) : (
                 <div className="cd-empty" style={{ height: 56, flexDirection: 'column', gap: 4 }}>
-                  <span>No active listings — be the first.</span>
+                  <span>No active listings, be the first.</span>
                   <a href={`/sell?card=${c.id}`} style={{ color: 'var(--gold)', fontSize: 12, fontWeight: 600 }}>List yours →</a>
                 </div>
               )}
@@ -1152,7 +1152,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
               {buying === lowestListing?.id ? 'Processing...' : `Buy · ${fmtDisplay(Number(lowestListing.price))}`}
             </button>
           ) : (
-            <button className="cd-act buy dim" onClick={openOffer}>No listings — Bid</button>
+            <button className="cd-act buy dim" onClick={openOffer}>No listings? Bid</button>
           )}
           <button className={`cd-act ghost ${showBidForm ? 'active' : ''}`} onClick={openOffer}>Offer</button>
           <a className="cd-act ghost" href="/trades">Trade</a>
@@ -1160,7 +1160,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
           <button className={`cd-act ghost cd-watch ${w ? "on" : ""}`} onClick={() => {
             if (!token) { setShowAuth(true); return; }
             const ok = toggleWatch(c.id);
-            if (ok) toast(w ? 'Removed from watchlist' : 'Watching — you\u2019ll get price + new-listing alerts ✓');
+            if (ok) toast(w ? 'Removed from watchlist' : 'Watching, you\u2019ll get price + new-listing alerts ✓');
           }} title={w ? 'Unwatch' : 'Watch'}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill={w ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             <span className="cd-act-label">Watch</span>
@@ -1196,7 +1196,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
       {reportListing && (
         <ReportModal targetType="listing" targetId={reportListing.id}
-          targetLabel={`${c.player} — ${fmtDisplay(Number(reportListing.price))} by @${reportListing.seller_handle || 'seller'}`}
+          targetLabel={`${c.player}, ${fmtDisplay(Number(reportListing.price))} by @${reportListing.seller_handle || 'seller'}`}
           onClose={() => setReportListing(null)} />
       )}
 
@@ -1207,7 +1207,7 @@ export default function CardDetail({ card: cardProp, onClose }) {
           onPaid={() => {
             setPayModal(null);
             if (payModal.listingId) setListings(prev => prev.filter(l => l.id !== payModal.listingId));
-            toast('Payment complete — your card is on the way!');
+            toast('Payment complete, your card is on the way!');
           }}
           onClose={() => setPayModal(null)}
         />

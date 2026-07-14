@@ -34,7 +34,7 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Report failed');
-      toast(data.already ? 'Already reported — our team has it' : 'Report sent. Thanks for keeping GEMLINE clean.');
+      toast(data.already ? 'Already reported, our team has it' : 'Report sent. Thanks for keeping GEMLINE clean.');
       onClose();
     } catch (e) { toast(e.message, true); }
     finally { setSending(false); }

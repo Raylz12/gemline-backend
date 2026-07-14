@@ -16,9 +16,9 @@ export async function generateMetadata({ searchParams }) {
   const sp = await searchParams;
   const sport = (sp.sport || '').slice(0, 40);
   const title = sport
-    ? `${sport} Card Sets — Checklists & Values | GEMLINE`
-    : 'Card Sets — Every Checklist & Price Guide | GEMLINE';
-  const description = 'Walk the aisles: browse every trading card set by sport and year — full checklists, card counts, and live market values on GEMLINE.';
+    ? `${sport} Card Sets: Checklists & Values | GEMLINE`
+    : 'Card Sets: Every Checklist & Price Guide | GEMLINE';
+  const description = 'Walk the aisles: browse every trading card set by sport and year, full checklists, card counts, and live market values on GEMLINE.';
   return {
     title, description,
     alternates: { canonical: 'https://gemlinecards.com/sets' },
@@ -71,12 +71,12 @@ export default async function SetsIndex({ searchParams }) {
       <div className="eyebrow">Walk the aisles</div>
       <h1 className="page" style={{ fontSize: 30, lineHeight: 1.15, marginBottom: 6 }}>Card Sets</h1>
       <p className="sub" style={{ marginBottom: 18 }}>
-        {total.toLocaleString()} sets — every checklist, every year, priced live.
+        {total.toLocaleString()} sets, every checklist, every year, priced live.
       </p>
 
       {/* Search + year — plain GET form, works without JS */}
       <form action="/sets" method="get" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input name="q" defaultValue={q} placeholder="Search sets — e.g. Prizm, Topps Chrome…"
+        <input name="q" defaultValue={q} placeholder="Search sets, e.g. Prizm, Topps Chrome…"
           style={{ flex: '1 1 220px', minWidth: 0, padding: '10px 14px', fontSize: 13, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 9, color: 'var(--txt)' }} />
         <select name="year" defaultValue={year}
           style={{ padding: '10px 12px', fontSize: 13, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 9, color: 'var(--txt)' }}>
@@ -98,7 +98,7 @@ export default async function SetsIndex({ searchParams }) {
       </div>
 
       {sets.length === 0 ? (
-        <p style={{ color: 'var(--muted)', padding: '40px 0', textAlign: 'center' }}>No sets match — try a different search.</p>
+        <p style={{ color: 'var(--muted)', padding: '40px 0', textAlign: 'center' }}>No sets match, try a different search.</p>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
           {sets.map(s => (
@@ -116,7 +116,7 @@ export default async function SetsIndex({ searchParams }) {
                 </span>
                 {Number(s.price_max) > 0 && (
                   <span style={{ display: 'block', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', marginTop: 3 }}>
-                    {usd(s.price_min)} – {usd(s.price_max)}
+                    {usd(s.price_min)} to {usd(s.price_max)}
                   </span>
                 )}
               </span>

@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'FAQ — GEMLINE',
+  title: 'FAQ | GEMLINE',
   description: 'Frequently asked questions about pricing, buying, selling, and trading on GEMLINE.',
   alternates: { canonical: '/faq' },
 };
@@ -15,11 +15,11 @@ const FAQS = [
   },
   {
     q: 'What fees does GEMLINE charge?',
-    a: 'Listing is free. When your card sells, GEMLINE keeps just 5% on your first five sales and 7.5% from your sixth sale on — you receive the rest, and the sell flow shows your exact net payout before you list. Buyers pay the listed price.',
+    a: 'Listing is free. When your card sells, GEMLINE keeps just 5% on your first five sales and 7.5% from your sixth sale on, you receive the rest, and the sell flow shows your exact net payout before you list. Buyers pay the listed price.',
   },
   {
     q: 'What is the Deal Finder?',
-    a: 'The Deal Finder (under Price Guide → Deals) surfaces cards listed below their fair market value, with the marketplace fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
+    a: 'The Deal Finder (the Deals tab on the Market page) surfaces cards listed below their fair market value, with the marketplace fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
   },
   {
     q: 'How do live auctions work?',
@@ -31,11 +31,11 @@ const FAQS = [
   },
   {
     q: 'When do I get paid after a sale?',
-    a: 'Your payout (sale price minus GEMLINE\u2019s fee — 5% on your first five sales, 7.5% after) releases when the buyer confirms receipt, or automatically when the inspection window lapses. If a dispute is opened, the payout stays frozen until it’s resolved.',
+    a: 'Your payout (sale price minus GEMLINE\u2019s fee. 5% on your first five sales, 7.5% after) releases when the buyer confirms receipt, or automatically when the inspection window lapses. If a dispute is opened, the payout stays frozen until it’s resolved.',
   },
   {
     q: 'Who pays for shipping?',
-    a: 'Sellers ship directly to buyers and cover shipping — build it into your price. Always ship with tracking; you’ll enter the tracking number on the order, and the buyer sees it instantly.',
+    a: 'Sellers ship directly to buyers and cover shipping, build it into your price. Always ship with tracking; you’ll enter the tracking number on the order, and the buyer sees it instantly.',
   },
   {
     q: 'What if the card arrives damaged or not as described?',
@@ -43,11 +43,11 @@ const FAQS = [
   },
   {
     q: 'How do I know a card is real?',
-    a: 'Sellers verify cards before listing — by scanning the physical slab or submitting its grading cert number — and verified listings carry a ✓ badge. Combined with escrow, you never pay for a card that doesn’t show up as described.',
+    a: 'Sellers verify cards before listing, by scanning the physical slab or submitting its grading cert number, and verified listings carry a ✓ badge. Combined with escrow, you never pay for a card that doesn’t show up as described.',
   },
   {
     q: 'Can I cancel an order?',
-    a: 'Before shipment, buyers can request cancellation (the seller approves) and sellers can cancel outright. The buyer’s payment hold is released in full — no money moves.',
+    a: 'Before shipment, buyers can request cancellation (the seller approves) and sellers can cancel outright. The buyer’s payment hold is released in full, no money moves.',
   },
 ];
 
