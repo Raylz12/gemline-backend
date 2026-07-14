@@ -315,3 +315,54 @@ CREATE INDEX IF NOT EXISTS idx_trades_proposer_status ON trades (proposer_id, st
 CREATE INDEX IF NOT EXISTS idx_trades_counterparty_status ON trades (counterparty_id, status);
 CREATE INDEX IF NOT EXISTS idx_trade_items_card_id ON trade_items (card_id);
 CREATE INDEX IF NOT EXISTS idx_trade_items_side ON trade_items (trade_id, side);
+
+-- Community Groups: collector clubs inside /community. Groups are public
+-- (anyone joins instantly) or private (join requests need owner/admin
+-- approval). Roles: owner (one per group), admin, member. Avatar is an emoji
+-- plus a color badge, no file uploads. Additive only, no existing tables touched.
+CREATE TABLE IF NOT EXISTS groups (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text UNIQUE NOT NULL,
+  slug        text UNIQUE NOT NULL,
+  description text NOT NULL DEFAULT '',
+  avatar      text NOT NULL DEFAULT '🃏',       -- emoji badge
+  color       text NOT NULL DEFAULT '#16c784',  -- badge background hex
+  privacy     text NOT NULL DEFAULT 'public' CHECK (privacy IN ('public','private')),
+  created_by  uuid NOT NULL REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_groups_created ON groups (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS group_members (
+  group_id  uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id   uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role      text NOT NULL DEFAULT 'member' CHECK (role IN ('owner','admin','member')),
+  joined_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members (user_id);
+
+-- Join requests for private groups. One live pending request per user per
+-- group (partial unique index); approve/deny stamps resolver + timestamp.
+CREATE TABLE IF NOT EXISTS group_join_requests (
+  id          bigserial PRIMARY KEY,
+  group_id    uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status      text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','denied')),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  resolved_by uuid REFERENCES users(id),
+  resolved_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_join_pending
+  ON group_join_requests (group_id, user_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_group_join_group ON group_join_requests (group_id, status);
+
+CREATE TABLE IF NOT EXISTS group_posts (
+  id         bigserial PRIMARY KEY,
+  group_id   uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body       text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_group_posts_group ON group_posts (group_id, created_at DESC);

@@ -446,7 +446,7 @@ async function assertActiveAccount(pool, userId, res) {
 }
 
 // Feature flags: default-on unless a row says otherwise. 60s in-memory cache.
-const KNOWN_FLAGS = ['packs', 'mystery_packs', 'community_posts', 'trades', 'auctions', 'ai_scout'];
+const KNOWN_FLAGS = ['packs', 'mystery_packs', 'community_posts', 'trades', 'auctions', 'ai_scout', 'groups'];
 let _flagCache = { at: 0, map: {} };
 async function getFlags(pool) {
   if (Date.now() - _flagCache.at < 60_000) return _flagCache.map;
@@ -5200,6 +5200,489 @@ app.post('/api/posts/:id/comments', requireAuth, limitWrites, async (req, res) =
       commentCount: Number(cnt.n) || 0,
     });
   } catch (e) { console.error('posts/comment-create:', e.message); res.status(500).json({ error: 'Failed to comment' }); }
+});
+
+// ── Community Groups ──────────────────────────────────────────────────────────
+// Collector clubs inside /community. Public groups join instantly, private
+// groups take a join request approved by the owner or an admin. Roles: owner
+// (exactly one), admin, member. Avatars are emoji + color badges, no uploads.
+// Tables live in schema.sql; lazy-create keeps fresh environments working.
+let _groupTablesReady = false;
+async function ensureGroupTables(pool) {
+  if (_groupTablesReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS groups (
+      id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        text UNIQUE NOT NULL,
+      slug        text UNIQUE NOT NULL,
+      description text NOT NULL DEFAULT '',
+      avatar      text NOT NULL DEFAULT '🃏',
+      color       text NOT NULL DEFAULT '#16c784',
+      privacy     text NOT NULL DEFAULT 'public' CHECK (privacy IN ('public','private')),
+      created_by  uuid NOT NULL REFERENCES users(id),
+      created_at  timestamptz NOT NULL DEFAULT now(),
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    )`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS group_members (
+      group_id  uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      user_id   uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role      text NOT NULL DEFAULT 'member' CHECK (role IN ('owner','admin','member')),
+      joined_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (group_id, user_id)
+    )`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS group_join_requests (
+      id          bigserial PRIMARY KEY,
+      group_id    uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status      text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','denied')),
+      created_at  timestamptz NOT NULL DEFAULT now(),
+      resolved_by uuid REFERENCES users(id),
+      resolved_at timestamptz
+    )`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS group_posts (
+      id         bigserial PRIMARY KEY,
+      group_id   uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body       text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_group_join_pending ON group_join_requests (group_id, user_id) WHERE status = 'pending'`).catch(() => {});
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members (user_id)').catch(() => {});
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_group_posts_group ON group_posts (group_id, created_at DESC)').catch(() => {});
+  _groupTablesReady = true;
+}
+
+const GROUP_SELECT = `g.id, g.name, g.slug, g.description, g.avatar, g.color, g.privacy, g.created_by, g.created_at,
+  (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count`;
+
+function slugifyGroup(name) {
+  return String(name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+}
+async function getGroupBySlug(pool, slug) {
+  const s = String(slug || '').toLowerCase().slice(0, 80);
+  if (!s) return null;
+  const { rows: [g] } = await pool.query(`SELECT ${GROUP_SELECT} FROM groups g WHERE g.slug = $1`, [s]);
+  return g || null;
+}
+async function getGroupRole(pool, groupId, userId) {
+  if (!userId) return null;
+  const { rows: [m] } = await pool.query('SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2', [groupId, userId]);
+  return m?.role || null;
+}
+const canModerateGroup = (role) => role === 'owner' || role === 'admin';
+const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
+function groupJson(g, extra = {}) {
+  return {
+    id: g.id, name: g.name, slug: g.slug, description: g.description,
+    avatar: g.avatar, color: g.color, privacy: g.privacy,
+    memberCount: Number(g.member_count) || 0, createdAt: g.created_at, ...extra,
+  };
+}
+const groupPostJson = (p) => ({
+  id: p.id, body: p.body, createdAt: p.created_at,
+  user: { id: p.user_id, handle: p.handle, avatarUrl: p.avatar_url },
+});
+
+// GET /api/groups — discover directory. ?q= name search, ?sort=members|newest,
+// ?tab=mine limits to the caller's groups. Signed-in callers get myRole +
+// requested riding along so the UI can render Join / Requested / Joined.
+app.get('/api/groups', optionalAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ groups: [] });
+    await ensureGroupTables(pool);
+    const q = String(req.query.q || '').trim().slice(0, 50);
+    const sort = req.query.sort === 'newest' ? 'newest' : 'members';
+    const mine = req.query.tab === 'mine';
+    if (mine && !req.userId) return res.json({ groups: [], needsAuth: true });
+    const params = [];
+    const conds = [];
+    if (q) { params.push(`%${q.replace(/[%_\\]/g, '\\$&')}%`); conds.push(`g.name ILIKE $${params.length}`); }
+    if (mine) { params.push(req.userId); conds.push(`EXISTS(SELECT 1 FROM group_members mm WHERE mm.group_id = g.id AND mm.user_id = $${params.length})`); }
+    let myCols = '';
+    if (req.userId) {
+      params.push(req.userId);
+      myCols = `, (SELECT role FROM group_members mr WHERE mr.group_id = g.id AND mr.user_id = $${params.length}) AS my_role,
+        EXISTS(SELECT 1 FROM group_join_requests jr WHERE jr.group_id = g.id AND jr.user_id = $${params.length} AND jr.status = 'pending') AS my_pending`;
+    }
+    const { rows } = await pool.query(`
+      SELECT ${GROUP_SELECT}${myCols} FROM groups g
+      ${conds.length ? 'WHERE ' + conds.join(' AND ') : ''}
+      ORDER BY ${sort === 'newest' ? 'g.created_at DESC' : 'member_count DESC, g.created_at DESC'}
+      LIMIT 50`, params);
+    res.json({ groups: rows.map(g => groupJson(g, { myRole: g.my_role || null, requested: !!g.my_pending })) });
+  } catch (e) { console.error('groups/list:', e.message); res.json({ groups: [] }); }
+});
+
+// POST /api/groups — create a group; creator becomes owner.
+app.post('/api/groups', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'groups'))) return res.status(503).json({ error: 'Groups are temporarily disabled' });
+    await ensureGroupTables(pool);
+    const name = String(req.body?.name || '').replace(/\s+/g, ' ').trim();
+    if (name.length < 3 || name.length > 50) return res.status(400).json({ error: 'Group name must be 3 to 50 characters' });
+    const description = String(req.body?.description || '').trim().slice(0, 500);
+    const avatar = String(req.body?.avatar || '').trim().slice(0, 8) || '🃏';
+    const color = /^#[0-9a-fA-F]{6}$/.test(String(req.body?.color || '')) ? String(req.body.color) : '#16c784';
+    const privacy = req.body?.privacy === 'private' ? 'private' : 'public';
+    const slug = slugifyGroup(name);
+    if (slug.length < 3) return res.status(400).json({ error: 'Group name needs at least 3 letters or numbers' });
+    const { rows: [own] } = await pool.query(`SELECT COUNT(*)::int AS n FROM group_members WHERE user_id = $1 AND role = 'owner'`, [req.userId]);
+    if (Number(own.n) >= 10) return res.status(400).json({ error: 'You already own 10 groups, that is the limit for now' });
+    const { rows: [g] } = await pool.query(`
+      INSERT INTO groups (name, slug, description, avatar, color, privacy, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [name, slug, description, avatar, color, privacy, req.userId]);
+    await pool.query(`INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`, [g.id, req.userId]);
+    res.json({ group: groupJson({ ...g, member_count: 1 }, { myRole: 'owner', requested: false }) });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'A group with that name already exists' });
+    console.error('groups/create:', e.message);
+    res.status(500).json({ error: 'Failed to create group' });
+  }
+});
+
+// GET /api/groups/:slug — detail: info, member count, caller's role, pending
+// request state, mod pending count, and recent posts when visible (public
+// groups are readable by anyone, private posts are members only).
+app.get('/api/groups/:slug', optionalAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(404).json({ error: 'Group not found' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    let requested = false;
+    let pendingCount = 0;
+    if (req.userId && !myRole) {
+      const { rows: [jr] } = await pool.query(`SELECT 1 FROM group_join_requests WHERE group_id = $1 AND user_id = $2 AND status = 'pending'`, [g.id, req.userId]);
+      requested = !!jr;
+    }
+    if (canModerateGroup(myRole)) {
+      const { rows: [pc] } = await pool.query(`SELECT COUNT(*)::int AS n FROM group_join_requests WHERE group_id = $1 AND status = 'pending'`, [g.id]);
+      pendingCount = Number(pc.n) || 0;
+    }
+    const canSee = g.privacy === 'public' || !!myRole;
+    let posts = [];
+    if (canSee) {
+      const { rows } = await pool.query(`
+        SELECT gp.id, gp.body, gp.created_at, u.id AS user_id, u.handle, u.avatar_url
+        FROM group_posts gp JOIN users u ON u.id = gp.user_id
+        WHERE gp.group_id = $1 ORDER BY gp.created_at DESC LIMIT 20`, [g.id]);
+      posts = rows.map(groupPostJson);
+    }
+    res.json({ group: groupJson(g, { myRole, requested, pendingCount, canSee }), posts });
+  } catch (e) { console.error('groups/detail:', e.message); res.status(500).json({ error: 'Failed to load group' }); }
+});
+
+// POST /api/groups/:slug/join — public: instant member. Private: files a join
+// request for owner/admin review (idempotent, one pending request per user).
+app.post('/api/groups/:slug/join', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'groups'))) return res.status(503).json({ error: 'Groups are temporarily disabled' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (myRole) return res.json({ joined: true, myRole });
+    if (g.privacy === 'public') {
+      await pool.query(`INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING`, [g.id, req.userId]);
+      return res.json({ joined: true, myRole: 'member' });
+    }
+    await pool.query(`
+      INSERT INTO group_join_requests (group_id, user_id) VALUES ($1, $2)
+      ON CONFLICT (group_id, user_id) WHERE status = 'pending' DO NOTHING`, [g.id, req.userId]);
+    res.json({ requested: true });
+  } catch (e) { console.error('groups/join:', e.message); res.status(500).json({ error: 'Failed to join group' }); }
+});
+
+// POST /api/groups/:slug/leave — members and admins can walk away. Owners must
+// transfer ownership or delete the group instead.
+app.post('/api/groups/:slug/leave', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (!myRole) {
+      // Not a member: treat as cancelling a pending join request.
+      const { rowCount } = await pool.query(`DELETE FROM group_join_requests WHERE group_id = $1 AND user_id = $2 AND status = 'pending'`, [g.id, req.userId]);
+      if (rowCount) return res.json({ left: true, cancelled: true });
+      return res.status(400).json({ error: 'You are not a member of this group' });
+    }
+    if (myRole === 'owner') return res.status(400).json({ error: 'Owners cannot leave. Transfer ownership or delete the group first.' });
+    await pool.query('DELETE FROM group_members WHERE group_id = $1 AND user_id = $2', [g.id, req.userId]);
+    res.json({ left: true });
+  } catch (e) { console.error('groups/leave:', e.message); res.status(500).json({ error: 'Failed to leave group' }); }
+});
+
+// GET /api/groups/:slug/requests — pending join requests, owner/admin only.
+app.get('/api/groups/:slug/requests', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ requests: [] });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (!canModerateGroup(myRole)) return res.status(403).json({ error: 'Only the owner or admins can review requests' });
+    const { rows } = await pool.query(`
+      SELECT jr.id, jr.created_at, u.id AS user_id, u.handle, u.avatar_url
+      FROM group_join_requests jr JOIN users u ON u.id = jr.user_id
+      WHERE jr.group_id = $1 AND jr.status = 'pending'
+      ORDER BY jr.created_at ASC LIMIT 100`, [g.id]);
+    res.json({ requests: rows.map(x => ({ id: x.id, createdAt: x.created_at, user: { id: x.user_id, handle: x.handle, avatarUrl: x.avatar_url } })) });
+  } catch (e) { console.error('groups/requests:', e.message); res.json({ requests: [] }); }
+});
+
+// POST /api/groups/:slug/requests/:id — approve or deny, owner/admin only.
+app.post('/api/groups/:slug/requests/:id', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (!canModerateGroup(myRole)) return res.status(403).json({ error: 'Only the owner or admins can review requests' });
+    const reqId = parseInt(req.params.id);
+    const action = req.body?.action === 'approve' ? 'approve' : req.body?.action === 'deny' ? 'deny' : null;
+    if (!reqId || !action) return res.status(400).json({ error: 'Invalid request' });
+    const { rows: [jr] } = await pool.query(`
+      UPDATE group_join_requests SET status = $1, resolved_by = $2, resolved_at = NOW()
+      WHERE id = $3 AND group_id = $4 AND status = 'pending' RETURNING user_id`,
+      [action === 'approve' ? 'approved' : 'denied', req.userId, reqId, g.id]);
+    if (!jr) return res.status(404).json({ error: 'Request not found or already handled' });
+    if (action === 'approve') {
+      await pool.query(`INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING`, [g.id, jr.user_id]);
+    }
+    res.json({ ok: true, action });
+  } catch (e) { console.error('groups/requests-resolve:', e.message); res.status(500).json({ error: 'Failed to update request' }); }
+});
+
+// PUT /api/groups/:slug — owner/admin edit description, avatar, color.
+// Name and privacy changes are owner only. Slug stays stable on rename so
+// shared links keep working.
+app.put('/api/groups/:slug', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (!canModerateGroup(myRole)) return res.status(403).json({ error: 'Only the owner or admins can edit this group' });
+    const sets = [];
+    const params = [];
+    const push = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+    if (typeof req.body?.description === 'string') push('description', req.body.description.trim().slice(0, 500));
+    if (typeof req.body?.avatar === 'string' && req.body.avatar.trim()) push('avatar', req.body.avatar.trim().slice(0, 8));
+    if (typeof req.body?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(req.body.color)) push('color', req.body.color);
+    if (typeof req.body?.name === 'string') {
+      if (myRole !== 'owner') return res.status(403).json({ error: 'Only the owner can rename the group' });
+      const name = req.body.name.replace(/\s+/g, ' ').trim();
+      if (name.length < 3 || name.length > 50) return res.status(400).json({ error: 'Group name must be 3 to 50 characters' });
+      push('name', name);
+    }
+    if (typeof req.body?.privacy === 'string') {
+      if (myRole !== 'owner') return res.status(403).json({ error: 'Only the owner can change privacy' });
+      push('privacy', req.body.privacy === 'private' ? 'private' : 'public');
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    params.push(g.id);
+    await pool.query(`UPDATE groups SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length}`, params);
+    const fresh = await getGroupBySlug(pool, g.slug);
+    res.json({ group: groupJson(fresh, { myRole }) });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'A group with that name already exists' });
+    console.error('groups/update:', e.message);
+    res.status(500).json({ error: 'Failed to update group' });
+  }
+});
+
+// DELETE /api/groups/:slug — owner only. Cascades members, requests, posts.
+app.delete('/api/groups/:slug', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (myRole !== 'owner') return res.status(403).json({ error: 'Only the owner can delete the group' });
+    await pool.query('DELETE FROM groups WHERE id = $1', [g.id]);
+    res.json({ deleted: true });
+  } catch (e) { console.error('groups/delete:', e.message); res.status(500).json({ error: 'Failed to delete group' }); }
+});
+
+// GET /api/groups/:slug/posts — paginated feed (20/page), members only for
+// private groups.
+app.get('/api/groups/:slug/posts', optionalAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ posts: [], hasMore: false });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (g.privacy === 'private' && !myRole) return res.status(403).json({ error: 'Members only', posts: [], hasMore: false });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = 20;
+    const { rows } = await pool.query(`
+      SELECT gp.id, gp.body, gp.created_at, u.id AS user_id, u.handle, u.avatar_url
+      FROM group_posts gp JOIN users u ON u.id = gp.user_id
+      WHERE gp.group_id = $1 ORDER BY gp.created_at DESC LIMIT $2 OFFSET $3`,
+      [g.id, limit + 1, (page - 1) * limit]);
+    res.json({ posts: rows.slice(0, limit).map(groupPostJson), hasMore: rows.length > limit, page });
+  } catch (e) { console.error('groups/posts:', e.message); res.json({ posts: [], hasMore: false }); }
+});
+
+// POST /api/groups/:slug/posts — members post to the group wall.
+app.post('/api/groups/:slug/posts', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    if (!(await assertActiveAccount(pool, req.userId, res))) return;
+    if (!(await flagEnabled(pool, 'groups'))) return res.status(503).json({ error: 'Groups are temporarily disabled' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (!myRole) return res.status(403).json({ error: 'Join this group to post' });
+    const body = String(req.body?.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Post body required' });
+    if (body.length > 500) return res.status(400).json({ error: 'Post too long (max 500 chars)' });
+    const { rows: [p] } = await pool.query(
+      'INSERT INTO group_posts (group_id, user_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at',
+      [g.id, req.userId, body]);
+    const { rows: [u] } = await pool.query('SELECT handle, avatar_url FROM users WHERE id = $1', [req.userId]);
+    res.json({ post: groupPostJson({ ...p, user_id: req.userId, handle: u?.handle, avatar_url: u?.avatar_url }) });
+  } catch (e) { console.error('groups/post-create:', e.message); res.status(500).json({ error: 'Failed to post' }); }
+});
+
+// DELETE /api/groups/:slug/posts/:postId — authors delete their own posts,
+// owner/admin can moderate anything in the group.
+app.delete('/api/groups/:slug/posts/:postId', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const postId = parseInt(req.params.postId);
+    if (!postId) return res.status(400).json({ error: 'Invalid post id' });
+    const { rows: [p] } = await pool.query('SELECT user_id FROM group_posts WHERE id = $1 AND group_id = $2', [postId, g.id]);
+    if (!p) return res.status(404).json({ error: 'Post not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (p.user_id !== req.userId && !canModerateGroup(myRole)) return res.status(403).json({ error: 'You can only delete your own posts' });
+    await pool.query('DELETE FROM group_posts WHERE id = $1', [postId]);
+    res.json({ deleted: true });
+  } catch (e) { console.error('groups/post-delete:', e.message); res.status(500).json({ error: 'Failed to delete post' }); }
+});
+
+// GET /api/groups/:slug/members — roster with roles. Private rosters are
+// members only; public rosters are public like the rest of the directory.
+app.get('/api/groups/:slug/members', optionalAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ members: [] });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (g.privacy === 'private' && !myRole) return res.status(403).json({ error: 'Members only', members: [] });
+    const { rows } = await pool.query(`
+      SELECT gm.role, gm.joined_at, u.id AS user_id, u.handle, u.avatar_url
+      FROM group_members gm JOIN users u ON u.id = gm.user_id
+      WHERE gm.group_id = $1
+      ORDER BY CASE gm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, gm.joined_at ASC
+      LIMIT 200`, [g.id]);
+    res.json({ members: rows.map(m => ({ role: m.role, joinedAt: m.joined_at, user: { id: m.user_id, handle: m.handle, avatarUrl: m.avatar_url } })), myRole });
+  } catch (e) { console.error('groups/members:', e.message); res.json({ members: [] }); }
+});
+
+// POST /api/groups/:slug/members/:userId/role — owner only. Promote to admin,
+// demote to member, or transfer ownership (old owner becomes admin).
+app.post('/api/groups/:slug/members/:userId/role', requireAuth, limitWrites, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (myRole !== 'owner') return res.status(403).json({ error: 'Only the owner can change roles' });
+    const targetId = req.params.userId;
+    if (!isUuid(targetId)) return res.status(400).json({ error: 'Invalid user' });
+    if (targetId === req.userId) return res.status(400).json({ error: 'You cannot change your own role' });
+    const newRole = ['owner', 'admin', 'member'].includes(req.body?.role) ? req.body.role : null;
+    if (!newRole) return res.status(400).json({ error: 'Role must be owner, admin, or member' });
+    const targetRole = await getGroupRole(pool, g.id, targetId);
+    if (!targetRole) return res.status(404).json({ error: 'That user is not a member' });
+    if (newRole === 'owner') {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2`, [g.id, req.userId]);
+        await client.query(`UPDATE group_members SET role = 'owner' WHERE group_id = $1 AND user_id = $2`, [g.id, targetId]);
+        await client.query('COMMIT');
+      } catch (err) { await client.query('ROLLBACK'); throw err; }
+      finally { client.release(); }
+      return res.json({ ok: true, transferred: true });
+    }
+    await pool.query('UPDATE group_members SET role = $1 WHERE group_id = $2 AND user_id = $3', [newRole, g.id, targetId]);
+    res.json({ ok: true, role: newRole });
+  } catch (e) { console.error('groups/role:', e.message); res.status(500).json({ error: 'Failed to change role' }); }
+});
+
+// DELETE /api/groups/:slug/members/:userId — remove a member. Owner can remove
+// anyone but themselves; admins can remove plain members only.
+app.delete('/api/groups/:slug/members/:userId', requireAuth, async (req, res) => {
+  try {
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.status(500).json({ error: 'No database' });
+    await ensureGroupTables(pool);
+    const g = await getGroupBySlug(pool, req.params.slug);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    const myRole = await getGroupRole(pool, g.id, req.userId);
+    if (!canModerateGroup(myRole)) return res.status(403).json({ error: 'Only the owner or admins can remove members' });
+    const targetId = req.params.userId;
+    if (!isUuid(targetId)) return res.status(400).json({ error: 'Invalid user' });
+    if (targetId === req.userId) return res.status(400).json({ error: 'Use leave instead of removing yourself' });
+    const targetRole = await getGroupRole(pool, g.id, targetId);
+    if (!targetRole) return res.status(404).json({ error: 'That user is not a member' });
+    if (targetRole === 'owner') return res.status(403).json({ error: 'The owner cannot be removed' });
+    if (myRole === 'admin' && targetRole === 'admin') return res.status(403).json({ error: 'Admins cannot remove other admins' });
+    await pool.query('DELETE FROM group_members WHERE group_id = $1 AND user_id = $2', [g.id, targetId]);
+    res.json({ removed: true });
+  } catch (e) { console.error('groups/member-remove:', e.message); res.status(500).json({ error: 'Failed to remove member' }); }
 });
 
 // ── Card Like/Pin endpoints ─────────────────────────────────────────────────

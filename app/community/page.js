@@ -6,6 +6,7 @@ import AuthModal from '../components/AuthModal';
 import { fmt } from '../lib/data';
 import useDarkPage from '../lib/useDarkPage';
 import ReportModal from '../components/ReportModal';
+import GroupsSection from './GroupsSection';
 
 function UserCard({ user, currentUserId, onToggleFollow, followingSet, onRequireAuth }) {
   const isFollowing = followingSet.has(user.id);
@@ -838,6 +839,7 @@ export default function CommunityPage() {
         <div className="seg" style={{ marginBottom: 20 }}>
           <button className={tab === 'feed' ? 'on' : ''} onClick={() => setTab('feed')}>Feed</button>
           <button className={tab === 'discover' ? 'on' : ''} onClick={() => setTab('discover')}>Discover</button>
+          <button className={tab === 'groups' ? 'on' : ''} onClick={() => setTab('groups')}>Groups</button>
           {user && (
             <>
               <button className={tab === 'following' ? 'on' : ''} onClick={() => setTab('following')}>
@@ -932,7 +934,11 @@ export default function CommunityPage() {
         </div>
       )}
 
-      {tab !== 'feed' && (
+      {tab === 'groups' && !searchQuery && (
+        <GroupsSection user={user} token={token} authFetch={authFetch} onRequireAuth={requireAuth} />
+      )}
+
+      {tab !== 'feed' && tab !== 'groups' && (
         <div className="community-grid">
           {displayUsers.map(u => (
             <UserCard key={u.id} user={u} currentUserId={user?.id} onToggleFollow={toggleFollow} followingSet={followingSet} onRequireAuth={requireAuth} />
