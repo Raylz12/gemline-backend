@@ -1,11 +1,17 @@
 'use client';
+// Deal Finder — the arb desk (buy-low / fair-value net-edge board) plus the
+// "Worth Grading?" ROI calculator. Extracted from the retired standalone
+// /arbitrage page so it can live as tabs inside the unified /market surface.
+// Gated by ProGate capability 'arbitrage' (free WITH an account) — logged-out
+// visitors get the frosted teaser + sign-up CTA. `view` picks the sub-surface:
+//   'deals'   → net-edge deal board (default)
+//   'grading' → Worth Grading? calculator
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../components/AuthContext';
-import CardDetail from '../components/CardDetail';
-import AuthModal from '../components/AuthModal';
-import ProGate, { hasCapability } from '../components/ProGate';
-import WorthGrading from '../components/WorthGrading';
-import useDarkPage from '../lib/useDarkPage';
+import { useAuth } from './AuthContext';
+import CardDetail from './CardDetail';
+import AuthModal from './AuthModal';
+import ProGate, { hasCapability } from './ProGate';
+import WorthGrading from './WorthGrading';
 
 // Tokenized play matcher — every search word must hit player/set/variant/year/grade.
 const matchesArbQuery = (c, q) => {
@@ -15,7 +21,7 @@ const matchesArbQuery = (c, q) => {
 };
 
 // Buy at the low ask, exit at Card Hedge high (FMV) net of the 7.5% marketplace
-// fee — the same net-edge model the analytics arb tab uses.
+// fee — the same net-edge model the price guide arb tab uses.
 const MARKETPLACE_FEE = 0.075;  // standard seller fee (first-5-sales intro rate is 5%)
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -56,25 +62,6 @@ function Spark({ vals = [], up }) {
       />
       <polyline fill="none" stroke={color} strokeWidth="1.5" points={pts}
         strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-// ─── Inline bar chart (for volume) ───────────────────────────────────────────
-function BarChart({ data = [], color = '#E8B339', label }) {
-  const max = Math.max(...data.map(d => d.v), 1);
-  const W = 200, H = 60, barW = Math.max(2, Math.floor((W - 4) / data.length) - 1);
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
-      {data.map((d, i) => {
-        const barH = Math.max(1, (d.v / max) * (H - 8));
-        const x = 2 + i * (barW + 1);
-        const y = H - barH - 2;
-        return (
-          <rect key={i} x={x} y={y} width={barW} height={barH}
-            fill={color} opacity={d.highlight ? 1 : 0.55} rx="1" />
-        );
-      })}
     </svg>
   );
 }
@@ -427,9 +414,8 @@ function SpreadMatrix({ cards, onSelect }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function ArbitragePage() {
-  useDarkPage();
+// ─── Deal Finder (tabbed content inside /market) ──────────────────────────────
+export default function DealFinder({ view = 'deals' }) {
   const { user, token } = useAuth();
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -437,7 +423,6 @@ export default function ArbitragePage() {
   const [now, setNow] = useState('');
   const [showAuth, setShowAuth] = useState(false);
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState('deals'); // deals | grading
 
   // Clock
   useEffect(() => {
@@ -456,7 +441,7 @@ export default function ArbitragePage() {
       const data = await res.json();
       // Merge all categories into a de-duped pool. arbPlays first — it's the
       // decision-grade net-edge bucket (real lo/hi inventory, net-positive
-      // after the 7.5% fee) that also powers the analytics arb tab.
+      // after the 7.5% fee) that also powers the price guide arb tab.
       const allCards = [
         ...(data.arbPlays || []),
         ...(data.gainers || []),
@@ -489,10 +474,11 @@ export default function ArbitragePage() {
   }, []);
 
   useEffect(() => {
+    if (view !== 'deals') return;
     fetchArbData();
     arbIntervalRef.current = setInterval(fetchArbData, 120_000); // 2min auto-refresh
     return () => clearInterval(arbIntervalRef.current);
-  }, [fetchArbData]);
+  }, [fetchArbData, view]);
 
   // Server-side search sweep — the default payload buckets are capped (~120
   // arb plays), so ?q= searches the FULL card universe and merges new rows in.
@@ -536,7 +522,7 @@ export default function ArbitragePage() {
 
   // Derived datasets — the play is: buy at the low ask, exit at Card Hedge high
   // (FMV) net of the 7.5% marketplace fee. Ranked by net edge $, momentum flag
-  // for undervalued + trending up. Same treatment as the analytics arb tab.
+  // for undervalued + trending up. Same treatment as the price guide arb tab.
   const cardsWithEdge = useMemo(() => visible
     .filter(c => c.lo > 0 && c.hi > 0 && c.market > 0 && c.market < 10000)
     .map(c => {
@@ -577,17 +563,8 @@ export default function ArbitragePage() {
   const netPlays = useMemo(() => cardsWithEdge.filter(c => c.netEdge > 0), [cardsWithEdge]);
   const avgNetEdge = useMemo(() => netPlays.length ? (netPlays.reduce((s, c) => s + c.netEdge, 0) / netPlays.length).toFixed(0) : '—', [netPlays]);
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, gap: 12, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>
-        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#34D88A', animation: 'pulse 1s infinite' }} />
-        LOADING MARKET DATA...
-      </div>
-    );
-  }
-
   return (
-    <div style={{ background: '#080b12', minHeight: '100vh', padding: 0 }}>
+    <div style={{ background: '#080b12', minHeight: '60vh', padding: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.06)' }}>
       <ProGate
         page
         allowed={hasCapability(user || (token ? {} : null), 'arbitrage')}
@@ -597,10 +574,19 @@ export default function ArbitragePage() {
         onUnlock={() => setShowAuth(true)}
       >
 
+      {view === 'grading' && <WorthGrading onSelect={setSelected} />}
+
+      {view === 'deals' && (loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, gap: 12, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#34D88A', animation: 'pulse 1s infinite' }} />
+          LOADING DEAL DATA...
+        </div>
+      ) : (
+      <>
       {/* ── Top bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 16px',
+        padding: '8px 16px', flexWrap: 'wrap', gap: 8,
         background: '#0a0d14',
         borderBottom: '1px solid rgba(255,255,255,.07)',
       }}>
@@ -636,23 +622,6 @@ export default function ArbitragePage() {
       {/* ── Ticker strip ── */}
       <TickerStrip cards={tickerCards} />
 
-      {/* ── Tabs: Deal Board / Worth Grading? ── */}
-      <div style={{ display: 'flex', gap: 2, padding: '8px 8px 0' }}>
-        {[['deals', 'DEAL BOARD'], ['grading', 'WORTH GRADING?']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            style={{
-              padding: '8px 16px', fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '.1em',
-              background: tab === k ? '#0d1117' : 'transparent', cursor: 'pointer',
-              border: '1px solid', borderColor: tab === k ? 'rgba(232,179,57,.45)' : 'rgba(255,255,255,.08)',
-              borderBottom: tab === k ? '1px solid #0d1117' : '1px solid rgba(255,255,255,.08)',
-              borderRadius: '4px 4px 0 0', color: tab === k ? '#E8B339' : 'var(--dim)',
-            }}>{label}</button>
-        ))}
-      </div>
-
-      {tab === 'grading' && <WorthGrading onSelect={setSelected} />}
-
-      {tab === 'deals' && <>
       {/* ── Play search ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 0', flexWrap: 'wrap' }}>
         <div className="arb-search" style={{ flex: '1 1 260px', maxWidth: 420 }}>
@@ -777,7 +746,8 @@ export default function ArbitragePage() {
           )}
         </Panel>
       </div>
-      </>}
+      </>
+      ))}
 
       </ProGate>
 

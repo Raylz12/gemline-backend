@@ -120,7 +120,7 @@ const NAV_ITEMS = [
   { href: '/trades', label: 'Trades', key: 'trades', public: true },
   { href: '/portfolio', label: 'Collection', key: 'portfolio', public: true },
   { href: '/analytics', label: 'Price Guide', key: 'analytics', public: true, low: true },
-  { href: '/arbitrage', label: 'Deal Finder', key: 'arbitrage', public: true, low: true },
+  { href: '/market?tab=deals', label: 'Deal Finder', key: 'arbitrage', public: true, low: true },
   { href: '/community', label: 'Community', key: 'community', public: true, low: true },
 ];
 

@@ -52,5 +52,14 @@ const nextConfig = {
   async rewrites() {
     return [];
   },
+
+  // Deal Finder merged into the unified /market surface. Old standalone route
+  // permanently redirects to the Deals tab so shared links never 404.
+  async redirects() {
+    return [
+      { source: '/arbitrage', destination: '/market?tab=deals', permanent: true },
+      { source: '/arbitrage/:path*', destination: '/market?tab=deals', permanent: true },
+    ];
+  },
 };
 export default nextConfig;

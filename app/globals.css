@@ -3353,6 +3353,41 @@ body.page-dark .skeleton{background:linear-gradient(90deg,#141926 25%,#1b2130 50
 .arb-search-x:hover{color:var(--txt)}
 @media(max-width:600px){.arb-search{flex:1 1 100%;min-width:0}}
 
+/* ── Unified /market segmented control (Browse | Deals | Worth Grading) ──────
+   Sticky under the header, horizontally scrollable on narrow iOS viewports so
+   every tab stays thumb-reachable without wrapping or clipping the layout. */
+.market-seg-wrap{
+  position:sticky;top:0;z-index:30;
+  margin:0 0 18px;padding:8px 0;
+  background:var(--bg,#f4f5f7);
+  -webkit-backdrop-filter:saturate(1.2) blur(6px);backdrop-filter:saturate(1.2) blur(6px);
+}
+body.page-dark .market-seg-wrap{background:#080b12}
+.market-seg{
+  display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  padding:4px;border-radius:12px;
+  background:var(--panel,#fff);border:1px solid var(--line,#e6e8ec);
+  width:max-content;max-width:100%;
+}
+.market-seg::-webkit-scrollbar{display:none}
+body.page-dark .market-seg{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.09)}
+.market-seg-btn{
+  flex:0 0 auto;min-height:40px;padding:8px 20px;
+  border:none;border-radius:9px;background:transparent;cursor:pointer;
+  font-family:var(--ui);font-size:14px;font-weight:600;letter-spacing:.01em;
+  color:var(--muted,#6b7280);white-space:nowrap;transition:background .15s,color .15s;
+}
+.market-seg-btn:hover{color:var(--txt,#111)}
+body.page-dark .market-seg-btn:hover{color:#eef1f6}
+.market-seg-btn.on{background:var(--gold,#16c784);color:#04140c}
+body.page-dark .market-seg-btn.on{color:#04140c}
+@media(max-width:600px){
+  .market-seg-wrap{margin-bottom:12px}
+  .market-seg{width:100%}
+  .market-seg-btn{flex:1 1 auto;padding:8px 12px;text-align:center;font-size:13.5px}
+}
+
 /* ── Arbitrage — responsive: table on desktop, stacked play-cards on mobile ── */
 .arb-desktop{display:block;height:100%}
 .arb-cards{display:none}

@@ -5724,8 +5724,8 @@ app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
         quantity: 1,
       }],
       subscription_data: { trial_period_days: 7 },
-      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/arbitrage?sub=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/arbitrage?sub=cancelled`,
+      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/market?tab=deals&sub=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/market?tab=deals&sub=cancelled`,
       client_reference_id: req.userId,
     });
     res.json({ url: session.url });
@@ -5738,10 +5738,10 @@ app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
 app.get('/api/subscription/return', async (req, res) => {
   try {
     const sessionId = req.query.session_id;
-    if (!sessionId) return res.redirect('/arbitrage');
+    if (!sessionId) return res.redirect('/market?tab=deals');
     const { default: Stripe } = await import('stripe');
     const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) return res.redirect('/arbitrage');
+    if (!key) return res.redirect('/market?tab=deals');
     const stripe = new Stripe(key);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (session.payment_status === 'paid' || session.status === 'complete') {
@@ -5756,9 +5756,9 @@ app.get('/api/subscription/return', async (req, res) => {
         );
       }
     }
-    res.redirect('/arbitrage?sub=success');
+    res.redirect('/market?tab=deals&sub=success');
   } catch (e) {
-    res.redirect('/arbitrage');
+    res.redirect('/market?tab=deals');
   }
 });
 

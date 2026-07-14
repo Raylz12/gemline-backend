@@ -9,8 +9,19 @@ import CardDetail from '../components/CardDetail';
 import Scout from '../components/Scout';
 import SavedSearches from '../components/SavedSearches';
 import { SkeletonCard } from '../components/Skeleton';
+import DealFinder from '../components/DealFinder';
 
 const PAGE_SIZE = 50;
+
+// Unified surface: one page, three views. "Browse" is the public price-guide
+// feed (SEO). "Deals" and "Worth Grading" are the Deal Finder tabs (free-
+// account gated via ProGate). URL-driven + deep-linkable via ?tab=.
+const MARKET_TABS = [
+  ['browse', 'Browse'],
+  ['deals', 'Deals'],
+  ['grading', 'Worth Grading'],
+];
+const VALID_TABS = new Set(MARKET_TABS.map(t => t[0]));
 
 function ListRow({ card: c, onClick }) {
   const isRC = (c.variant || '').toLowerCase().includes('rc') ||
@@ -82,8 +93,44 @@ export default function MarketplacePage() {
   const [activeListings, setActiveListings] = useState([]);
   const [viewMode, setViewMode] = useState('grid'); // grid | list
   const [page, setPage] = useState(1);
+  // Top-level view: browse (price guide feed) | deals | grading (Deal Finder).
+  const [activeTab, setActiveTab] = useState('browse');
 
   useEffect(() => { setPage(1); }, [filters, searchQuery]);
+
+  // Deal Finder views (deals/grading) commit the page to the dark trade-desk
+  // theme; Browse stays on the light price-guide theme. Toggled at body level
+  // so header/footer follow, and cleanly reverted on unmount / tab switch.
+  useEffect(() => {
+    if (activeTab === 'browse') return;
+    document.body.classList.add('page-dark');
+    return () => document.body.classList.remove('page-dark');
+  }, [activeTab]);
+
+  // Read the active tab from the URL on load + keep it in sync with back/
+  // forward navigation (?tab=deals is shareable and history-friendly).
+  useEffect(() => {
+    const readTab = () => {
+      try {
+        const t = new URLSearchParams(window.location.search).get('tab');
+        setActiveTab(VALID_TABS.has(t) ? t : 'browse');
+      } catch { setActiveTab('browse'); }
+    };
+    readTab();
+    window.addEventListener('popstate', readTab);
+    return () => window.removeEventListener('popstate', readTab);
+  }, []);
+
+  const selectTab = (t) => {
+    setActiveTab(t);
+    try {
+      const url = new URL(window.location.href);
+      if (t === 'browse') url.searchParams.delete('tab');
+      else url.searchParams.set('tab', t);
+      window.history.pushState(null, '', url.toString());
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    } catch {}
+  };
 
   // Deep link from SEO card pages and shares: /market?card=<uuid> auto-opens
   // the interactive CardDetail overlay for that card (it self-hydrates from id).
@@ -231,6 +278,21 @@ export default function MarketplacePage() {
 
   return (
     <>
+      {/* Unified segmented control — Browse (price guide) | Deals | Worth Grading.
+          Sticky + horizontally scrollable so it stays thumb-reachable on iOS. */}
+      <div className="market-seg-wrap">
+        <div className="market-seg" role="tablist" aria-label="Market views">
+          {MARKET_TABS.map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={activeTab === k}
+              className={`market-seg-btn ${activeTab === k ? 'on' : ''}`}
+              onClick={() => selectTab(k)}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab !== 'browse' && <DealFinder view={activeTab} />}
+
+      {activeTab === 'browse' && <>
       {/* .market-hero collapses on mobile so cards land in the first viewport */}
       <div className="market-hero">
         <div className="eyebrow">Marketplace</div>
@@ -470,6 +532,7 @@ export default function MarketplacePage() {
           )}
         </div>
       </div>
+      </>}
 
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
     </>

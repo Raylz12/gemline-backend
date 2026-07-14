@@ -18,7 +18,7 @@ const COLUMNS = [
     blurb: 'Know what your cards are worth — live data, every grade.',
     links: [
       { href: '/analytics', label: 'Price Guide' },
-      { href: '/arbitrage', label: 'Deals' },
+      { href: '/market?tab=deals', label: 'Deal Finder' },
       { href: '/portfolio', label: 'My Collection' },
       { href: '/community', label: 'Community' },
     ],
