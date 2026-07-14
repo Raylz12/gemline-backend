@@ -13,8 +13,8 @@
   --r:8px; --r-sm:5px;
   /* ── Fonts ── */
   --mono:"IBM Plex Mono",monospace;
-  --disp:"Barlow Condensed","Arial Narrow",sans-serif;
-  --ui:"Barlow","Inter",system-ui,sans-serif;
+  --disp:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -43,7 +43,7 @@ header{position:sticky;top:0;z-index:40;background:#0f1117;border-bottom:1px sol
 .nav{max-width:1320px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:12px 18px}
 .brand{display:flex;align-items:center;gap:10px;flex:0 0 auto}
 .logo{width:30px;height:30px;border-radius:5px;background:var(--gold);display:grid;place-items:center;color:#000;font-family:var(--disp);font-weight:900;font-size:17px;letter-spacing:-.02em}
-.wordmark{font-family:var(--disp);font-weight:900;font-size:21px;letter-spacing:.04em;text-transform:uppercase;color:#fff}
+.wordmark{font-family:var(--disp);font-weight:800;font-size:19px;letter-spacing:.015em;text-transform:uppercase;color:#fff}
 .wordmark span{color:var(--gold)}
 .tagline{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.35);letter-spacing:.16em;margin-top:-2px}
 .search{flex:1;max-width:440px;position:relative}
