@@ -19,7 +19,7 @@ const FAQS = [
   },
   {
     q: 'What is the Deal Finder?',
-    a: 'The Deal Finder (the Deals tab on the Market page) surfaces cards listed below their fair market value, with the marketplace fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
+    a: 'The Deal Finder (its own tab in the site navigation) surfaces cards listed below their fair market value, with the marketplace fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
   },
   {
     q: 'How do live auctions work?',

@@ -18,8 +18,8 @@ const COLUMNS = [
     blurb: 'Know what your cards are worth. Live data, every grade.',
     links: [
       { href: '/market', label: 'Price Guide' },
-      { href: '/market?tab=deals', label: 'Deal Finder' },
-      { href: '/market?tab=grading', label: 'Worth Grading' },
+      { href: '/deal-finder', label: 'Deal Finder' },
+      { href: '/deal-finder?tab=grading', label: 'Worth Grading' },
       { href: '/analytics', label: 'Market Movers' },
       { href: '/portfolio', label: 'My Collection' },
       { href: '/community', label: 'Community' },

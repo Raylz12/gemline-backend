@@ -9,19 +9,12 @@ import CardDetail from '../components/CardDetail';
 import Scout from '../components/Scout';
 import SavedSearches from '../components/SavedSearches';
 import { SkeletonCard } from '../components/Skeleton';
-import DealFinder from '../components/DealFinder';
 
 const PAGE_SIZE = 50;
 
-// Unified surface: one page, three views. "Browse" is the public price-guide
-// feed (SEO). "Deals" and "Worth Grading" are the Deal Finder tabs (free-
-// account gated via ProGate). URL-driven + deep-linkable via ?tab=.
-const MARKET_TABS = [
-  ['browse', 'Browse'],
-  ['deals', 'Deals'],
-  ['grading', 'Worth Grading'],
-];
-const VALID_TABS = new Set(MARKET_TABS.map(t => t[0]));
+// /market is the public marketplace browse feed (SEO). The Deal Finder and
+// Worth Grading moved to their own dedicated /deal-finder page (the future
+// paywall surface); legacy /market?tab= deep links redirect there below.
 
 function ListRow({ card: c, onClick }) {
   const isRC = (c.variant || '').toLowerCase().includes('rc') ||
@@ -93,44 +86,18 @@ export default function MarketplacePage() {
   const [activeListings, setActiveListings] = useState([]);
   const [viewMode, setViewMode] = useState('grid'); // grid | list
   const [page, setPage] = useState(1);
-  // Top-level view: browse (price guide feed) | deals | grading (Deal Finder).
-  const [activeTab, setActiveTab] = useState('browse');
 
   useEffect(() => { setPage(1); }, [filters, searchQuery]);
 
-  // Deal Finder views (deals/grading) commit the page to the dark trade-desk
-  // theme; Browse stays on the light price-guide theme. Toggled at body level
-  // so header/footer follow, and cleanly reverted on unmount / tab switch.
+  // Legacy deep links from when Deals / Worth Grading lived as tabs on this
+  // page: forward them to the dedicated /deal-finder page so nothing 404s.
   useEffect(() => {
-    if (activeTab === 'browse') return;
-    document.body.classList.add('page-dark');
-    return () => document.body.classList.remove('page-dark');
-  }, [activeTab]);
-
-  // Read the active tab from the URL on load + keep it in sync with back/
-  // forward navigation (?tab=deals is shareable and history-friendly).
-  useEffect(() => {
-    const readTab = () => {
-      try {
-        const t = new URLSearchParams(window.location.search).get('tab');
-        setActiveTab(VALID_TABS.has(t) ? t : 'browse');
-      } catch { setActiveTab('browse'); }
-    };
-    readTab();
-    window.addEventListener('popstate', readTab);
-    return () => window.removeEventListener('popstate', readTab);
-  }, []);
-
-  const selectTab = (t) => {
-    setActiveTab(t);
     try {
-      const url = new URL(window.location.href);
-      if (t === 'browse') url.searchParams.delete('tab');
-      else url.searchParams.set('tab', t);
-      window.history.pushState(null, '', url.toString());
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      const t = new URLSearchParams(window.location.search).get('tab');
+      if (t === 'deals') window.location.replace('/deal-finder');
+      else if (t === 'grading') window.location.replace('/deal-finder?tab=grading');
     } catch {}
-  };
+  }, []);
 
   // Deep link from SEO card pages and shares: /market?card=<uuid> auto-opens
   // the interactive CardDetail overlay for that card (it self-hydrates from id).
@@ -276,35 +243,16 @@ export default function MarketplacePage() {
 
   const boosted = enrichedCards.filter(c => c.boost).sort((a, b) => b.boost.rank - a.boost.rank);
 
-  // One page header for all three views — the tab bar lives INSIDE it, right
-  // under the title, so it reads as part of the page instead of a floating pill.
-  const HERO = {
-    browse: ['Every card, priced live.', 'Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence. Every price is verified against live market data.'],
-    deals: ['Deal Finder', 'Cards priced below fair value, fees already counted. Live across the whole market, refreshed all day.'],
-    grading: ['Worth grading?', 'Run the numbers before you send a card in. Raw price, graded price, and grading cost, all in one view.'],
-  };
-
   return (
     <>
-      {/* Unified page header — title + native tab bar (Browse | Deals | Worth
-          Grading). The tab bar sticks under the site header while scrolling.
-          .market-hero collapses on mobile so cards land in the first viewport. */}
+      {/* Page header — .market-hero collapses on mobile so cards land in the
+          first viewport. */}
       <div className="market-hero">
         <div className="eyebrow">Marketplace</div>
-        <h1 className="page">{HERO[activeTab][0]}</h1>
-        <p className="sub">{HERO[activeTab][1]}</p>
-      </div>
-      <div className="market-tabs" role="tablist" aria-label="Market views">
-        {MARKET_TABS.map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={activeTab === k}
-            className={`market-tab ${activeTab === k ? 'on' : ''}`}
-            onClick={() => selectTab(k)}>{label}</button>
-        ))}
+        <h1 className="page">Every card, priced live.</h1>
+        <p className="sub">Browse real market prices powered by Card Hedge. Buy, sell, and trade cards with confidence. Every price is verified against live market data.</p>
       </div>
 
-      {activeTab !== 'browse' && <DealFinder view={activeTab} />}
-
-      {activeTab === 'browse' && <>
       {/* Scout — AI Card Search (collapsed behind a toggle on mobile) */}
       <div className={`scout-wrap ${scoutOpen ? 'open' : ''}`} style={{ marginBottom: 24 }}>
         <button className="scout-toggle" onClick={() => setScoutOpen(o => !o)}>
@@ -537,7 +485,6 @@ export default function MarketplacePage() {
           )}
         </div>
       </div>
-      </>}
 
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
     </>

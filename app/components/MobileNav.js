@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation';
 
 // Supply side first-class: Sell + Trades earn bottom-nav slots; Analytics
 // (Price Guide) and Stores live in the header hamburger + footer instead.
+// Deal Finder earns the sixth slot (it is the future Pro surface); Community
+// stays reachable via the header nav, hamburger menu, and footer.
 const TABS = [
   { href: '/market', label: 'Market', icon: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -20,10 +22,8 @@ const TABS = [
   { href: '/portfolio', label: 'Collection', icon: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
   )},
-  // Deals now live as a tab inside /market (Market tab) — no separate bottom-nav
-  // slot so the bar doesn't carry two entries pointing at the same page.
-  { href: '/community', label: 'Social', icon: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+  { href: '/deal-finder', label: 'Deals', icon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
   )},
 ];
 

@@ -4,8 +4,8 @@
     { "src": "package.json", "use": "@vercel/next" }
   ],
   "routes": [
-    { "src": "/arbitrage", "status": 308, "headers": { "Location": "/market?tab=deals" } },
-    { "src": "/arbitrage/(.*)", "status": 308, "headers": { "Location": "/market?tab=deals" } },
+    { "src": "/arbitrage", "status": 308, "headers": { "Location": "/deal-finder" } },
+    { "src": "/arbitrage/(.*)", "status": 308, "headers": { "Location": "/deal-finder" } },
     { "src": "/api/(.*)", "dest": "/api/index.js" }
   ],
   "headers": [

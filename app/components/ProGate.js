@@ -7,12 +7,14 @@
 // user has every capability free — visitors get a frosted teaser + sign-in CTA.
 // No billing exists yet; do NOT wire prices here.
 // Capability → required plan. Every capability is 'free' today (any account
-// unlocks it); flipping analytics/arbitrage/community to a paid Pro tier later
-// is a one-line config change here (set to 'pro').
+// unlocks it); flipping a capability to a paid Pro tier later is a one-line
+// config change here (set to 'pro').
 const CAPABILITY_PLAN = {
   market_insight: 'free',
   analytics: 'free',   // /analytics + /heatmap (movers/heatmap/arb tab)
-  arbitrage: 'free',   // /arbitrage terminal
+  // PAYWALL FLIP: change 'free' to 'pro' on the next line to put the entire
+  // /deal-finder page (Deals + Worth Grading) behind the paid Pro tier.
+  dealfinder: 'free',  // /deal-finder (Deal Finder + Worth Grading)
   community: 'free',   // /community directory + feed
 };
 

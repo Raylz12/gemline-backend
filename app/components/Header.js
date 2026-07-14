@@ -111,12 +111,13 @@ function NotificationBell() {
 }
 
 // Display-layer nav: Sell + Trades promoted to top level (supply funnel);
-// Portfolio reads as "Collection" (route unchanged). Pricing has ONE front
-// door: Market — the Price Guide feed (Browse), Deal Finder (Deals), and
-// Worth Grading all live as tabs inside /market. No duplicate pricing tabs.
-// `low: true` items hide first on narrow desktop widths (see globals.css).
+// Portfolio reads as "Collection" (route unchanged). Two pricing doors:
+// Market is the public Price Guide browse feed, Deal Finder is the dedicated
+// pro tools page at /deal-finder (Deals + Worth Grading, the future paywall
+// surface). `low: true` items hide first on narrow desktop widths (globals.css).
 const NAV_ITEMS = [
   { href: '/market', label: 'Market', key: 'market', public: true },
+  { href: '/deal-finder', label: 'Deal Finder', key: 'dealfinder', public: true },
   { href: '/live', label: 'Live', key: 'live', public: true },
   { href: '/sell', label: 'Sell', key: 'sell', public: true },
   { href: '/trades', label: 'Trades', key: 'trades', public: true },
@@ -348,7 +349,7 @@ export default function Header() {
 
         {menuOpen && (
           <div style={{ padding: '8px 22px 14px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[...NAV_ITEMS, { href: '/market?tab=deals', label: 'Deal Finder', key: 'deals' }, { href: '/stores', label: 'Stores', key: 'stores' }].map(item => (
+            {[...NAV_ITEMS, { href: '/stores', label: 'Stores', key: 'stores' }].map(item => (
               <Link key={item.key} href={item.href} onClick={e => { handleNavClick(e, item); setMenuOpen(false); }}
                 className={`navbtn ${pathname === item.href ? 'on' : ''}`} style={{ fontSize: 13, padding: '8px 14px' }}>
                 {item.label}

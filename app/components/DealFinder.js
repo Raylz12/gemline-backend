@@ -1,9 +1,9 @@
 'use client';
-// Deal Finder — the arb desk (buy-low / fair-value net-edge board) plus the
-// "Worth Grading?" ROI calculator. Extracted from the retired standalone
-// /arbitrage page so it can live as tabs inside the unified /market surface.
-// Gated by ProGate capability 'arbitrage' (free WITH an account) — logged-out
-// visitors get the frosted teaser + sign-up CTA. `view` picks the sub-surface:
+// Deal Finder — the buy-low / fair-value net-edge deal board plus the
+// "Worth Grading?" ROI calculator. Lives on the dedicated /deal-finder page
+// (the future paywall surface). Gated by ProGate capability 'dealfinder'
+// (free WITH an account today) — logged-out visitors get the frosted teaser
+// + sign-up CTA. `view` picks the sub-surface:
 //   'deals'   → net-edge deal board (default)
 //   'grading' → Worth Grading? calculator
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -414,7 +414,7 @@ function SpreadMatrix({ cards, onSelect }) {
   );
 }
 
-// ─── Deal Finder (tabbed content inside /market) ──────────────────────────────
+// ─── Deal Finder (tabbed content on /deal-finder) ────────────────────────────
 export default function DealFinder({ view = 'deals' }) {
   const { user, token } = useAuth();
   const [cards, setCards] = useState([]);
@@ -567,7 +567,7 @@ export default function DealFinder({ view = 'deals' }) {
     <div style={{ background: '#080b12', minHeight: '60vh', padding: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.06)' }}>
       <ProGate
         page
-        allowed={hasCapability(user || (token ? {} : null), 'arbitrage')}
+        allowed={hasCapability(user || (token ? {} : null), 'dealfinder')}
         title="Create a free account to unlock the Deal Finder"
         sub="Cards priced below fair value, fees already counted, plus movers and full-market search, free with a GEMLINE account."
         cta="Create a free account"

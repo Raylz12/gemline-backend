@@ -53,12 +53,13 @@ const nextConfig = {
     return [];
   },
 
-  // Deal Finder merged into the unified /market surface. Old standalone route
-  // permanently redirects to the Deals tab so shared links never 404.
+  // Deal Finder lives on its own dedicated /deal-finder page. The retired
+  // /arbitrage route permanently redirects there so shared links never 404
+  // (legacy /market?tab=deals|grading links forward client-side in /market).
   async redirects() {
     return [
-      { source: '/arbitrage', destination: '/market?tab=deals', permanent: true },
-      { source: '/arbitrage/:path*', destination: '/market?tab=deals', permanent: true },
+      { source: '/arbitrage', destination: '/deal-finder', permanent: true },
+      { source: '/arbitrage/:path*', destination: '/deal-finder', permanent: true },
     ];
   },
 };
