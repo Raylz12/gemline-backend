@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GEMLINE for Collectors</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: letter; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 8.5in; height: 11in; }
+  body {
+    font-family: 'Rubik', sans-serif;
+    background: #07080d;
+    color: #eef0f4;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    display: flex; flex-direction: column;
+    padding: 0.55in 0.6in 0.45in;
+    position: relative; overflow: hidden;
+  }
+  .glow { position:absolute; width:560px; height:560px; border-radius:50%; filter:blur(90px); opacity:.18; pointer-events:none; }
+  .glow.g1 { background:#16c784; top:-200px; left:-140px; }
+  .glow.g2 { background:#7c5cff; bottom:-240px; right:-160px; opacity:.14; }
+  .glow.g3 { background:#e8b64c; top:40%; right:-220px; opacity:.10; }
+  .brand-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .logo { width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,#16c784,#0e9c66); display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque'; font-weight:800; font-size:26px; color:#04130c; }
+  .wordmark { font-family:'Bricolage Grotesque'; font-weight:800; font-size:26px; letter-spacing:.04em; }
+  .wordmark span { color:#16c784; }
+  .tagline { font-family:'IBM Plex Mono'; font-size:9.5px; letter-spacing:.22em; color:#9aa3b2; margin-top:2px; }
+  .audience { font-family:'IBM Plex Mono'; font-size:10px; letter-spacing:.18em; color:#16c784; border:1px solid rgba(22,199,132,.45); border-radius:999px; padding:7px 16px; }
+  h1 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:37px; line-height:1.07; margin-bottom:10px; }
+  h1 .accent { color:#16c784; }
+  .lede { font-size:14.5px; line-height:1.55; color:#c3c9d4; max-width:6.5in; margin-bottom:22px; }
+  .lede b { color:#eef0f4; }
+  .benefits { display:grid; grid-template-columns:1fr 1fr; gap:13px; margin-bottom:20px; }
+  .benefit { background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09); border-radius:14px; padding:14px 17px; }
+  .benefit .ic { width:30px; height:30px; border-radius:9px; background:rgba(22,199,132,.13); border:1px solid rgba(22,199,132,.3); display:flex; align-items:center; justify-content:center; color:#16c784; margin-bottom:8px; }
+  .benefit h3 { font-family:'Bricolage Grotesque'; font-weight:700; font-size:15.5px; margin-bottom:5px; }
+  .benefit p { font-size:12px; line-height:1.5; color:#b6bdc9; }
+  .quote { border-left:3px solid #16c784; padding:4px 0 4px 16px; margin-bottom:20px; font-size:14px; line-height:1.5; color:#dfe3ea; font-style:italic; }
+  .quote .who { display:block; font-style:normal; font-family:'IBM Plex Mono'; font-size:10px; color:#9aa3b2; letter-spacing:.1em; margin-top:5px; }
+  .cta { background:linear-gradient(135deg, rgba(22,199,132,.16), rgba(124,92,255,.10)); border:1px solid rgba(22,199,132,.4); border-radius:16px; padding:17px 22px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
+  .cta h2 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:20px; margin-bottom:4px; }
+  .cta p { font-size:12.5px; color:#c3c9d4; line-height:1.45; }
+  .cta .url { font-family:'IBM Plex Mono'; font-weight:700; font-size:15px; color:#04130c; background:#16c784; border-radius:10px; padding:12px 20px; white-space:nowrap; }
+  .foot { margin-top:auto; padding-top:13px; display:flex; justify-content:space-between; font-size:9.5px; color:#6d7686; font-family:'IBM Plex Mono'; letter-spacing:.05em; }
+</style>
+</head>
+<body>
+  <div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+
+  <div class="brand-row">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div>
+        <div class="wordmark">GEM<span>LINE</span></div>
+        <div class="tagline">THE CARD SHOW, ONLINE</div>
+      </div>
+    </div>
+    <div class="audience">FOR COLLECTORS</div>
+  </div>
+
+  <h1>Ever wonder what your<br>cards are <span class="accent">actually worth?</span></h1>
+
+  <p class="lede">That shoebox under your bed. The binder from your grandpa. The rookie you pulled last weekend. Every one of them has a real price, and GEMLINE shows it to you <b>free</b>. Then it helps you do something about it: collect smarter, trade fair, and never get lowballed again.</p>
+
+  <div class="benefits">
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg></div><h3>Look up any card, free</h3><p>Type a player, snap a search, done. Over a million cards priced against live market data, updated three times a day. Raw or graded, every grade.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div><h3>Watch your collection grow</h3><p>Add your cards and see what the whole stack is worth, which ones are heating up, and how your PC has changed over time. It's your collection, scored like the pros.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg></div><h3>Trade without getting fleeced</h3><p>Card-for-card trades with a built-in fair-value meter, so you know if a deal is even before you shake on it. No more "trust me bro" trades.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6z"/><path d="M2 9h20M12 3l-4 6 4 12 4-12-4-6"/></svg></div><h3>Find the deals first</h3><p>The Deal Finder spots cards selling below their going rate and tells you in plain English what you'd save. Bargain hunting, minus the homework.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 5h1M17 6h3a2 2 0 0 1-2 5h-1"/></svg></div><h3>Know when grading is worth it</h3><p>Thinking about slabbing a card? The Worth Grading tool does the math: grading fee vs. what a PSA 10 or 9 would sell for. Answer in one glance.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Buy and sell, safely</h3><p>Every sale is protected: money is held until the card shows up as promised. Great for first-timers, parents, and anyone tired of sketchy meetups.</p></div>
+  </div>
+
+  <div class="quote">
+    "It feels like walking a card show floor. You check prices, hunt deals, make trades, and show off your pulls. Except the show never closes."
+    <span class="who">BY COLLECTORS, FOR COLLECTORS</span>
+  </div>
+
+  <div class="cta">
+    <div>
+      <h2>Free account. 30 seconds. No credit card.</h2>
+      <p>Start with the Price Guide, add your first ten cards, and see your collection like never before.</p>
+    </div>
+    <div class="url">gemlinecards.com</div>
+  </div>
+
+  <div class="foot">
+    <span>GEMLINE | THE CARD SHOW, ONLINE</span>
+    <span>PRICES POWERED BY CARD HEDGE</span>
+  </div>
+</body>
+</html>

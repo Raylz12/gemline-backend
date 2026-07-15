@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GEMLINE for Card Shops</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: letter; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 8.5in; height: 10.98in; overflow: hidden; }
+  body {
+    font-family: 'Rubik', sans-serif;
+    background: #07080d;
+    color: #eef0f4;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    display: flex; flex-direction: column;
+    padding: 0.45in 0.6in 0.4in;
+    position: relative; overflow: hidden;
+  }
+  .glow { position:absolute; width:520px; height:520px; border-radius:50%; filter:blur(90px); opacity:.16; pointer-events:none; }
+  .glow.g1 { background:#16c784; top:-180px; right:-140px; }
+  .glow.g2 { background:#e8b64c; bottom:-220px; left:-160px; opacity:.10; }
+  .brand-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .logo { width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,#16c784,#0e9c66); display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque'; font-weight:800; font-size:26px; color:#04130c; }
+  .wordmark { font-family:'Bricolage Grotesque'; font-weight:800; font-size:26px; letter-spacing:.04em; }
+  .wordmark span { color:#16c784; }
+  .tagline { font-family:'IBM Plex Mono'; font-size:9.5px; letter-spacing:.22em; color:#9aa3b2; margin-top:2px; }
+  .audience { font-family:'IBM Plex Mono'; font-size:10px; letter-spacing:.18em; color:#e8b64c; border:1px solid rgba(232,182,76,.45); border-radius:999px; padding:7px 16px; }
+  h1 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:35px; line-height:1.08; margin-bottom:10px; }
+  h1 .accent { color:#16c784; }
+  .lede { font-size:13.5px; line-height:1.5; color:#c3c9d4; max-width:6.6in; margin-bottom:18px; }
+  .lede b { color:#eef0f4; }
+  .benefits { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-bottom:18px; }
+  .benefit { background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09); border-radius:14px; padding:13px 16px; }
+  .benefit .ic { width:30px; height:30px; border-radius:9px; background:rgba(22,199,132,.13); border:1px solid rgba(22,199,132,.3); display:flex; align-items:center; justify-content:center; color:#16c784; margin-bottom:8px; }
+  .benefit h3 { font-family:'Bricolage Grotesque'; font-weight:700; font-size:15.5px; margin-bottom:5px; }
+  .benefit p { font-size:12px; line-height:1.5; color:#b6bdc9; }
+  .strip { display:flex; gap:12px; margin-bottom:18px; }
+  .stat { flex:1; text-align:center; background:rgba(22,199,132,.08); border:1px solid rgba(22,199,132,.28); border-radius:12px; padding:12px 8px; }
+  .stat .n { font-family:'IBM Plex Mono'; font-weight:700; font-size:19px; color:#16c784; }
+  .stat .l { font-size:10px; color:#9aa3b2; letter-spacing:.06em; text-transform:uppercase; margin-top:3px; }
+  .cta { background:linear-gradient(135deg, rgba(22,199,132,.16), rgba(232,182,76,.10)); border:1px solid rgba(22,199,132,.4); border-radius:16px; padding:15px 22px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
+  .cta h2 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:20px; margin-bottom:4px; }
+  .cta p { font-size:12.5px; color:#c3c9d4; line-height:1.45; }
+  .cta .url { font-family:'IBM Plex Mono'; font-weight:700; font-size:15px; color:#04130c; background:#16c784; border-radius:10px; padding:12px 20px; white-space:nowrap; }
+  .foot { margin-top:auto; padding-top:14px; display:flex; justify-content:space-between; font-size:9.5px; color:#6d7686; font-family:'IBM Plex Mono'; letter-spacing:.05em; }
+</style>
+</head>
+<body>
+  <div class="glow g1"></div><div class="glow g2"></div>
+
+  <div class="brand-row">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div>
+        <div class="wordmark">GEM<span>LINE</span></div>
+        <div class="tagline">THE CARD SHOW, ONLINE</div>
+      </div>
+    </div>
+    <div class="audience">FOR CARD SHOPS &amp; DEALERS</div>
+  </div>
+
+  <h1>Your showcase is great.<br>Now put it in <span class="accent">every collector's pocket.</span></h1>
+
+  <p class="lede">You already do the hard part: sourcing cards, grading eyes, real relationships. GEMLINE gives your shop a second front door that never closes, so the collector three states away can buy from you as easily as the regular who stops in every Saturday. <b>No monthly fee. No listing fees. You only pay when you sell.</b></p>
+
+  <div class="benefits">
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></svg></div><h3>Your own storefront page</h3><p>A branded shop page with your inventory, your story, and real customer reviews. Collectors follow shops they trust, and they come back.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z"/></svg></div><h3>Customers beyond your zip code</h3><p>Your best cards deserve more eyeballs than foot traffic allows. List once and reach collectors across the country, 24/7.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5c0-1.1-1.3-2-3-2s-3 .9-3 2 1 1.8 3 2.2 3 1.1 3 2.3-1.3 2-3 2-3-.9-3-2"/></svg></div><h3>Keep more of every sale</h3><p>One flat 10% when a card sells. No insertion fees, no store subscription, no ad upsells. Payouts are Stripe-secured and land after the buyer confirms.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><h3>Escrow that protects you too</h3><p>Money is held safely until delivery is confirmed. No chargeback roulette, no "item not received" games. Sellers get real protection here.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/></svg></div><h3>A live Price Guide behind the counter</h3><p>Over a million cards priced against live market data, every grade. Price trades and buy collections with confidence, right from your phone.</p></div>
+    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg></div><h3>Live auctions &amp; real trades</h3><p>Run auctions on your hits, take trade offers with a built-in fair-value meter. It's the energy of a show table, online.</p></div>
+  </div>
+
+  <div class="strip">
+    <div class="stat"><div class="n">1M+</div><div class="l">Cards priced live</div></div>
+    <div class="stat"><div class="n">10%</div><div class="l">Flat fee, sale only</div></div>
+    <div class="stat"><div class="n">$0</div><div class="l">Monthly cost</div></div>
+    <div class="stat"><div class="n">3x</div><div class="l">Daily price updates</div></div>
+  </div>
+
+  <div class="cta">
+    <div>
+      <h2>Set up your shop this week</h2>
+      <p>Create your free account, claim your storefront, and list your first showcase in an afternoon. By collectors, for collectors.</p>
+    </div>
+    <div class="url">gemlinecards.com</div>
+  </div>
+
+  <div class="foot">
+    <span>GEMLINE | THE CARD SHOW, ONLINE</span>
+    <span>PRICES POWERED BY CARD HEDGE</span>
+  </div>
+</body>
+</html>
