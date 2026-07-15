@@ -1,11 +1,13 @@
 'use client';
 // Deal Finder — the buy-low / fair-value net-edge deal board plus the
-// "Worth Grading?" ROI calculator. Lives on the dedicated /deal-finder page
-// (the future paywall surface). Gated by ProGate capability 'dealfinder'
-// (free WITH an account today) — logged-out visitors get the frosted teaser
-// + sign-up CTA. `view` picks the sub-surface:
+// "Worth Grading?" ROI calculator, Live Deals (eBay cross-ref), deal alerts,
+// and the track record. THE paid surface: gated by ProGate capability
+// 'dealfinder' = GEMLINE Pro. The server enforces it too (/api/market/arb
+// 402s for non-Pro) — the blurred teaser renders DEMO data only, so no real
+// deal data ever reaches non-Pro browsers. `view` picks the sub-surface:
 //   'deals'   → net-edge deal board (default)
 //   'grading' → Worth Grading? calculator
+//   'track'   → Our Track Record (flagged deals vs what happened next)
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import CardDetail from './CardDetail';
@@ -13,6 +15,7 @@ import CardThumb from './CardThumb';
 import AuthModal from './AuthModal';
 import ProGate, { hasCapability } from './ProGate';
 import WorthGrading from './WorthGrading';
+import TrackRecord from './TrackRecord';
 
 // Tokenized play matcher — every search word must hit player/set/variant/year/grade.
 const matchesArbQuery = (c, q) => {
@@ -24,6 +27,62 @@ const matchesArbQuery = (c, q) => {
 // Buy at the low ask, exit at Card Hedge high (FMV) net of the 7.5% marketplace
 // fee — the same net-edge model the price guide arb tab uses.
 const MARKETPLACE_FEE = 0.075;  // standard seller fee (first-5-sales intro rate is 5%)
+
+// ── Budget presets — filter every panel by the buy-at price, persisted ──────
+const BUDGETS = [
+  { key: 'all',   label: 'All budgets',  min: 0,   max: Infinity },
+  { key: 'u100',  label: 'Under $100',   min: 0,   max: 100 },
+  { key: 'b300',  label: '$100–300',     min: 100, max: 300 },
+  { key: 'b750',  label: '$300–750',     min: 300, max: 750 },
+  { key: 'b1500', label: '$750–1,500',   min: 750, max: 1500 },
+];
+const BUDGET_LS_KEY = 'gemline_deal_budget';
+
+// ── GEMLINE Score chip — server-computed 0–100 deal quality ─────────────────
+function ScoreChip({ score, big = false }) {
+  const s = Number(score) || 0;
+  const band = s >= 90
+    ? { c: '#34D88A', bg: 'rgba(52,216,138,.14)', bd: 'rgba(52,216,138,.45)' }
+    : s >= 70
+    ? { c: '#E8B339', bg: 'rgba(232,179,57,.13)', bd: 'rgba(232,179,57,.45)' }
+    : { c: 'rgba(255,255,255,.65)', bg: 'rgba(255,255,255,.07)', bd: 'rgba(255,255,255,.16)' };
+  return (
+    <span title="GEMLINE Score: net edge after fees, liquidity, trend stability, and spread confidence in one 0–100 number" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontFamily: 'var(--mono)', fontWeight: 800,
+      fontSize: big ? 13 : 11, padding: big ? '3px 9px' : '1px 7px',
+      borderRadius: 999, color: band.c, background: band.bg, border: `1px solid ${band.bd}`,
+      whiteSpace: 'nowrap',
+    }}>
+      ◈ {s}
+    </span>
+  );
+}
+
+// ── Demo data for the paywall teaser — fabricated, deterministic, clearly not
+// live. The blurred background behind the Pro pitch renders THIS, never real
+// deal data (the API 402s for non-Pro anyway). ───────────────────────────
+const DEMO_NAMES = [
+  'V. Wembanyama', 'C. Bednard', 'S. Ohtami', 'P. Mahomas', 'L. Doncevic', 'J. Buroow',
+  'A. Judgge', 'C. Strouud', 'K. Duraant', 'C. Williams', 'J. Chaase', 'B. Wagnner',
+  'T. Lawrance', 'E. Rodrigez', 'M. Betz', 'D. Prescot', 'A. Richardsen', 'J. Jefferzon',
+];
+function demoCards() {
+  return DEMO_NAMES.map((player, i) => {
+    const lo = 60 + ((i * 97) % 900);
+    const hi = lo * (1.18 + ((i * 13) % 20) / 100);
+    return {
+      id: `demo-${i}`, player, sport: 'Basketball', set: '2025 Sample Set Chrome',
+      grader: 'PSA', grade: '10', year: '2025', variant: null,
+      market: +(lo * 1.08).toFixed(0), lo, hi: +hi.toFixed(0),
+      confidence: null, thumbnail: null, rookie: i % 4 === 0,
+      sales7d: 4 + (i % 9), sales30d: 20 + ((i * 31) % 300),
+      gain7d: ((i * 17) % 25) - 8, score: 55 + ((i * 11) % 45),
+      cardhedge_id: null, theme: ['#1a1d28', '#252838'],
+      ini: player.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+    };
+  });
+}
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtP = (n) => {
@@ -190,7 +249,7 @@ function Panel({ id, title, badge, badgeColor, right, help, children, style = {}
 
 // ─── Today's Top Deals — the simple layer. Big friendly cards a 10-year-old
 // can read: what it is, what it costs, and what you save. Tap to open. ──────
-function TopDeals({ deals, onSelect }) {
+function TopDeals({ deals, onSelect, onAlert }) {
   if (!deals.length) return null;
   return (
     <div id="df-top" style={{ padding: '18px 12px 6px', scrollMarginTop: 116 }}>
@@ -217,9 +276,12 @@ function TopDeals({ deals, onSelect }) {
             }}>
               <CardThumb src={c.thumbnail} name={c.player} sport={c.sport} width={58} height={80} radius={6} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontFamily: 'var(--ui)', fontSize: 15, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {c.player}
-                  {c.rookie ? <span style={{ fontSize: 10, background: '#E8B339', color: '#000', borderRadius: 3, padding: '1px 5px', marginLeft: 6, fontWeight: 800, verticalAlign: 'middle' }}>RC</span> : null}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontFamily: 'var(--ui)', fontSize: 15, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
+                    {c.player}
+                    {c.rookie ? <span style={{ fontSize: 10, background: '#E8B339', color: '#000', borderRadius: 3, padding: '1px 5px', marginLeft: 6, fontWeight: 800, verticalAlign: 'middle' }}>RC</span> : null}
+                  </div>
+                  <ScoreChip score={c.score} big />
                 </div>
                 <div style={{ fontFamily: 'var(--ui)', fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {`${c.grader || 'Raw'} ${c.grade || ''}`.trim()} · {c.set?.slice(0, 30)}
@@ -227,9 +289,20 @@ function TopDeals({ deals, onSelect }) {
                 <div style={{ fontFamily: 'var(--ui)', fontSize: 13, color: 'rgba(255,255,255,.75)', marginTop: 8, lineHeight: 1.45 }}>
                   Buy at <b style={{ color: '#34D88A', fontFamily: 'var(--mono)' }}>{fmtP(c.lo)}</b>, usually sells for <b style={{ fontFamily: 'var(--mono)' }}>{fmtP(c.hi)}</b>{up ? <>, and it's up <b style={{ color: '#34D88A' }}>{c.gain7d.toFixed(0)}%</b> this week</> : null}
                 </div>
-                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,216,138,.12)', border: '1px solid rgba(52,216,138,.3)', borderRadius: 999, padding: '3px 10px' }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: '#34D88A' }}>You keep {fmtP(c.netEdge)}</span>
-                  <span style={{ fontFamily: 'var(--ui)', fontSize: 11, color: 'rgba(255,255,255,.5)' }}>after fees</span>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,216,138,.12)', border: '1px solid rgba(52,216,138,.3)', borderRadius: 999, padding: '3px 10px' }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: '#34D88A' }}>You keep {fmtP(c.netEdge)}</span>
+                    <span style={{ fontFamily: 'var(--ui)', fontSize: 11, color: 'rgba(255,255,255,.5)' }}>after fees</span>
+                  </span>
+                  {onAlert && (
+                    <button
+                      title="Alert me about deals like this"
+                      onClick={(e) => { e.stopPropagation(); onAlert(c); }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, padding: '3px 10px', cursor: 'pointer', color: 'rgba(255,255,255,.65)', fontFamily: 'var(--ui)', fontSize: 11.5, fontWeight: 600 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                      Alert me
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -243,6 +316,7 @@ function TopDeals({ deals, onSelect }) {
 // ─── Jump chips — obvious in-page navigation, sticky under the site header ──
 const JUMPS = [
   ['df-top', 'Top Deals'],
+  ['df-live', 'Live Deals'],
   ['df-movers', 'Movers'],
   ['df-volume', 'Most Traded'],
   ['df-heat', 'Heatmap'],
@@ -268,6 +342,185 @@ function JumpChips() {
             color: 'rgba(255,255,255,.75)', cursor: 'pointer', transition: '.15s',
           }}>{label}</button>
       ))}
+    </div>
+  );
+}
+
+// ─── Budget filter — "What's your budget?" chips, persisted, filters ALL panels
+function BudgetBar({ budgetKey, onPick }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 0', flexWrap: 'wrap' }}>
+      <span style={{ fontFamily: 'var(--ui)', fontSize: 13.5, fontWeight: 700, color: 'rgba(255,255,255,.75)' }}>What&apos;s your budget?</span>
+      {BUDGETS.map(b => {
+        const active = b.key === budgetKey;
+        return (
+          <button key={b.key} onClick={() => onPick(b.key)} style={{
+            padding: '6px 14px', borderRadius: 999,
+            fontFamily: 'var(--ui)', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: '.15s',
+            background: active ? '#E8B339' : 'rgba(255,255,255,.06)',
+            border: active ? '1px solid #E8B339' : '1px solid rgba(255,255,255,.1)',
+            color: active ? '#000' : 'rgba(255,255,255,.75)',
+          }}>{b.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Live Deals — underpriced ACTIVE listings (GEMLINE first, then eBay) ─────
+function LiveDeals({ deals, loaded, budget }) {
+  const filtered = budget && budget.key !== 'all'
+    ? deals.filter(d => (d.total || 0) >= budget.min && (d.total || 0) <= budget.max)
+    : deals;
+  return (
+    <div id="df-live" style={{ padding: '18px 12px 6px', scrollMarginTop: 116 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ fontFamily: 'var(--disp)', fontSize: 24, fontWeight: 800, color: 'var(--txt)' }}>Live Deals</h2>
+        <span style={{ fontFamily: 'var(--ui)', fontSize: 13.5, color: 'rgba(255,255,255,.55)' }}>
+          Real listings you can buy right now — on GEMLINE and eBay — priced below the going rate. Checked against live eBay inventory every ~45 minutes.
+        </span>
+      </div>
+      {!loaded ? (
+        <div style={{ padding: '18px 4px', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>SCANNING LIVE LISTINGS…</div>
+      ) : !filtered.length ? (
+        <div style={{ padding: '18px 4px', fontFamily: 'var(--ui)', fontSize: 13.5, color: 'rgba(255,255,255,.5)' }}>
+          No live listings beat the market{budget && budget.key !== 'all' ? ' in this budget' : ''} right now. This panel refreshes all day — the good ones go fast.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 12, marginTop: 14 }}>
+          {filtered.slice(0, 12).map((d, i) => {
+            const isGem = d.source === 'gemline';
+            return (
+              <div key={i} style={{
+                background: 'linear-gradient(160deg, #11161f, #0c1018)',
+                border: isGem ? '1px solid rgba(232,179,57,.35)' : '1px solid rgba(91,141,239,.3)',
+                borderRadius: 12, padding: 14, display: 'flex', gap: 12,
+              }}>
+                <CardThumb src={d.image} name={d.player} sport={d.sport} width={58} height={80} radius={6} />
+                <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      fontFamily: 'var(--mono)', fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em',
+                      padding: '1px 6px', borderRadius: 4,
+                      background: isGem ? 'rgba(232,179,57,.15)' : 'rgba(91,141,239,.15)',
+                      color: isGem ? '#E8B339' : '#5B8DEF',
+                      border: isGem ? '1px solid rgba(232,179,57,.4)' : '1px solid rgba(91,141,239,.4)',
+                    }}>{isGem ? 'ON GEMLINE' : 'ON EBAY'}</span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--ui)', fontSize: 13.5, fontWeight: 700, color: 'var(--txt)', marginTop: 6, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {d.title}
+                  </div>
+                  <div style={{ fontFamily: 'var(--ui)', fontSize: 12.5, color: 'rgba(255,255,255,.7)', marginTop: 6 }}>
+                    Listed at <b style={{ color: '#34D88A', fontFamily: 'var(--mono)' }}>{fmtP(d.total)}</b>{d.shipping > 0 ? <span style={{ color: 'rgba(255,255,255,.45)', fontSize: 11 }}> (incl. ship)</span> : null} · going rate <b style={{ fontFamily: 'var(--mono)' }}>{fmtP(d.goingRate)}</b>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto', paddingTop: 8 }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: '#34D88A' }}>
+                      +{fmtP(d.margin)} <span style={{ fontWeight: 400, color: 'rgba(255,255,255,.5)', fontSize: 10.5, fontFamily: 'var(--ui)' }}>flip margin after fees</span>
+                    </span>
+                    <a href={d.url} target={isGem ? '_self' : '_blank'} rel="noopener noreferrer"
+                      style={{
+                        flexShrink: 0, padding: '6px 16px', borderRadius: 7, textDecoration: 'none',
+                        fontFamily: 'var(--ui)', fontSize: 13, fontWeight: 800,
+                        background: isGem ? '#E8B339' : '#5B8DEF', color: isGem ? '#000' : '#fff',
+                      }}>BUY →</a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── My Alerts — manage deal alert subscriptions ────────────────────────────
+function AlertsPanel({ alerts, open, onToggleOpen, onCreate, onDelete, onToggle, msg }) {
+  const [name, setName] = useState('');
+  const [budgetKey, setBudgetKey] = useState('all');
+  const [minScore, setMinScore] = useState(0);
+  const [playerQuery, setPlayerQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    const b = BUDGETS.find(x => x.key === budgetKey) || BUDGETS[0];
+    const ok = await onCreate({
+      name: name.trim(),
+      playerQuery: playerQuery.trim() || null,
+      budgetMin: b.min > 0 ? b.min : null,
+      budgetMax: Number.isFinite(b.max) ? b.max : null,
+      minScore: Number(minScore) || 0,
+    });
+    if (ok) { setName(''); setPlayerQuery(''); }
+    setSaving(false);
+  };
+
+  const inp = { padding: '8px 10px', borderRadius: 6, fontSize: 13, background: 'rgba(255,255,255,.05)', color: 'var(--txt,#eef1f6)', border: '1px solid rgba(255,255,255,.12)' };
+  return (
+    <div style={{ margin: '12px 12px 0', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, background: '#0d1117', overflow: 'hidden' }}>
+      <button onClick={onToggleOpen} style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', background: 'rgba(255,255,255,.03)', border: 'none', cursor: 'pointer',
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.6)', textTransform: 'uppercase', fontWeight: 600 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E8B339" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          My Deal Alerts
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,.06)', color: 'var(--muted)' }}>{alerts.length}</span>
+        </span>
+        <span style={{ color: 'var(--dim)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {msg && <div style={{ padding: '8px 14px', fontFamily: 'var(--ui)', fontSize: 12.5, color: '#34D88A', borderTop: '1px solid rgba(255,255,255,.05)' }}>{msg}</div>}
+      {open && (
+        <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,.06)' }}>
+          <div style={{ fontFamily: 'var(--ui)', fontSize: 12.5, color: 'rgba(255,255,255,.55)', marginBottom: 10 }}>
+            We check every price sync (3× a day) and email you when new deals match — at most one email per alert per day.
+          </div>
+          <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input style={{ ...inp, flex: '1 1 150px' }} placeholder="Alert name (e.g. Cheap PSA 10s)" value={name} onChange={e => setName(e.target.value)} maxLength={60} />
+            <input style={{ ...inp, flex: '1 1 150px' }} placeholder="Player / set (optional)" value={playerQuery} onChange={e => setPlayerQuery(e.target.value)} maxLength={80} />
+            <select style={inp} value={budgetKey} onChange={e => setBudgetKey(e.target.value)}>
+              {BUDGETS.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
+            </select>
+            <select style={inp} value={minScore} onChange={e => setMinScore(e.target.value)}>
+              <option value="0">Any score</option>
+              <option value="70">Score 70+</option>
+              <option value="90">Score 90+</option>
+            </select>
+            <button type="submit" disabled={saving || !name.trim()} style={{
+              padding: '8px 18px', borderRadius: 6, fontFamily: 'var(--ui)', fontSize: 13, fontWeight: 800,
+              background: '#E8B339', color: '#000', border: 'none', cursor: 'pointer', opacity: saving || !name.trim() ? .5 : 1,
+            }}>{saving ? 'Saving…' : '+ Create alert'}</button>
+          </form>
+          <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
+            {alerts.length === 0 && (
+              <div style={{ fontFamily: 'var(--ui)', fontSize: 13, color: 'rgba(255,255,255,.45)' }}>No alerts yet — create one above, or tap “Alert me” on any top deal.</div>
+            )}
+            {alerts.map(a => (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 6, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <div style={{ fontFamily: 'var(--ui)', fontSize: 13.5, fontWeight: 700, color: a.active ? 'var(--txt)' : 'rgba(255,255,255,.4)' }}>{a.name}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)', marginTop: 2 }}>
+                    {a.playerQuery ? `“${a.playerQuery}” · ` : ''}
+                    {a.budgetMin || a.budgetMax ? `$${a.budgetMin || 0}–${a.budgetMax ? '$' + a.budgetMax : '∞'} · ` : 'any budget · '}
+                    {a.minScore ? `score ${a.minScore}+ · ` : ''}
+                    {a.lastSentAt ? `last sent ${new Date(a.lastSentAt).toLocaleDateString()}` : 'nothing sent yet'}
+                  </div>
+                </div>
+                <button onClick={() => onToggle(a.id, !a.active)} style={{
+                  padding: '4px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--ui)',
+                  background: a.active ? 'rgba(52,216,138,.13)' : 'rgba(255,255,255,.06)',
+                  border: a.active ? '1px solid rgba(52,216,138,.4)' : '1px solid rgba(255,255,255,.12)',
+                  color: a.active ? '#34D88A' : 'rgba(255,255,255,.5)',
+                }}>{a.active ? 'Active' : 'Paused'}</button>
+                <button onClick={() => onDelete(a.id)} title="Delete alert" style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer', background: 'transparent', border: '1px solid rgba(255,92,108,.35)', color: '#FF5C6C', fontFamily: 'var(--ui)', fontWeight: 700 }}>×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -348,7 +601,7 @@ function VolumeBars({ cards }) {
 
 // ─── Spread matrix (main table) ───────────────────────────────────────────────
 function SpreadMatrix({ cards, onSelect }) {
-  const [sortCol, setSortCol] = useState('netEdge');
+  const [sortCol, setSortCol] = useState('score');
   const [sortDir, setSortDir] = useState('desc');
   const [hover, setHover] = useState(null);
 
@@ -384,6 +637,7 @@ function SpreadMatrix({ cards, onSelect }) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Sort</span>
         <select value={sortCol} onChange={e => { const col = e.target.value; setSortCol(col); setSortDir(col === 'lo' ? 'asc' : 'desc'); }}
           style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12, background: 'rgba(255,255,255,.05)', color: 'var(--txt,#eef1f6)', border: '1px solid rgba(255,255,255,.1)' }}>
+          <option value="score">GEMLINE Score</option>
           <option value="netEdge">Best deal $</option>
           <option value="netPct">Best deal %</option>
           <option value="lo">Buy price (low first)</option>
@@ -414,6 +668,7 @@ function SpreadMatrix({ cards, onSelect }) {
               Buy <b style={{ color: '#34D88A' }}>{fmtP(c.lo)}</b> · fair value <b style={{ color: 'var(--txt,#eef1f6)' }}>{fmtP(c.hi)}</b> · <b style={{ color: netColor }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))} after fees</b>
             </div>
             <div className="arb-card-chips">
+              <ScoreChip score={c.score} />
               <span className={`arb-chip ${(c.sales7d || 0) >= 5 ? 'up' : ''}`}>{liqLabel} {c.sales7d || 0}/{c.sales30d || 0}</span>
               <span className="arb-chip" style={{ color: netColor }}>{(c.netPct >= 0 ? '+' : '') + c.netPct?.toFixed(0)}% value after fees</span>
               {c.momentum ? <span className="arb-chip hot">momentum</span> : null}
@@ -434,6 +689,7 @@ function SpreadMatrix({ cards, onSelect }) {
       }}>
         <div style={{ width: 32 }} />
         <div style={{ flex: 1, minWidth: 160, fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase' }}>CARD</div>
+        <Th label="SCORE" col="score" w={62} />
         <Th label="BUY AT" col="lo" w={72} />
         <Th label="GOING RATE" col="hi" w={84} />
         <Th label="YOU KEEP $" col="netEdge" w={92} />
@@ -483,6 +739,8 @@ function SpreadMatrix({ cards, onSelect }) {
                   </div>
                 </div>
               </div>
+              {/* GEMLINE Score */}
+              <span style={{ width: 62 }}><ScoreChip score={c.score} /></span>
               {/* Buy (low ask) */}
               <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 12.5, color: '#34D88A', fontWeight: 600 }}>{fmtP(c.lo)}</span>
               {/* Going rate (FMV high) */}
@@ -516,13 +774,52 @@ function SpreadMatrix({ cards, onSelect }) {
 
 // ─── Deal Finder (tabbed content on /deal-finder) ────────────────────────────
 export default function DealFinder({ view = 'deals' }) {
-  const { user, token } = useAuth();
+  const { user, token, authFetch } = useAuth();
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState('');
   const [showAuth, setShowAuth] = useState(false);
   const [query, setQuery] = useState('');
+  // Paywall state — the server 402s /api/market/arb for non-Pro; when that
+  // happens the blurred teaser renders demo data and the Pro pitch covers it.
+  const [gated, setGated] = useState(false);
+  const [upgrade, setUpgrade] = useState(null);
+  const [checkingOut, setCheckingOut] = useState(false);
+  // Budget filter (persisted)
+  const [budgetKey, setBudgetKey] = useState('all');
+  // Live Deals (eBay + GEMLINE cross-ref)
+  const [liveDeals, setLiveDeals] = useState([]);
+  const [liveLoaded, setLiveLoaded] = useState(false);
+  // Deal alerts
+  const [alerts, setAlerts] = useState([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [alertMsg, setAlertMsg] = useState('');
+
+  useEffect(() => {
+    try {
+      const k = localStorage.getItem(BUDGET_LS_KEY);
+      if (k && BUDGETS.some(b => b.key === k)) setBudgetKey(k);
+    } catch {}
+  }, []);
+  const pickBudget = (k) => {
+    setBudgetKey(k);
+    try { localStorage.setItem(BUDGET_LS_KEY, k); } catch {}
+  };
+  const budget = BUDGETS.find(b => b.key === budgetKey) || BUDGETS[0];
+
+  // Kick off Stripe Checkout for GEMLINE Pro ($7.99/mo, 7-day trial)
+  const startCheckout = useCallback(async () => {
+    if (!token) { setShowAuth(true); return; }
+    setCheckingOut(true);
+    try {
+      const res = await authFetch('/api/subscription/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const d = await res.json();
+      if (d.url) { window.location.href = d.url; return; }
+      alert(d.error || 'Could not start checkout — try again.');
+    } catch { alert('Could not start checkout — try again.'); }
+    setCheckingOut(false);
+  }, [token, authFetch]);
 
   // Clock
   useEffect(() => {
@@ -548,8 +845,16 @@ export default function DealFinder({ view = 'deals' }) {
 
   const fetchArbData = useCallback(async () => {
     try {
-      const res = await fetch('/api/market/arb');
+      const res = await authFetch('/api/market/arb');
       const data = await res.json();
+      if (data.gated || res.status === 402) {
+        // Paywalled: render demo data behind the blur, show the Pro pitch.
+        setGated(true);
+        if (data.upgrade) setUpgrade(data.upgrade);
+        setCards(demoCards());
+        return;
+      }
+      setGated(false);
       // Merge all categories into a de-duped pool. arbPlays first — it's the
       // decision-grade net-edge bucket (real lo/hi inventory, net-positive
       // after the 7.5% fee) that also powers the price guide arb tab.
@@ -572,6 +877,7 @@ export default function DealFinder({ view = 'deals' }) {
         rookie: c.rookie, sales7d: Number(c.sales7d) || 0,
         sales30d: Number(c.sales30d) || 0,
         gain7d: Math.abs(Number(c.gain7d)) <= 999 ? Number(c.gain7d) : 0,
+        score: Number(c.score) || 0,
         cardhedge_id: c.cardhedge_id || null,
         theme: ['#1a1d28', '#252838'],
         ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
@@ -582,7 +888,7 @@ export default function DealFinder({ view = 'deals' }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => {
     if (view !== 'deals') return;
@@ -595,11 +901,12 @@ export default function DealFinder({ view = 'deals' }) {
   // arb plays), so ?q= searches the FULL card universe and merges new rows in.
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) return;
+    if (q.length < 2 || gated) return;
     const t = setTimeout(() => {
-      fetch(`/api/market/arb?q=${encodeURIComponent(q)}`)
+      authFetch(`/api/market/arb?q=${encodeURIComponent(q)}`)
         .then(r => r.json())
         .then(d => {
+          if (d.gated) return;
           const rows = (d.arbPlays || []).map(c => ({
             id: c.id, player: c.player, sport: c.sport, set: c.set,
             grader: c.grader, grade: c.grade, year: c.year, variant: c.variant,
@@ -609,6 +916,7 @@ export default function DealFinder({ view = 'deals' }) {
             rookie: c.rookie, sales7d: Number(c.sales7d) || 0,
             sales30d: Number(c.sales30d) || 0,
             gain7d: Math.abs(Number(c.gain7d)) <= 999 ? Number(c.gain7d) : 0,
+            score: Number(c.score) || 0,
             cardhedge_id: c.cardhedge_id || null,
             theme: ['#1a1d28', '#252838'],
             ini: (c.player || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
@@ -623,13 +931,81 @@ export default function DealFinder({ view = 'deals' }) {
         .catch(() => {});
     }, 350);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, gated, authFetch]);
 
-  // Search narrows every desk surface (panels, heatmap, matrix) to matching plays.
+  // Refetch when the hydrated user turns out to be Pro (or just subscribed).
+  useEffect(() => {
+    if (gated && user?.plan === 'pro') { setLoading(true); fetchArbData(); }
+  }, [user?.plan, gated, fetchArbData]);
+
+  // ── Live Deals + My Alerts (Pro-only data) ──────────────────────────────
+  useEffect(() => {
+    if (view !== 'deals' || gated || loading || !token) return;
+    let dead = false;
+    authFetch('/api/market/live-deals')
+      .then(r => r.json())
+      .then(d => { if (!dead && !d.gated) { setLiveDeals(d.deals || []); setLiveLoaded(true); } })
+      .catch(() => {});
+    authFetch('/api/deal-alerts')
+      .then(r => r.json())
+      .then(d => { if (!dead && Array.isArray(d.alerts)) setAlerts(d.alerts); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [view, gated, loading, token, authFetch]);
+
+  const flashAlertMsg = (m) => { setAlertMsg(m); setTimeout(() => setAlertMsg(''), 3500); };
+
+  const createAlert = useCallback(async (body) => {
+    try {
+      const res = await authFetch('/api/deal-alerts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (d.alert) {
+        setAlerts(prev => [d.alert, ...prev]);
+        flashAlertMsg(`Alert “${d.alert.name}” saved — we'll email you when deals match.`);
+        return true;
+      }
+      flashAlertMsg(d.error || 'Could not save alert');
+    } catch { flashAlertMsg('Could not save alert'); }
+    return false;
+  }, [authFetch]);
+
+  const deleteAlert = useCallback(async (id) => {
+    setAlerts(prev => prev.filter(a => a.id !== id));
+    try { await authFetch(`/api/deal-alerts/${id}`, { method: 'DELETE' }); } catch {}
+  }, [authFetch]);
+
+  const toggleAlert = useCallback(async (id, active) => {
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, active } : a));
+    try {
+      await authFetch(`/api/deal-alerts/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }),
+      });
+    } catch {}
+  }, [authFetch]);
+
+  // "Alert me about deals like this" — one tap from a top deal card.
+  const quickAlert = useCallback((c) => {
+    createAlert({
+      name: `${c.player} deals`,
+      playerQuery: c.player,
+      budgetMin: budget.min > 0 ? budget.min : null,
+      budgetMax: Number.isFinite(budget.max) ? budget.max : null,
+      minScore: 0,
+    }).then(ok => { if (ok) setAlertsOpen(true); });
+  }, [createAlert, budget]);
+
+  // Search narrows every desk surface (panels, heatmap, matrix) to matching
+  // plays; the budget preset narrows by BUY price (the low ask).
   const visible = useMemo(() => {
     const q = query.trim();
-    return q ? cards.filter(c => matchesArbQuery(c, q)) : cards;
-  }, [cards, query]);
+    let list = q ? cards.filter(c => matchesArbQuery(c, q)) : cards;
+    if (budget.key !== 'all') {
+      list = list.filter(c => (c.lo || c.market || 0) >= budget.min && (c.lo || c.market || 0) <= budget.max);
+    }
+    return list;
+  }, [cards, query, budget]);
 
   // Derived datasets — the play is: buy at the low ask, exit at Card Hedge high
   // (FMV) net of the 7.5% marketplace fee. Ranked by net edge $, momentum flag
@@ -692,18 +1068,34 @@ export default function DealFinder({ view = 'deals' }) {
   const netPlays = useMemo(() => cardsWithEdge.filter(c => c.netEdge > 0), [cardsWithEdge]);
   const avgNetEdge = useMemo(() => netPlays.length ? (netPlays.reduce((s, c) => s + c.netEdge, 0) / netPlays.length).toFixed(0) : '—', [netPlays]);
 
+  // Gate logic: hydrated users go by plan; a stored token is treated
+  // optimistically as allowed until /api/state hydrates (the API withholds
+  // data server-side regardless, so nothing can leak in that window).
+  const allowed = user ? hasCapability(user, 'dealfinder') : (!!token && !gated);
+
   return (
     <div style={{ background: '#080b12', minHeight: '60vh', padding: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.06)' }}>
       <ProGate
         page
-        allowed={hasCapability(user || (token ? {} : null), 'dealfinder')}
-        title="Create a free account to unlock the Deal Finder"
-        sub="Cards priced below fair value, fees already counted, plus movers and full-market search, free with a GEMLINE account."
-        cta="Create a free account"
-        onUnlock={() => setShowAuth(true)}
+        allowed={allowed}
+        title="Deal Finder is a GEMLINE Pro feature"
+        sub="The whole market scanned for cards priced below their going rate — fees counted, every deal scored, checked against live eBay listings."
+        bullets={upgrade?.features || [
+          'Deal Finder: every card priced below fair value, fees already counted',
+          'GEMLINE Score (0–100) on every deal — edge, liquidity, and risk in one number',
+          'Live Deals: underpriced eBay + GEMLINE listings you can buy right now',
+          'Deal alerts by email — your budget, your players, your minimum score',
+          'Our Track Record: how flagged deals actually performed',
+        ]}
+        price={`$${(upgrade?.priceMonthly ?? 7.99).toFixed(2)}/mo`}
+        priceNote={`${upgrade?.trialDays ?? 7}-day free trial · cancel anytime`}
+        cta={token ? (checkingOut ? 'Opening checkout…' : 'Start your 7-day free trial') : 'Create an account to start your free trial'}
+        onUnlock={startCheckout}
       >
 
       {view === 'grading' && <WorthGrading onSelect={setSelected} />}
+
+      {view === 'track' && <TrackRecord />}
 
       {view === 'deals' && (loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, gap: 12, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--dim)' }}>
@@ -754,8 +1146,20 @@ export default function DealFinder({ view = 'deals' }) {
       {/* ── Jump chips (sticky in-page nav) ── */}
       <JumpChips />
 
+      {/* ── Budget filter — narrows every panel below ── */}
+      <BudgetBar budgetKey={budgetKey} onPick={pickBudget} />
+
+      {/* ── My Deal Alerts ── */}
+      <AlertsPanel
+        alerts={alerts} open={alertsOpen} onToggleOpen={() => setAlertsOpen(o => !o)}
+        onCreate={createAlert} onDelete={deleteAlert} onToggle={toggleAlert} msg={alertMsg}
+      />
+
       {/* ── Today's Top Deals — the simple layer ── */}
-      <TopDeals deals={topDeals} onSelect={setSelected} />
+      <TopDeals deals={topDeals} onSelect={setSelected} onAlert={quickAlert} />
+
+      {/* ── Live Deals — GEMLINE + eBay cross-ref ── */}
+      <LiveDeals deals={liveDeals} loaded={liveLoaded} budget={budget} />
 
       {/* ── Play search ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 0', flexWrap: 'wrap' }}>

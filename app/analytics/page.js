@@ -95,9 +95,19 @@ export function matchesArbQuery(c, q) {
   return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
 }
 
+// Bearer header for the Pro-gated /api/market/arb feed — this component sits
+// outside AuthProvider hydration timing, so read the token directly.
+const arbAuthHeaders = () => {
+  try {
+    const t = localStorage.getItem('gemline_token');
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch { return {}; }
+};
+
 function ArbTable({ onSelect }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [gated, setGated] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [minNet, setMinNet] = useState(10);
   const [minLiq, setMinLiq] = useState(0);
@@ -109,11 +119,12 @@ function ArbTable({ onSelect }) {
   // full card universe and merges any new plays into the loaded pool.
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) return;
+    if (q.length < 2 || gated) return;
     const t = setTimeout(() => {
-      fetch(`/api/market/arb?q=${encodeURIComponent(q)}`)
+      fetch(`/api/market/arb?q=${encodeURIComponent(q)}`, { headers: arbAuthHeaders() })
         .then(r => r.json())
         .then(d => {
+          if (d.gated) return;
           const extra = (d.arbPlays || []).filter(c => (c.hi || 0) > 0 && (c.lo || 0) > 0)
             .map(c => { const e = deriveEdge(c); return { ...c, ...e, momentum: e.netEdge > 0 && (c.gain7d || 0) > 0 }; });
           if (!extra.length) return;
@@ -126,13 +137,15 @@ function ArbTable({ onSelect }) {
         .catch(() => {});
     }, 350);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, gated]);
 
   const load = () => {
     setLoading(true);
-    fetch('/api/market/arb')
+    fetch('/api/market/arb', { headers: arbAuthHeaders() })
       .then(r => r.json())
       .then(d => {
+        if (d.gated) { setGated(true); setLoading(false); return; }
+        setGated(false);
         const all = [...(d.arbPlays || []), ...(d.undervalued || []), ...(d.gainers || []), ...(d.losers || []), ...(d.mostTraded || [])];
         const seen = new Set();
         const merged = all.filter(c => {
@@ -155,6 +168,23 @@ function ArbTable({ onSelect }) {
     const t = setInterval(load, 120000);
     return () => clearInterval(t);
   }, []);
+
+  // Deal data went Pro (July 2026): this screener's feed now requires GEMLINE
+  // Pro. Non-Pro users see the pitch instead of an empty table.
+  if (gated) {
+    return (
+      <div style={{ padding: '48px 24px', textAlign: 'center', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }}>
+        <div style={{ fontSize: 30, marginBottom: 10 }}>🔒</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--txt)' }}>The Deal Screener is now part of GEMLINE Pro</div>
+        <p style={{ fontSize: 13.5, color: 'var(--muted)', maxWidth: 440, margin: '10px auto 16px', lineHeight: 1.6 }}>
+          Cards priced below their going rate, scored 0–100, with live eBay cross-checks and email alerts — $7.99/mo after a 7-day free trial.
+        </p>
+        <a href="/deal-finder" style={{ display: 'inline-block', padding: '10px 22px', borderRadius: 8, background: 'var(--gold)', color: '#000', fontWeight: 800, fontSize: 14, textDecoration: 'none' }}>
+          Try GEMLINE Pro free →
+        </a>
+      </div>
+    );
+  }
 
   const sportOpts = ['All', ...Array.from(new Set(rows.map(r => r.sport).filter(Boolean))).sort()];
   const ARB_SORTS = {
@@ -418,7 +448,7 @@ export default function AnalyticsPage() {
         page
         allowed={hasCapability(user || (token ? {} : null), 'analytics')}
         title="Create a free account to unlock Market Movers"
-        sub="Movers, the heat map, and the deal screener, live across 287K+ cards, free with a GEMLINE account."
+        sub="Movers and the heat map, live across 287K+ cards, free with a GEMLINE account. (The deal screener is a GEMLINE Pro feature.)"
         cta="Create a free account"
         onUnlock={() => setShowAuth(true)}
       >

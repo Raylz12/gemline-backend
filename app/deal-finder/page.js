@@ -2,23 +2,24 @@
 import { useState, useEffect } from 'react';
 import DealFinder from '../components/DealFinder';
 
-// Dedicated pro pricing surface: the Deal Finder (net-edge deal board) plus
-// Worth Grading, split out of /market so the public Browse feed stays a clean
-// SEO page and THIS page is the one that goes behind the paywall later.
-// Gating lives in ProGate.js CAPABILITY_PLAN under 'dealfinder': flipping
-// that single line from 'free' to 'pro' paywalls this entire page.
+// THE paid surface: the Deal Finder (net-edge deal board, GEMLINE Score,
+// Live Deals, alerts) plus Worth Grading and the Track Record. Behind the
+// GEMLINE Pro paywall — gating lives in ProGate.js CAPABILITY_PLAN under
+// 'dealfinder' ('pro'), and the API enforces it server-side too.
 // URL-driven + deep-linkable via ?tab= (e.g. /deal-finder?tab=grading).
 const DF_TABS = [
   ['deals', 'Deals'],
   ['grading', 'Worth Grading'],
+  ['track', 'Our Track Record'],
 ];
 const VALID_TABS = new Set(DF_TABS.map(t => t[0]));
 
-// One page header for both views — the tab bar lives INSIDE it, right under
+// One page header for all views — the tab bar lives INSIDE it, right under
 // the title, same underline pattern as the market tab bar.
 const HERO = {
-  deals: ['Deal Finder', 'Cards priced below fair value, fees already counted. Live across the whole market, refreshed all day.'],
+  deals: ['Deal Finder', 'Cards priced below fair value, fees already counted and every deal scored 0–100 — with live eBay cross-checks. A GEMLINE Pro feature.'],
   grading: ['Worth grading?', 'Run the numbers before you send a card in. Raw price, graded price, and grading cost, all in one view.'],
+  track: ['Our Track Record', 'Every deal we flagged, and what the price did next. Receipts, not promises.'],
 };
 
 export default function DealFinderPage() {
