@@ -2228,14 +2228,16 @@ function ebayTitleMatches(c, title) {
     const gr = String(c.grade).toLowerCase().replace(/\.0$/, '');
     if (!t.includes(` ${g} `) || !t.includes(` ${gr} `)) return false;
   }
-  // Card-number conflict: if the title advertises a card number (#277 or
-  // 041/173 style) and it isn't OUR number, it's a different card — drop.
+  // Card number: same player+set+grade can differ 3× in price between #276
+  // and #277 (base vs SIR), so when OUR card has a number the title must
+  // carry that exact number — listings that don't state it get dropped.
   if (c.number) {
     const ourNum = String(c.number).trim().replace(/^0+(?=.)/, '').toLowerCase();
-    const nums = [...rawTitle.matchAll(/#\s*([a-z0-9-]{1,8})|\b(\d{1,4})\s*\/\s*\d{1,4}\b/g)]
-      .map(m => (m[1] || m[2] || '').replace(/^0+(?=.)/, '').toLowerCase())
+    const nums = [...rawTitle.matchAll(/#\s*([a-z0-9-]{1,8})|\b(\d{1,4})\s*\/\s*\d{1,4}\b|\bno\.?\s*(\d{1,4})\b/g)]
+      .map(m => (m[1] || m[2] || m[3] || '').replace(/^0+(?=.)/, '').toLowerCase())
       .filter(Boolean);
-    if (nums.length && !nums.includes(ourNum)) return false;
+    const bareHit = t.includes(` ${ourNum} `); // "276" as a plain token
+    if (!nums.includes(ourNum) && !bareHit) return false;
   }
   return true;
 }
@@ -2250,7 +2252,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
     // Serve the shared 45-min cache (one eBay sweep serves every Pro user)
     const { rows: [hit] } = await pool.query(
       `SELECT payload, created_at FROM ebay_live_cache
-       WHERE cache_key = 'live_deals_v3' AND created_at > NOW() - INTERVAL '45 minutes'`);
+       WHERE cache_key = 'live_deals_v4' AND created_at > NOW() - INTERVAL '45 minutes'`);
     if (hit) return res.json({ ...hit.payload, cachedAt: hit.created_at });
 
     const FEE = 0.075;
@@ -2287,7 +2289,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
     const token = await ebayAppToken();
     let ebayCalls = 0;
     if (token) {
-      const cards = await fetchTopDealRows(pool, 40);
+      const cards = await fetchTopDealRows(pool, 44);
       const chunk = (arr, n) => { const r = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; };
       const found = [];
       for (const batch of chunk(cards, 8)) {
@@ -2296,6 +2298,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
             const fmv = Number(c.catalog_price) || 0;
             if (fmv < 50) return [];
             const bits = [c.player, c.year];
+            if (c.number) bits.push(String(c.number)); // number is required in-title anyway
             if (c.grader && c.grade) bits.push(`${c.grader} ${c.grade}`);
             const params = new URLSearchParams({
               q: bits.filter(Boolean).join(' ').slice(0, 100),
@@ -2350,7 +2353,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
       ebayCalls,
     };
     await pool.query(
-      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v3', $1, NOW())
+      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v4', $1, NOW())
        ON CONFLICT (cache_key) DO UPDATE SET payload = $1, created_at = NOW()`,
       [JSON.stringify(payload)]);
     res.json(payload);
