@@ -3,51 +3,86 @@
 <head>
 <meta charset="utf-8">
 <title>GEMLINE for Collectors</title>
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   @page { size: letter; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 8.5in; height: 11in; }
+  html, body { width: 8.5in; height: 10.98in; overflow: hidden; }
   body {
     font-family: 'Rubik', sans-serif;
-    background: #07080d;
+    background: #090a12;
     color: #eef0f4;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
     display: flex; flex-direction: column;
-    padding: 0.55in 0.6in 0.45in;
+    padding: 0.4in 0.55in 0.35in;
     position: relative; overflow: hidden;
   }
-  .glow { position:absolute; width:560px; height:560px; border-radius:50%; filter:blur(90px); opacity:.18; pointer-events:none; }
-  .glow.g1 { background:#16c784; top:-200px; left:-140px; }
-  .glow.g2 { background:#7c5cff; bottom:-240px; right:-160px; opacity:.14; }
-  .glow.g3 { background:#e8b64c; top:40%; right:-220px; opacity:.10; }
-  .brand-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .dots { position:absolute; inset:0; background-image:radial-gradient(rgba(255,255,255,.055) 1px, transparent 1.4px); background-size:20px 20px; pointer-events:none; }
+  .glow { position:absolute; width:560px; height:560px; border-radius:50%; filter:blur(95px); pointer-events:none; }
+  .g1 { background:#16c784; opacity:.20; top:-220px; left:-160px; }
+  .g2 { background:#7c5cff; opacity:.18; top:120px; right:-240px; }
+  .g3 { background:#e8b64c; opacity:.12; bottom:-260px; left:30%; }
+
+  .brand-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; position:relative; flex-shrink:0; }
   .brand { display:flex; align-items:center; gap:12px; }
-  .logo { width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,#16c784,#0e9c66); display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque'; font-weight:800; font-size:26px; color:#04130c; }
-  .wordmark { font-family:'Bricolage Grotesque'; font-weight:800; font-size:26px; letter-spacing:.04em; }
+  .logo { width:46px; height:46px; border-radius:13px; background:linear-gradient(135deg,#16c784,#0e9c66); display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque'; font-weight:800; font-size:27px; color:#04130c; box-shadow:0 6px 24px rgba(22,199,132,.35); }
+  .wordmark { font-family:'Bricolage Grotesque'; font-weight:800; font-size:27px; letter-spacing:.04em; }
   .wordmark span { color:#16c784; }
   .tagline { font-family:'IBM Plex Mono'; font-size:9.5px; letter-spacing:.22em; color:#9aa3b2; margin-top:2px; }
-  .audience { font-family:'IBM Plex Mono'; font-size:10px; letter-spacing:.18em; color:#16c784; border:1px solid rgba(22,199,132,.45); border-radius:999px; padding:7px 16px; }
-  h1 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:37px; line-height:1.07; margin-bottom:10px; }
-  h1 .accent { color:#16c784; }
-  .lede { font-size:14.5px; line-height:1.55; color:#c3c9d4; max-width:6.5in; margin-bottom:22px; }
-  .lede b { color:#eef0f4; }
-  .benefits { display:grid; grid-template-columns:1fr 1fr; gap:13px; margin-bottom:20px; }
-  .benefit { background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09); border-radius:14px; padding:14px 17px; }
-  .benefit .ic { width:30px; height:30px; border-radius:9px; background:rgba(22,199,132,.13); border:1px solid rgba(22,199,132,.3); display:flex; align-items:center; justify-content:center; color:#16c784; margin-bottom:8px; }
-  .benefit h3 { font-family:'Bricolage Grotesque'; font-weight:700; font-size:15.5px; margin-bottom:5px; }
-  .benefit p { font-size:12px; line-height:1.5; color:#b6bdc9; }
-  .quote { border-left:3px solid #16c784; padding:4px 0 4px 16px; margin-bottom:20px; font-size:14px; line-height:1.5; color:#dfe3ea; font-style:italic; }
-  .quote .who { display:block; font-style:normal; font-family:'IBM Plex Mono'; font-size:10px; color:#9aa3b2; letter-spacing:.1em; margin-top:5px; }
-  .cta { background:linear-gradient(135deg, rgba(22,199,132,.16), rgba(124,92,255,.10)); border:1px solid rgba(22,199,132,.4); border-radius:16px; padding:17px 22px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
-  .cta h2 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:20px; margin-bottom:4px; }
-  .cta p { font-size:12.5px; color:#c3c9d4; line-height:1.45; }
-  .cta .url { font-family:'IBM Plex Mono'; font-weight:700; font-size:15px; color:#04130c; background:#16c784; border-radius:10px; padding:12px 20px; white-space:nowrap; }
-  .foot { margin-top:auto; padding-top:13px; display:flex; justify-content:space-between; font-size:9.5px; color:#6d7686; font-family:'IBM Plex Mono'; letter-spacing:.05em; }
+
+  .burst { position:relative; transform:rotate(7deg); }
+  .burst svg { display:block; filter:drop-shadow(0 6px 18px rgba(232,182,76,.35)); }
+  .burst .t { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:'Bricolage Grotesque'; font-weight:800; color:#1a1200; line-height:1; }
+  .burst .t b { font-size:19px; }
+  .burst .t i { font-style:normal; font-size:9px; letter-spacing:.08em; font-family:'IBM Plex Mono'; font-weight:700; }
+
+  .hero { display:flex; align-items:center; gap:10px; margin-bottom:13px; position:relative; flex-shrink:0; }
+  .hero-copy { flex:1.15; }
+  h1 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:36px; line-height:1.06; margin-bottom:12px; letter-spacing:-.005em; }
+  h1 .hl { color:#16c784; }
+  h1 .gold { background:linear-gradient(100deg,#e8b64c,#ffd98a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .lede { font-size:14.5px; line-height:1.55; color:#c9cfda; max-width:4.7in; }
+  .lede b { color:#fff; }
+  .cards-stage { flex:.85; display:flex; justify-content:center; position:relative; }
+  .cards-stage svg.fan { display:block; }
+
+  .tape { display:flex; align-items:center; gap:0; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.04); border-radius:12px; overflow:hidden; margin-bottom:14px; flex-shrink:0; }
+  .tape .tag { font-family:'IBM Plex Mono'; font-size:9px; font-weight:700; letter-spacing:.16em; background:#16c784; color:#04130c; padding:8px 12px; white-space:nowrap; }
+  .tape .feed { font-family:'IBM Plex Mono'; font-size:10.5px; padding:8px 14px; white-space:nowrap; overflow:hidden; color:#cdd3de; letter-spacing:.02em; }
+  .tape .up { color:#16c784; font-weight:700; }
+  .tape .dn { color:#ff5c7c; font-weight:700; }
+
+  .benefits { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:15px; flex-shrink:0; }
+  .b { border-radius:16px; padding:15px 15px 14px; border:1.5px solid; position:relative; background:rgba(255,255,255,.045); }
+  .b:nth-child(odd) { transform:rotate(-.7deg); }
+  .b:nth-child(even) { transform:rotate(.7deg); }
+  .b.c-green { border-color:rgba(22,199,132,.55); }
+  .b.c-gold { border-color:rgba(232,182,76,.55); }
+  .b.c-purple { border-color:rgba(124,92,255,.55); }
+  .b .ic { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:8px; }
+  .c-green .ic { background:rgba(22,199,132,.16); color:#16c784; }
+  .c-gold .ic { background:rgba(232,182,76,.16); color:#e8b64c; }
+  .c-purple .ic { background:rgba(124,92,255,.18); color:#a58fff; }
+  .b h3 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:16px; margin-bottom:6px; letter-spacing:.005em; }
+  .b p { font-size:12px; line-height:1.5; color:#b9c0cc; }
+  .b p b { color:#e6e9ef; }
+
+  .cta { background:linear-gradient(120deg, rgba(22,199,132,.18), rgba(124,92,255,.14)); border:1.5px solid rgba(22,199,132,.5); border-radius:18px; padding:17px 22px; display:flex; align-items:center; gap:20px; position:relative; flex-shrink:0; }
+  .cta .qr { width:88px; height:88px; background:#fff; border-radius:12px; padding:7px; flex-shrink:0; }
+  .cta .qr svg { width:100%; height:100%; display:block; }
+  .cta h2 { font-family:'Bricolage Grotesque'; font-weight:800; font-size:22px; margin-bottom:4px; }
+  .cta h2 .hl { color:#16c784; }
+  .cta p { font-size:12.5px; color:#c9cfda; line-height:1.45; }
+  .cta .right { margin-left:auto; text-align:right; flex-shrink:0; }
+  .cta .url { font-family:'IBM Plex Mono'; font-weight:700; font-size:15px; color:#04130c; background:#16c784; border-radius:10px; padding:11px 18px; white-space:nowrap; display:inline-block; }
+  .cta .fine { font-family:'IBM Plex Mono'; font-size:9px; color:#9aa3b2; letter-spacing:.08em; margin-top:7px; }
+
+  .foot { margin-top:auto; padding-top:11px; display:flex; justify-content:space-between; font-size:9.5px; color:#6d7686; font-family:'IBM Plex Mono'; letter-spacing:.05em; }
 </style>
 </head>
 <body>
   <div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+  <div class="dots"></div>
 
   <div class="brand-row">
     <div class="brand">
@@ -57,37 +92,109 @@
         <div class="tagline">THE CARD SHOW, ONLINE</div>
       </div>
     </div>
-    <div class="audience">FOR COLLECTORS</div>
+    <div class="burst">
+      <svg width="96" height="96" viewBox="0 0 100 100">
+        <polygon fill="#e8b64c" points="50,2 59,14 73,8 76,23 91,22 87,37 100,44 89,54 96,68 81,70 80,85 66,81 59,95 50,84 41,95 34,81 20,85 19,70 4,68 11,54 0,44 13,37 9,22 24,23 27,8 41,14"/>
+        <polygon fill="#ffd98a" points="50,10 57,20 68,15 70,27 82,26 79,38 90,44 81,52 86,63 74,65 73,77 62,74 57,85 50,76 43,85 38,74 27,77 26,65 14,63 19,52 10,44 21,38 18,26 30,27 32,15 43,20" opacity=".55"/>
+      </svg>
+      <div class="t"><b>100%</b><i>FREE</i></div>
+    </div>
   </div>
 
-  <h1>Ever wonder what your<br>cards are <span class="accent">actually worth?</span></h1>
+  <div class="hero">
+    <div class="hero-copy">
+      <h1>That card in your binder?<br>It could be worth <span class="gold">way more</span> than you think.</h1>
+      <p class="lede">GEMLINE is the card show that never closes. Look up <b>any card's real price, free</b>, build your collection, hunt deals, and trade with people who actually get it.</p>
+    </div>
+    <div class="cards-stage">
+      <svg class="fan" width="282" height="237" viewBox="0 0 300 252">
+        <defs>
+          <linearGradient id="holo1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#7c5cff"/><stop offset=".5" stop-color="#16c784"/><stop offset="1" stop-color="#e8b64c"/>
+          </linearGradient>
+          <linearGradient id="holo2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ff5c7c"/><stop offset="1" stop-color="#7c5cff"/>
+          </linearGradient>
+          <linearGradient id="holo3" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#16c784"/><stop offset="1" stop-color="#0e5c9c"/>
+          </linearGradient>
+          <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+            <stop offset=".2" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".35"/><stop offset=".8" stop-color="#fff" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <!-- back-left card -->
+        <g transform="rotate(-14 80 150)">
+          <rect x="30" y="52" width="118" height="164" rx="12" fill="#141826" stroke="url(#holo2)" stroke-width="3"/>
+          <rect x="41" y="63" width="96" height="102" rx="8" fill="url(#holo2)" opacity=".8"/>
+          <circle cx="89" cy="100" r="17" fill="#fff" opacity=".9"/>
+          <path d="M64 152c5-18 14-28 25-28s20 10 25 28z" fill="#fff" opacity=".9"/>
+          <rect x="41" y="175" width="70" height="9" rx="4.5" fill="#3a415a"/>
+          <rect x="41" y="192" width="44" height="8" rx="4" fill="#2a3047"/>
+        </g>
+        <!-- back-right card -->
+        <g transform="rotate(13 226 150)">
+          <rect x="158" y="52" width="118" height="164" rx="12" fill="#141826" stroke="url(#holo3)" stroke-width="3"/>
+          <rect x="169" y="63" width="96" height="102" rx="8" fill="url(#holo3)" opacity=".8"/>
+          <polygon points="217,82 224,102 245,102 228,114 234,134 217,122 200,134 206,114 189,102 210,102" fill="#fff" opacity=".92"/>
+          <rect x="169" y="175" width="70" height="9" rx="4.5" fill="#3a415a"/>
+          <rect x="169" y="192" width="44" height="8" rx="4" fill="#2a3047"/>
+        </g>
+        <!-- front card -->
+        <g transform="rotate(-2 150 140)">
+          <rect x="90" y="30" width="124" height="172" rx="13" fill="#10141f" stroke="url(#holo1)" stroke-width="3.5"/>
+          <rect x="101" y="41" width="102" height="108" rx="9" fill="url(#holo1)"/>
+          <rect x="101" y="41" width="102" height="108" rx="9" fill="url(#shine)"/>
+          <circle cx="152" cy="80" r="19" fill="#fff"/>
+          <path d="M124 136c6-21 16-32 28-32s22 11 28 32z" fill="#fff"/>
+          <rect x="101" y="160" width="76" height="10" rx="5" fill="#454e6b"/>
+          <rect x="101" y="178" width="48" height="9" rx="4.5" fill="#303752"/>
+          <!-- price pill -->
+          <g transform="rotate(-6 206 46)">
+            <rect x="168" y="18" width="76" height="30" rx="15" fill="#16c784"/>
+            <text x="206" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-weight="700" font-size="15" fill="#04130c">$412 ▲</text>
+          </g>
+        </g>
+        <!-- sparkles -->
+        <g fill="#ffd98a">
+          <path d="M52 30l3 8 8 3-8 3-3 8-3-8-8-3 8-3z"/>
+          <path d="M262 200l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5z"/>
+        </g>
+        <g fill="#a58fff">
+          <path d="M272 66l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/>
+          <path d="M40 218l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/>
+        </g>
+      </svg>
+    </div>
+  </div>
 
-  <p class="lede">That shoebox under your bed. The binder from your grandpa. The rookie you pulled last weekend. Every one of them has a real price, and GEMLINE shows it to you <b>free</b>. Then it helps you do something about it: collect smarter, trade fair, and never get lowballed again.</p>
+  <div class="tape">
+    <div class="tag">LIVE TAPE</div>
+    <div class="feed">CHARIZARD HOLO <span class="up">$412 ▲</span> &nbsp;·&nbsp; WEMBY PRIZM PSA 10 <span class="up">+31% 7D</span> &nbsp;·&nbsp; OHTANI RC <span class="up">$128 ▲</span> &nbsp;·&nbsp; PIKACHU VMAX <span class="dn">$67 ▼</span></div>
+  </div>
 
   <div class="benefits">
-    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg></div><h3>Look up any card, free</h3><p>Type a player, snap a search, done. Over a million cards priced against live market data, updated three times a day. Raw or graded, every grade.</p></div>
-    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div><h3>Watch your collection grow</h3><p>Add your cards and see what the whole stack is worth, which ones are heating up, and how your PC has changed over time. It's your collection, scored like the pros.</p></div>
-    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg></div><h3>Trade without getting fleeced</h3><p>Card-for-card trades with a built-in fair-value meter, so you know if a deal is even before you shake on it. No more "trust me bro" trades.</p></div>
-    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6z"/><path d="M2 9h20M12 3l-4 6 4 12 4-12-4-6"/></svg></div><h3>Find the deals first</h3><p>The Deal Finder spots cards selling below their going rate and tells you in plain English what you'd save. Bargain hunting, minus the homework.</p></div>
-    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 5h1M17 6h3a2 2 0 0 1-2 5h-1"/></svg></div><h3>Know when grading is worth it</h3><p>Thinking about slabbing a card? The Worth Grading tool does the math: grading fee vs. what a PSA 10 or 9 would sell for. Answer in one glance.</p></div>
-    <div class="benefit"><div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Buy and sell, safely</h3><p>Every sale is protected: money is held until the card shows up as promised. Great for first-timers, parents, and anyone tired of sketchy meetups.</p></div>
-  </div>
-
-  <div class="quote">
-    "It feels like walking a card show floor. You check prices, hunt deals, make trades, and show off your pulls. Except the show never closes."
-    <span class="who">BY COLLECTORS, FOR COLLECTORS</span>
+    <div class="b c-green"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></div><h3>Price any card in seconds</h3><p>Type a name. Boom, real price. <b>Over a million cards</b>, raw or graded, updated 3x a day.</p></div>
+    <div class="b c-purple"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><h3>Your collection, leveled up</h3><p>Add your cards and watch the total climb. It's an <b>inventory screen for your PC</b>, with real prices.</p></div>
+    <div class="b c-gold"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg></div><h3>Never get lowballed</h3><p>The trade meter tells you if a swap is fair <b>before you say yes</b>. No more "trust me bro" trades.</p></div>
+    <div class="b c-gold"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6z"/><path d="M2 9h20"/></svg></div><h3>Deal radar</h3><p>We flag cards selling <b>below their going rate</b> and tell you exactly what you'd save. First dibs, every day.</p></div>
+    <div class="b c-green"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 5h1M17 6h3a2 2 0 0 1-2 5h-1"/></svg></div><h3>Grade it or nah?</h3><p>Wondering if that card deserves a slab? We run the math: <b>grading fee vs. PSA 10 payday</b>. One glance.</p></div>
+    <div class="b c-purple"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Parent approved</h3><p>Money stays protected until the card <b>actually shows up</b>. Safe for first-timers, no sketchy meetups.</p></div>
   </div>
 
   <div class="cta">
+    <div class="qr"><svg viewBox="0 0 27 27"><path d="M1,1H2V2H1zM2,1H3V2H2zM3,1H4V2H3zM4,1H5V2H4zM5,1H6V2H5zM6,1H7V2H6zM7,1H8V2H7zM9,1H10V2H9zM10,1H11V2H10zM12,1H13V2H12zM13,1H14V2H13zM14,1H15V2H14zM19,1H20V2H19zM20,1H21V2H20zM21,1H22V2H21zM22,1H23V2H22zM23,1H24V2H23zM24,1H25V2H24zM25,1H26V2H25zM1,2H2V3H1zM7,2H8V3H7zM9,2H10V3H9zM15,2H16V3H15zM17,2H18V3H17zM19,2H20V3H19zM25,2H26V3H25zM1,3H2V4H1zM3,3H4V4H3zM4,3H5V4H4zM5,3H6V4H5zM7,3H8V4H7zM9,3H10V4H9zM11,3H12V4H11zM12,3H13V4H12zM13,3H14V4H13zM14,3H15V4H14zM16,3H17V4H16zM17,3H18V4H17zM19,3H20V4H19zM21,3H22V4H21zM22,3H23V4H22zM23,3H24V4H23zM25,3H26V4H25zM1,4H2V5H1zM3,4H4V5H3zM4,4H5V5H4zM5,4H6V5H5zM7,4H8V5H7zM10,4H11V5H10zM11,4H12V5H11zM12,4H13V5H12zM14,4H15V5H14zM17,4H18V5H17zM19,4H20V5H19zM21,4H22V5H21zM22,4H23V5H22zM23,4H24V5H23zM25,4H26V5H25zM1,5H2V6H1zM3,5H4V6H3zM4,5H5V6H4zM5,5H6V6H5zM7,5H8V6H7zM9,5H10V6H9zM10,5H11V6H10zM11,5H12V6H11zM12,5H13V6H12zM13,5H14V6H13zM15,5H16V6H15zM17,5H18V6H17zM19,5H20V6H19zM21,5H22V6H21zM22,5H23V6H22zM23,5H24V6H23zM25,5H26V6H25zM1,6H2V7H1zM7,6H8V7H7zM11,6H12V7H11zM13,6H14V7H13zM15,6H16V7H15zM19,6H20V7H19zM25,6H26V7H25zM1,7H2V8H1zM2,7H3V8H2zM3,7H4V8H3zM4,7H5V8H4zM5,7H6V8H5zM6,7H7V8H6zM7,7H8V8H7zM9,7H10V8H9zM11,7H12V8H11zM13,7H14V8H13zM15,7H16V8H15zM17,7H18V8H17zM19,7H20V8H19zM20,7H21V8H20zM21,7H22V8H21zM22,7H23V8H22zM23,7H24V8H23zM24,7H25V8H24zM25,7H26V8H25zM11,8H12V9H11zM12,8H13V9H12zM13,8H14V9H13zM14,8H15V9H14zM15,8H16V9H15zM16,8H17V9H16zM1,9H2V10H1zM4,9H5V10H4zM5,9H6V10H5zM6,9H7V10H6zM7,9H8V10H7zM8,9H9V10H8zM9,9H10V10H9zM10,9H11V10H10zM15,9H16V10H15zM16,9H17V10H16zM17,9H18V10H17zM18,9H19V10H18zM21,9H22V10H21zM23,9H24V10H23zM24,9H25V10H24zM25,9H26V10H25zM3,10H4V11H3zM4,10H5V11H4zM5,10H6V11H5zM6,10H7V11H6zM11,10H12V11H11zM13,10H14V11H13zM16,10H17V11H16zM20,10H21V11H20zM21,10H22V11H21zM22,10H23V11H22zM23,10H24V11H23zM24,10H25V11H24zM1,11H2V12H1zM2,11H3V12H2zM3,11H4V12H3zM5,11H6V12H5zM6,11H7V12H6zM7,11H8V12H7zM9,11H10V12H9zM10,11H11V12H10zM11,11H12V12H11zM14,11H15V12H14zM15,11H16V12H15zM16,11H17V12H16zM17,11H18V12H17zM19,11H20V12H19zM20,11H21V12H20zM22,11H23V12H22zM25,11H26V12H25zM3,12H4V13H3zM6,12H7V13H6zM9,12H10V13H9zM10,12H11V13H10zM12,12H13V13H12zM13,12H14V13H13zM15,12H16V13H15zM19,12H20V13H19zM20,12H21V13H20zM22,12H23V13H22zM23,12H24V13H23zM24,12H25V13H24zM25,12H26V13H25zM3,13H4V14H3zM4,13H5V14H4zM5,13H6V14H5zM6,13H7V14H6zM7,13H8V14H7zM8,13H9V14H8zM10,13H11V14H10zM15,13H16V14H15zM16,13H17V14H16zM17,13H18V14H17zM19,13H20V14H19zM20,13H21V14H20zM25,13H26V14H25zM1,14H2V15H1zM2,14H3V15H2zM3,14H4V15H3zM6,14H7V15H6zM8,14H9V15H8zM9,14H10V15H9zM13,14H14V15H13zM15,14H16V15H15zM16,14H17V15H16zM17,14H18V15H17zM21,14H22V15H21zM24,14H25V15H24zM1,15H2V16H1zM2,15H3V16H2zM5,15H6V16H5zM7,15H8V16H7zM8,15H9V16H8zM9,15H10V16H9zM15,15H16V16H15zM16,15H17V16H16zM17,15H18V16H17zM18,15H19V16H18zM21,15H22V16H21zM22,15H23V16H22zM23,15H24V16H23zM24,15H25V16H24zM25,15H26V16H25zM1,16H2V17H1zM3,16H4V17H3zM5,16H6V17H5zM13,16H14V17H13zM15,16H16V17H15zM16,16H17V17H16zM18,16H19V17H18zM19,16H20V17H19zM20,16H21V17H20zM22,16H23V17H22zM23,16H24V17H23zM25,16H26V17H25zM1,17H2V18H1zM3,17H4V18H3zM7,17H8V18H7zM12,17H13V18H12zM13,17H14V18H13zM14,17H15V18H14zM17,17H18V18H17zM18,17H19V18H18zM19,17H20V18H19zM20,17H21V18H20zM21,17H22V18H21zM23,17H24V18H23zM24,17H25V18H24zM9,18H10V19H9zM11,18H12V19H11zM12,18H13V19H12zM17,18H18V19H17zM21,18H22V19H21zM23,18H24V19H23zM24,18H25V19H24zM1,19H2V20H1zM2,19H3V20H2zM3,19H4V20H3zM4,19H5V20H4zM5,19H6V20H5zM6,19H7V20H6zM7,19H8V20H7zM9,19H10V20H9zM11,19H12V20H11zM13,19H14V20H13zM15,19H16V20H15zM17,19H18V20H17zM19,19H20V20H19zM21,19H22V20H21zM25,19H26V20H25zM1,20H2V21H1zM7,20H8V21H7zM9,20H10V21H9zM12,20H13V21H12zM14,20H15V21H14zM16,20H17V21H16zM17,20H18V21H17zM21,20H22V21H21zM25,20H26V21H25zM1,21H2V22H1zM3,21H4V22H3zM4,21H5V22H4zM5,21H6V22H5zM7,21H8V22H7zM9,21H10V22H9zM10,21H11V22H10zM11,21H12V22H11zM12,21H13V22H12zM13,21H14V22H13zM15,21H16V22H15zM16,21H17V22H16zM17,21H18V22H17zM18,21H19V22H18zM19,21H20V22H19zM20,21H21V22H20zM21,21H22V22H21zM1,22H2V23H1zM3,22H4V23H3zM4,22H5V23H4zM5,22H6V23H5zM7,22H8V23H7zM9,22H10V23H9zM11,22H12V23H11zM13,22H14V23H13zM14,22H15V23H14zM15,22H16V23H15zM16,22H17V23H16zM17,22H18V23H17zM18,22H19V23H18zM19,22H20V23H19zM24,22H25V23H24zM25,22H26V23H25zM1,23H2V24H1zM3,23H4V24H3zM4,23H5V24H4zM5,23H6V24H5zM7,23H8V24H7zM11,23H12V24H11zM12,23H13V24H12zM14,23H15V24H14zM16,23H17V24H16zM17,23H18V24H17zM18,23H19V24H18zM21,23H22V24H21zM22,23H23V24H22zM23,23H24V24H23zM24,23H25V24H24zM25,23H26V24H25zM1,24H2V25H1zM7,24H8V25H7zM10,24H11V25H10zM12,24H13V25H12zM15,24H16V25H15zM20,24H21V25H20zM21,24H22V25H21zM23,24H24V25H23zM24,24H25V25H24zM25,24H26V25H25zM1,25H2V26H1zM2,25H3V26H2zM3,25H4V26H3zM4,25H5V26H4zM5,25H6V26H5zM6,25H7V26H6zM7,25H8V26H7zM9,25H10V26H9zM13,25H14V26H13zM17,25H18V26H17zM18,25H19V26H18zM19,25H20V26H19zM22,25H23V26H22zM25,25H26V26H25z" fill="#090a12"/></svg></div>
     <div>
-      <h2>Free account. 30 seconds. No credit card.</h2>
-      <p>Start with the Price Guide, add your first ten cards, and see your collection like never before.</p>
+      <h2>Scan it. Your shoebox is <span class="hl">waiting</span>.</h2>
+      <p>Check one card. That's how it starts. Ten minutes later you've priced the whole binder.</p>
     </div>
-    <div class="url">gemlinecards.com</div>
+    <div class="right">
+      <div class="url">gemlinecards.com</div>
+      <div class="fine">FREE FOREVER · NO CREDIT CARD · 30 SECONDS</div>
+    </div>
   </div>
 
   <div class="foot">
-    <span>GEMLINE | THE CARD SHOW, ONLINE</span>
+    <span>GEMLINE | THE CARD SHOW, ONLINE · BY COLLECTORS, FOR COLLECTORS</span>
     <span>PRICES POWERED BY CARD HEDGE</span>
   </div>
 </body>
