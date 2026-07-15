@@ -199,7 +199,7 @@ function TopDeals({ deals, onSelect }) {
           Today's Top Deals
         </h2>
         <span style={{ fontFamily: 'var(--ui)', fontSize: 13.5, color: 'rgba(255,255,255,.55)' }}>
-          Cards you can grab for less than they usually sell for. Fees already counted.
+          Real deals in the $50&ndash;$1,500 range &mdash; priced below what they usually sell for, fees already counted.
         </span>
       </div>
       <div style={{
@@ -669,11 +669,14 @@ export default function DealFinder({ view = 'deals' }) {
   const tickerCards = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);
 
   // The simple layer: top 6 deals, one per player for variety, real liquidity only.
+  // Price band $50–$1,500 — deals normal buyers can actually act on (guards
+  // against stale cached API data too; the backend enforces the same band).
   const topDeals = useMemo(() => {
     const seen = new Set();
     const out = [];
     for (const c of cardsWithEdge) {
       if (c.netEdge <= 0) continue;
+      if ((c.market || 0) < 50 || (c.market || 0) > 1500) continue;
       if ((c.sales30d || 0) < 3) continue;
       if (seen.has(c.player)) continue;
       seen.add(c.player);

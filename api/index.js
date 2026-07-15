@@ -1806,35 +1806,37 @@ app.get('/api/market/arb', async (req, res) => {
       return res.json({ q, arbPlays: rows.map(mapCard) });
     }
 
-    // Parallelize all queries — cuts latency dramatically
+    // Parallelize all queries — cuts latency dramatically.
+    // Default buckets target the $50–$1,500 "real buyer" band — most collectors
+    // aren't dropping $5K on a card. ?q= search still covers up to $5K.
     const [uvRes, gainRes, lossRes, tradedRes, arbRes] = await Promise.all([
       // Undervalued: high volume + negative gain = buy-the-dip candidates
       pool.query(`SELECT ${arbCols} FROM cards
-        WHERE catalog_price > 5 AND catalog_price <= 5000 AND sales_7d >= 3
+        WHERE catalog_price >= 50 AND catalog_price <= 1500 AND sales_7d >= 3
           AND COALESCE(gain_7d, 0) < 0
         ORDER BY (COALESCE(sales_7d,0) * ABS(COALESCE(gain_7d,0))) DESC LIMIT 50`),
       // 7-day gainers — trusted pool (top volume, sane |gain| ≤ 150%): raw
       // gain-sorted rows were a wall of clamped +468–500% thin-sale junk
       pool.query(`WITH vol AS (SELECT ${arbCols} FROM cards
-        WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
+        WHERE sales_7d >= 5 AND catalog_price >= 50 AND catalog_price <= 1500
           AND gain_7d IS NOT NULL AND ABS(gain_7d) <= 150
         ORDER BY sales_7d DESC LIMIT 600)
         SELECT * FROM vol WHERE gain_7d > 5 ORDER BY gain_7d DESC LIMIT 25`),
       // 7-day losers — same trusted pool
       pool.query(`WITH vol AS (SELECT ${arbCols} FROM cards
-        WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
+        WHERE sales_7d >= 5 AND catalog_price >= 50 AND catalog_price <= 1500
           AND gain_7d IS NOT NULL AND ABS(gain_7d) <= 150
         ORDER BY sales_7d DESC LIMIT 600)
         SELECT * FROM vol WHERE gain_7d < -5 ORDER BY gain_7d ASC LIMIT 25`),
       // Most traded (real volume)
       pool.query(`SELECT ${arbCols} FROM cards
-        WHERE sales_7d >= 5 AND catalog_price > 5 AND catalog_price <= 5000
+        WHERE sales_7d >= 5 AND catalog_price >= 50 AND catalog_price <= 1500
         ORDER BY sales_7d DESC, sales_30d DESC LIMIT 25`),
       // Arb plays: real lo/hi spread, net-positive after the 7.5% standard fee, ranked by net edge × liquidity
       pool.query(`SELECT ${arbCols} FROM cards
         WHERE ch_price_lo > 0 AND ch_price_hi > 0
           AND ch_price_hi * 0.925 - ch_price_lo >= 5
-          AND catalog_price > 5 AND catalog_price <= 5000
+          AND catalog_price >= 50 AND catalog_price <= 1500
         ORDER BY (ch_price_hi * 0.925 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
         LIMIT 120`),
     ]);
