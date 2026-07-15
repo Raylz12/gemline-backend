@@ -2188,19 +2188,41 @@ async function ebayAppToken() {
 const CCG_SPORTS = new Set(['Pokemon', 'Magic', 'TCG', 'Yu-Gi-Oh!', 'YuGiOh', 'Lorcana', 'One Piece']);
 
 // Conservative title matcher — a wrong match kills trust, so when unsure we
-// drop it: every player token must appear, plus the year OR a distinctive
-// set token, plus grader AND grade for graded cards.
+// drop it: every player token must appear, plus the year, plus a distinctive
+// set token (brands/sports/player-name words don't count), plus grader AND
+// grade for graded cards, and none of the risk words (proxy, lot, Japanese
+// alt-sets, seller hedging like "possible", damage language...).
+const EBAY_DENY_WORDS = [
+  'proxy', 'custom', 'digital', 'repack', 'reprint', 'fake', 'altered', 'replica',
+  'break', 'lot ', ' lot', 'bundle', 'choose', 'pick ', 'damaged', 'crease', 'creased',
+  'miscut', 'misprint', 'possibl', 'read desc', 'as is', 'sticker', 'porcelain', 'novelty',
+];
+const EBAY_GENERIC_SET_WORDS = new Set([
+  'card', 'cards', 'the', 'pokemon', 'basketball', 'football', 'baseball',
+  'hockey', 'soccer', 'magic', 'wrestling', 'tennis', 'golf', 'boxing',
+]);
 function ebayTitleMatches(c, title) {
-  const t = ` ${String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  const rawTitle = String(title || '').toLowerCase();
+  const t = ` ${rawTitle.replace(/[^a-z0-9]+/g, ' ')} `;
+  // Risk words → drop. Also drop Japanese listings unless OUR card is Japanese.
+  if (EBAY_DENY_WORDS.some(w => rawTitle.includes(w))) return false;
+  const oursJp = /japan/i.test(`${c.card_set || ''} ${c.variant || ''}`);
+  if (!oursJp && /japan/.test(rawTitle)) return false;
   const tok = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(Boolean);
   const playerTokens = tok(c.player);
   if (!playerTokens.length) return false;
   if (!playerTokens.every(w => t.includes(` ${w} `))) return false;
   const year = String(c.year || '').trim();
   const yearHit = year && t.includes(` ${year} `);
-  const setTokens = tok(c.card_set).filter(w => w.length >= 4 && !['card', 'cards', 'the'].includes(w) && w !== year);
+  // Distinctive set tokens: ≥4 chars, not generic, not the year, not part of
+  // the player's own name ("Mega" in "Mega Greninja EX" says nothing).
+  const playerSet = new Set(playerTokens);
+  const setTokens = tok(c.card_set).filter(w =>
+    w.length >= 4 && !EBAY_GENERIC_SET_WORDS.has(w) && w !== year && !playerSet.has(w));
   const setHit = setTokens.some(w => t.includes(` ${w} `));
-  if (!yearHit && !setHit) return false;
+  // Require year AND set when we have distinctive set tokens; year alone only
+  // when the set name gives us nothing to check against.
+  if (setTokens.length ? !(yearHit && setHit) : !yearHit) return false;
   if (c.grader && c.grade) {
     const g = String(c.grader).toLowerCase();
     const gr = String(c.grade).toLowerCase().replace(/\.0$/, '');
@@ -2219,7 +2241,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
     // Serve the shared 45-min cache (one eBay sweep serves every Pro user)
     const { rows: [hit] } = await pool.query(
       `SELECT payload, created_at FROM ebay_live_cache
-       WHERE cache_key = 'live_deals_v1' AND created_at > NOW() - INTERVAL '45 minutes'`);
+       WHERE cache_key = 'live_deals_v2' AND created_at > NOW() - INTERVAL '45 minutes'`);
     if (hit) return res.json({ ...hit.payload, cachedAt: hit.created_at });
 
     const FEE = 0.075;
@@ -2319,7 +2341,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
       ebayCalls,
     };
     await pool.query(
-      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v1', $1, NOW())
+      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v2', $1, NOW())
        ON CONFLICT (cache_key) DO UPDATE SET payload = $1, created_at = NOW()`,
       [JSON.stringify(payload)]);
     res.json(payload);
