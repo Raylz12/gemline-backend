@@ -1,6 +1,6 @@
 {
   "builds": [
-    { "src": "api/index.js", "use": "@vercel/node" },
+    { "src": "api/index.js", "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "package.json", "use": "@vercel/next" }
   ],
   "routes": [

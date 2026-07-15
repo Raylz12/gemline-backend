@@ -12,7 +12,8 @@ import { resolveCardId, CARDHEDGE_ID_RE } from '../src/domain/cardResolve.js';
 import * as ordersSvc from '../orders.js';
 import * as escrowSvc from '../escrow.js';
 import { transition } from '../machine.js';
-import { emailUser, templates as emailTpl } from '../lib/email.js';
+import { emailUser, sendEmail, templates as emailTpl } from '../lib/email.js';
+import { computeDealScore } from '../lib/dealScore.js';
 import { stripeClient, createPaymentIntent, createConnectAccount, createOnboardingLink, getAccountStatus, verifyWebhook } from '../src/adapters/stripe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -146,6 +147,62 @@ async function shopListingGate(pool, userId) {
     if (st.active) return null;
     return 'Your shop needs an active Gemline Shop subscription ($9.99/mo) to list new cards. Your existing listings stay live.';
   } catch (e) { console.error('shopListingGate:', e.message); return null; }
+}
+
+// ── GEMLINE Pro (Deal Finder paywall) ────────────────────────────────────────
+// Pro is webhook-driven off the subscriptions table (plan='pro_monthly';
+// legacy 'arb_monthly' rows honored). Admins are always Pro. Detection is a
+// read-time derive (no users.plan column) with a 60s in-memory cache so the
+// per-request check on hot endpoints (/api/market/arb) costs ~nothing.
+const PRO_PLANS = ['pro_monthly', 'arb_monthly'];
+const PRO_PRICE_MONTHLY = 7.99;
+const PRO_TRIAL_DAYS = 7;
+// What non-Pro callers get alongside the 402 — the frontend renders this pitch.
+const PRO_UPGRADE = {
+  plan: 'pro',
+  name: 'GEMLINE Pro',
+  priceMonthly: PRO_PRICE_MONTHLY,
+  trialDays: PRO_TRIAL_DAYS,
+  checkoutPath: '/api/subscription/checkout',
+  features: [
+    'Deal Finder: every card priced below fair value, fees already counted',
+    'GEMLINE Score (0–100) on every deal — edge, liquidity, and risk in one number',
+    'Live Deals: underpriced eBay + GEMLINE listings you can buy right now',
+    'Deal alerts by email — your budget, your players, your minimum score',
+    'Our Track Record: how flagged deals actually performed',
+  ],
+};
+const _proCache = new Map(); // userId -> { pro:boolean, expires:ms }
+async function isProUser(pool, userId) {
+  if (!pool || !userId) return false;
+  const hit = _proCache.get(userId);
+  if (hit && hit.expires > Date.now()) return hit.pro;
+  let pro = false;
+  try {
+    const { rows: [me] } = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (me?.role === 'admin') pro = true;
+    else {
+      const { rows } = await pool.query(
+        `SELECT 1 FROM subscriptions
+         WHERE user_id = $1 AND plan = ANY($2) AND status = 'active'
+           AND (current_period_end IS NULL OR current_period_end > NOW() - INTERVAL '1 day')
+         LIMIT 1`, [userId, PRO_PLANS]);
+      pro = rows.length > 0;
+    }
+  } catch (e) { console.error('isProUser:', e.message); }
+  _proCache.set(userId, { pro, expires: Date.now() + 60_000 });
+  return pro;
+}
+// Middleware: 402 Payment Required with the upgrade pitch for non-Pro users.
+// Mount AFTER requireAuth (needs req.userId).
+async function requirePro(req, res, next) {
+  try {
+    const pool = await getPool();
+    if (await isProUser(pool, req.userId)) return next();
+    res.status(402).json({ error: 'GEMLINE Pro required', gated: true, upgrade: PRO_UPGRADE });
+  } catch (e) {
+    res.status(402).json({ error: 'GEMLINE Pro required', gated: true, upgrade: PRO_UPGRADE });
+  }
 }
 
 // ── DB-backed rate limiters (hold across serverless instances) ───────────────
@@ -1755,10 +1812,21 @@ app.get('/api/market/freshness', async (req, res) => {
   }
 });
 
-// GET /api/market/arb — dedicated arbitrage data (cached 5min)
-app.get('/api/market/arb', async (req, res) => {
+// GET /api/market/arb — dedicated arbitrage data (cached 5min).
+// PRO-ONLY: this is the Deal Finder's data feed. Non-Pro (or anonymous)
+// callers get a 402 with the upgrade pitch and EMPTY buckets — the response
+// shape stays graceful for the frontend but no deal data ever leaves.
+app.get('/api/market/arb', optionalAuth, async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    // Response now varies by subscription — never CDN-cache it.
+    res.set('Cache-Control', 'private, no-store');
+    const pro = await isProUser(await getPool(), req.userId);
+    if (!pro) {
+      return res.status(402).json({
+        gated: true, error: 'GEMLINE Pro required', upgrade: PRO_UPGRADE,
+        arbPlays: [], gainers: [], losers: [], undervalued: [], mostTraded: [],
+      });
+    }
     const forceRefresh = req.query.refresh === '1';
     const q = String(req.query.q || '').trim().slice(0, 80);
     if (!q && !forceRefresh && app._arbCache && app._arbCache.expires > Date.now())
@@ -1769,7 +1837,7 @@ app.get('/api/market/arb', async (req, res) => {
 
     const arbCols = `id, player, sport, card_set, grader, grade, year, variant,
              catalog_price, ch_price_lo, ch_price_hi, gain_7d, sales_7d, sales_30d,
-             ebay_thumb, cardhedge_id, rookie`;
+             ebay_thumb, cardhedge_id, rookie, ch_confidence`;
 
     const mapCard = (c) => ({
       id: c.id, player: c.player, sport: c.sport, set: c.card_set,
@@ -1779,6 +1847,9 @@ app.get('/api/market/arb', async (req, res) => {
       gain7d: Number(c.gain_7d) || 0, sales7d: Number(c.sales_7d) || 0,
       sales30d: Number(c.sales_30d) || 0,
       thumbnail: c.ebay_thumb, cardhedge_id: c.cardhedge_id, rookie: c.rookie,
+      confidence: c.ch_confidence || null,
+      // GEMLINE Score — 0–100 deal quality, computed server-side (lib/dealScore.js)
+      score: computeDealScore(c),
       edge: (Number(c.ch_price_lo) > 0 && Number(c.ch_price_hi) > 0)
         ? +(((Number(c.ch_price_hi) - Number(c.ch_price_lo)) / Number(c.ch_price_lo)) * 100).toFixed(1) : 0,
       spread: (Number(c.ch_price_hi) || 0) - (Number(c.ch_price_lo) || 0),
@@ -1858,6 +1929,449 @@ app.get('/api/market/arb', async (req, res) => {
   } catch (e) {
     console.error('Arb data error:', e.message);
     res.json({ undervalued: [], gainers: [], losers: [], mostTraded: [] });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// GEMLINE PRO — deal alerts, eBay live deals, track record
+// ══════════════════════════════════════════════════════════════════════
+
+let _dealTablesReady = false;
+async function ensureDealTables(pool) {
+  if (_dealTablesReady || !pool) return;
+  await pool.query(`CREATE TABLE IF NOT EXISTS deal_alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    budget_min NUMERIC,
+    budget_max NUMERIC,
+    sports TEXT[],
+    player_query TEXT,
+    min_score INT DEFAULT 0,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_sent_at TIMESTAMPTZ
+  )`).catch(e => console.error('deal_alerts ddl:', e.message));
+  await pool.query(`CREATE TABLE IF NOT EXISTS deal_alert_sent (
+    alert_id UUID NOT NULL,
+    card_id UUID NOT NULL,
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (alert_id, card_id)
+  )`).catch(e => console.error('deal_alert_sent ddl:', e.message));
+  await pool.query(`CREATE TABLE IF NOT EXISTS deal_snapshots (
+    snapshot_date DATE NOT NULL,
+    card_id UUID NOT NULL,
+    score INT,
+    market_price NUMERIC,
+    net_edge NUMERIC,
+    bucket TEXT,
+    market_median NUMERIC,
+    PRIMARY KEY (snapshot_date, card_id)
+  )`).catch(e => console.error('deal_snapshots ddl:', e.message));
+  await pool.query(`CREATE TABLE IF NOT EXISTS ebay_live_cache (
+    cache_key TEXT PRIMARY KEY,
+    payload JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(e => console.error('ebay_live_cache ddl:', e.message));
+  _dealTablesReady = true;
+}
+
+// Shared "today's best deals" pool — same ranking as the arb endpoint's
+// arbPlays bucket, with the GEMLINE Score attached. Used by the alerts cron,
+// snapshots, and the eBay live-deals cross-ref.
+async function fetchTopDealRows(pool, limit = 200) {
+  const { rows } = await pool.query(
+    `SELECT id, player, sport, card_set, grader, grade, year, variant, number,
+            catalog_price, ch_price_lo, ch_price_hi, gain_7d, sales_7d, sales_30d,
+            ebay_thumb, ch_confidence, rookie
+     FROM cards
+     WHERE ch_price_lo > 0 AND ch_price_hi > 0
+       AND ch_price_hi * 0.925 - ch_price_lo >= 5
+       AND catalog_price >= 50 AND catalog_price <= 1500
+     ORDER BY (ch_price_hi * 0.925 - ch_price_lo) * (COALESCE(sales_30d,0) + 1) DESC
+     LIMIT $1`, [limit]);
+  return rows.map(c => ({
+    ...c,
+    score: computeDealScore(c),
+    netEdge: +(Number(c.ch_price_hi) * 0.925 - Number(c.ch_price_lo)).toFixed(2),
+  }));
+}
+
+const dealBucket = (p) => p < 100 ? 'under100' : p < 300 ? '100-300' : p < 750 ? '300-750' : '750-1500';
+async function dealBandMedian(pool) {
+  const { rows: [m] } = await pool.query(
+    `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY catalog_price) AS m
+     FROM cards WHERE ch_price_lo > 0 AND ch_price_hi > 0 AND catalog_price BETWEEN 50 AND 1500`);
+  return Number(m?.m) || null;
+}
+
+// ── Deal alerts CRUD (Pro only) ───────────────────────────────────────
+const mapAlert = (a) => ({
+  id: a.id, name: a.name,
+  budgetMin: a.budget_min === null ? null : Number(a.budget_min),
+  budgetMax: a.budget_max === null ? null : Number(a.budget_max),
+  sports: a.sports || [], playerQuery: a.player_query || '',
+  minScore: a.min_score || 0, active: !!a.active,
+  createdAt: a.created_at, lastSentAt: a.last_sent_at,
+});
+
+app.get('/api/deal-alerts', requireAuth, requirePro, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.json({ alerts: [] });
+    await ensureDealTables(pool);
+    const { rows } = await pool.query('SELECT * FROM deal_alerts WHERE user_id = $1 ORDER BY created_at DESC', [req.userId]);
+    res.json({ alerts: rows.map(mapAlert) });
+  } catch (e) { console.error('deal-alerts list:', e.message); res.json({ alerts: [] }); }
+});
+
+app.post('/api/deal-alerts', requireAuth, requirePro, limitWrites, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.status(500).json({ error: 'Database not available' });
+    await ensureDealTables(pool);
+    const name = String(req.body?.name || '').trim().slice(0, 60);
+    if (!name) return res.status(400).json({ error: 'Name your alert' });
+    const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+    const budgetMin = num(req.body?.budgetMin);
+    const budgetMax = num(req.body?.budgetMax);
+    const minScore = Math.max(0, Math.min(100, parseInt(req.body?.minScore, 10) || 0));
+    const playerQuery = String(req.body?.playerQuery || '').trim().slice(0, 80) || null;
+    const sports = Array.isArray(req.body?.sports)
+      ? req.body.sports.map(s => String(s).slice(0, 30)).filter(Boolean).slice(0, 10) : [];
+    const { rows: [{ n }] } = await pool.query('SELECT COUNT(*)::int AS n FROM deal_alerts WHERE user_id = $1', [req.userId]);
+    if (n >= 10) return res.status(400).json({ error: 'Alert limit reached (10) — delete one first' });
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO deal_alerts (user_id, name, budget_min, budget_max, sports, player_query, min_score)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [req.userId, name, budgetMin, budgetMax, sports.length ? sports : null, playerQuery, minScore]);
+    res.json({ ok: true, alert: mapAlert(row) });
+  } catch (e) { console.error('deal-alerts create:', e.message); res.status(400).json({ error: e.message }); }
+});
+
+app.put('/api/deal-alerts/:id', requireAuth, requirePro, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.status(500).json({ error: 'Database not available' });
+    await ensureDealTables(pool);
+    const active = req.body?.active;
+    if (typeof active !== 'boolean') return res.status(400).json({ error: 'active boolean required' });
+    const { rowCount } = await pool.query(
+      'UPDATE deal_alerts SET active = $1 WHERE id = $2 AND user_id = $3', [active, req.params.id, req.userId]);
+    if (!rowCount) return res.status(404).json({ error: 'Alert not found' });
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/deal-alerts/:id', requireAuth, requirePro, async (req, res) => {
+  try {
+    const pool = await getPool();
+    if (!pool) return res.status(500).json({ error: 'Database not available' });
+    await ensureDealTables(pool);
+    const { rowCount } = await pool.query('DELETE FROM deal_alerts WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+    if (!rowCount) return res.status(404).json({ error: 'Alert not found' });
+    await pool.query('DELETE FROM deal_alert_sent WHERE alert_id = $1', [req.params.id]).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ── Deal alerts cron + daily snapshots ──────────────────────────────────
+// Runs 30min after each price sync (host crontab 30 6,14,22 UTC). Snapshots
+// the day's top 50 deals for the public track record, then emails matching
+// alerts (≤1 email per alert per 24h; cards dedup'd per alert for 7 days).
+async function dealAlertsCronHandler(req, res) {
+  if (!cronOrAdminAuthed(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const pool = await getPool();
+    if (!pool) return res.json({ ok: false, reason: 'no db' });
+    await ensureDealTables(pool);
+    const t0 = Date.now();
+    const deals = await fetchTopDealRows(pool, 250);
+
+    // 1) Snapshot today's top 50 (by GEMLINE Score, positive net edge only)
+    const marketMedian = await dealBandMedian(pool);
+    const top = deals.filter(d => d.netEdge > 0).sort((a, b) => b.score - a.score).slice(0, 50);
+    let snapshotted = 0;
+    for (const d of top) {
+      const { rowCount } = await pool.query(
+        `INSERT INTO deal_snapshots (snapshot_date, card_id, score, market_price, net_edge, bucket, market_median)
+         VALUES (CURRENT_DATE, $1, $2, $3, $4, $5, $6)
+         ON CONFLICT (snapshot_date, card_id) DO NOTHING`,
+        [d.id, d.score, Number(d.catalog_price) || null, d.netEdge, dealBucket(Number(d.catalog_price) || 0), marketMedian]);
+      snapshotted += rowCount;
+    }
+
+    // 2) Match alerts → email (Pro subscribers only)
+    const { rows: alerts } = await pool.query(
+      `SELECT a.*, u.email FROM deal_alerts a JOIN users u ON u.id = a.user_id
+       WHERE a.active AND (a.last_sent_at IS NULL OR a.last_sent_at < NOW() - INTERVAL '24 hours')`);
+    let emailsSent = 0;
+    for (const a of alerts) {
+      if (!a.email) continue;
+      if (!(await isProUser(pool, a.user_id))) continue; // lapsed subs stop getting Pro mail
+      const min = a.budget_min === null ? 0 : Number(a.budget_min);
+      const max = a.budget_max === null ? Infinity : Number(a.budget_max);
+      const pq = String(a.player_query || '').toLowerCase().split(/\s+/).filter(Boolean);
+      let matches = deals.filter(d => {
+        const buy = Number(d.ch_price_lo) || 0;
+        if (d.netEdge <= 0 || buy <= 0) return false;
+        if (buy < min || buy > max) return false;
+        if (d.score < (a.min_score || 0)) return false;
+        if (Array.isArray(a.sports) && a.sports.length && !a.sports.includes(d.sport)) return false;
+        if (pq.length) {
+          const hay = `${d.player || ''} ${d.card_set || ''} ${d.variant || ''}`.toLowerCase();
+          if (!pq.every(t => hay.includes(t))) return false;
+        }
+        return true;
+      });
+      if (!matches.length) continue;
+      const { rows: sent } = await pool.query(
+        `SELECT card_id FROM deal_alert_sent WHERE alert_id = $1 AND sent_at > NOW() - INTERVAL '7 days'`, [a.id]);
+      const sentSet = new Set(sent.map(s => s.card_id));
+      matches = matches.filter(d => !sentSet.has(d.id)).sort((x, y) => y.score - x.score).slice(0, 5);
+      if (!matches.length) continue;
+      const tpl = emailTpl.dealAlert({
+        alertName: a.name,
+        deals: matches.map(d => ({
+          player: d.player,
+          detail: `${d.grader || 'Raw'} ${d.grade || ''}`.trim() + (d.card_set ? ` · ${String(d.card_set).slice(0, 40)}` : ''),
+          buy: Number(d.ch_price_lo), rate: Number(d.ch_price_hi),
+          net: d.netEdge, score: d.score,
+        })),
+      });
+      const out = await sendEmail({ to: a.email, ...tpl });
+      if (out.ok) {
+        emailsSent++;
+        for (const d of matches) {
+          await pool.query(
+            `INSERT INTO deal_alert_sent (alert_id, card_id, sent_at) VALUES ($1, $2, NOW())
+             ON CONFLICT (alert_id, card_id) DO UPDATE SET sent_at = NOW()`, [a.id, d.id]);
+        }
+        await pool.query('UPDATE deal_alerts SET last_sent_at = NOW() WHERE id = $1', [a.id]);
+      }
+    }
+    res.json({ ok: true, ms: Date.now() - t0, snapshotted, alertsChecked: alerts.length, emailsSent });
+  } catch (e) {
+    console.error('deal-alerts cron:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+}
+app.get('/api/cron/deal-alerts', dealAlertsCronHandler);
+app.post('/api/cron/deal-alerts', dealAlertsCronHandler);
+
+// ── eBay live deals cross-ref (Pro only) ────────────────────────────────
+// For the top ~40 deal cards, find ACTIVE eBay fixed-price listings priced
+// meaningfully below our FMV, plus GEMLINE's own underpriced listings.
+// Cached 45min in ebay_live_cache (serverless memory doesn't survive) so we
+// stay far under the eBay Browse 5K/day quota (≤40 calls per rebuild).
+let _ebayToken = null; // { token, expires }
+async function ebayAppToken() {
+  if (_ebayToken && _ebayToken.expires > Date.now()) return _ebayToken.token;
+  const id = process.env.EBAY_APP_ID, cert = process.env.EBAY_CERT_ID;
+  if (!id || !cert) return null;
+  try {
+    const r = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Basic ' + Buffer.from(`${id}:${cert}`).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials&scope=' + encodeURIComponent('https://api.ebay.com/oauth/api_scope'),
+    });
+    if (!r.ok) { console.error('ebay token:', r.status); return null; }
+    const d = await r.json();
+    _ebayToken = { token: d.access_token, expires: Date.now() + Math.max(60, (d.expires_in || 7200) - 120) * 1000 };
+    return _ebayToken.token;
+  } catch (e) { console.error('ebay token:', e.message); return null; }
+}
+
+const CCG_SPORTS = new Set(['Pokemon', 'Magic', 'TCG', 'Yu-Gi-Oh!', 'YuGiOh', 'Lorcana', 'One Piece']);
+
+// Conservative title matcher — a wrong match kills trust, so when unsure we
+// drop it: every player token must appear, plus the year OR a distinctive
+// set token, plus grader AND grade for graded cards.
+function ebayTitleMatches(c, title) {
+  const t = ` ${String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  const tok = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(Boolean);
+  const playerTokens = tok(c.player);
+  if (!playerTokens.length) return false;
+  if (!playerTokens.every(w => t.includes(` ${w} `))) return false;
+  const year = String(c.year || '').trim();
+  const yearHit = year && t.includes(` ${year} `);
+  const setTokens = tok(c.card_set).filter(w => w.length >= 4 && !['card', 'cards', 'the'].includes(w) && w !== year);
+  const setHit = setTokens.some(w => t.includes(` ${w} `));
+  if (!yearHit && !setHit) return false;
+  if (c.grader && c.grade) {
+    const g = String(c.grader).toLowerCase();
+    const gr = String(c.grade).toLowerCase().replace(/\.0$/, '');
+    if (!t.includes(` ${g} `) || !t.includes(` ${gr} `)) return false;
+  }
+  return true;
+}
+
+app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
+  try {
+    res.set('Cache-Control', 'private, no-store');
+    const pool = await getPool();
+    if (!pool) return res.json({ deals: [] });
+    await ensureDealTables(pool);
+
+    // Serve the shared 45-min cache (one eBay sweep serves every Pro user)
+    const { rows: [hit] } = await pool.query(
+      `SELECT payload, created_at FROM ebay_live_cache
+       WHERE cache_key = 'live_deals_v1' AND created_at > NOW() - INTERVAL '45 minutes'`);
+    if (hit) return res.json({ ...hit.payload, cachedAt: hit.created_at });
+
+    const FEE = 0.075;
+    const deals = [];
+
+    // 1) GEMLINE's own underpriced listings (< 0.85×FMV) — ranked first
+    try {
+      const { rows: own } = await pool.query(
+        `SELECT l.id AS listing_id, l.price, c.id AS card_id, c.player, c.card_set, c.grader, c.grade,
+                c.year, c.number, c.sport, c.catalog_price, c.ebay_thumb
+         FROM listings l JOIN cards c ON c.id = l.card_id
+         WHERE l.status = 'active' AND c.catalog_price > 0 AND l.price > 0
+           AND l.price < 0.85 * c.catalog_price
+         ORDER BY (c.catalog_price - l.price) DESC LIMIT 12`);
+      for (const o of own) {
+        const fmv = Number(o.catalog_price);
+        const price = Number(o.price);
+        deals.push({
+          source: 'gemline',
+          title: `${o.player} ${o.year || ''} ${(o.card_set || '').slice(0, 40)} ${o.grader || ''} ${o.grade || ''}`.replace(/\s+/g, ' ').trim(),
+          player: o.player, grader: o.grader, grade: o.grade, sport: o.sport,
+          price, shipping: 0, total: price,
+          goingRate: fmv,
+          margin: +(fmv * (1 - FEE) - price).toFixed(2),
+          marginPct: +(((fmv * (1 - FEE) - price) / price) * 100).toFixed(1),
+          url: `/card/${o.card_id}`,
+          image: o.ebay_thumb || null,
+          cardId: o.card_id,
+        });
+      }
+    } catch (e) { console.error('live-deals own listings:', e.message); }
+
+    // 2) eBay Browse cross-ref on the top deal cards
+    const token = await ebayAppToken();
+    let ebayCalls = 0;
+    if (token) {
+      const cards = await fetchTopDealRows(pool, 40);
+      const chunk = (arr, n) => { const r = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; };
+      const found = [];
+      for (const batch of chunk(cards, 8)) {
+        const results = await Promise.all(batch.map(async (c) => {
+          try {
+            const fmv = Number(c.catalog_price) || 0;
+            if (fmv < 50) return [];
+            const bits = [c.player, c.year];
+            if (c.grader && c.grade) bits.push(`${c.grader} ${c.grade}`);
+            const params = new URLSearchParams({
+              q: bits.filter(Boolean).join(' ').slice(0, 100),
+              category_ids: CCG_SPORTS.has(c.sport) ? '183454' : '212',
+              filter: `buyingOptions:{FIXED_PRICE},price:[10..${Math.max(15, fmv * 0.85).toFixed(0)}],priceCurrency:USD,itemLocationCountry:US`,
+              sort: 'price',
+              limit: '6',
+            });
+            ebayCalls++;
+            const r2 = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${params}`, {
+              headers: { Authorization: `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US' },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!r2.ok) return [];
+            const d = await r2.json();
+            const out = [];
+            for (const it of d.itemSummaries || []) {
+              if (!ebayTitleMatches(c, it.title)) continue;   // when unsure, drop it
+              const price = Number(it.price?.value) || 0;
+              const ship = Number(it.shippingOptions?.[0]?.shippingCost?.value) || 0;
+              const total = +(price + ship).toFixed(2);
+              // Sanity rails: too-cheap usually means wrong item (lot, reprint,
+              // damaged) — require 25–85% of FMV and ≥$10 net flip margin.
+              if (total < fmv * 0.25 || total > fmv * 0.85) continue;
+              const margin = +(fmv * (1 - FEE) - total).toFixed(2);
+              if (margin < 10) continue;
+              out.push({
+                source: 'ebay',
+                title: it.title,
+                player: c.player, grader: c.grader, grade: c.grade, sport: c.sport,
+                price, shipping: ship, total,
+                goingRate: fmv,
+                margin, marginPct: +((margin / total) * 100).toFixed(1),
+                url: it.itemWebUrl,
+                image: it.image?.imageUrl || it.thumbnailImages?.[0]?.imageUrl || c.ebay_thumb || null,
+                cardId: c.id,
+              });
+            }
+            // Max 2 listings per card so one card can't wallpaper the panel
+            return out.sort((a, b) => b.margin - a.margin).slice(0, 2);
+          } catch { return []; }
+        }));
+        found.push(...results.flat());
+        if (found.length >= 20) break;
+      }
+      deals.push(...found.sort((a, b) => b.margin - a.margin));
+    }
+
+    const payload = {
+      deals: deals.slice(0, 24),
+      generatedAt: new Date().toISOString(),
+      ebayCalls,
+    };
+    await pool.query(
+      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v1', $1, NOW())
+       ON CONFLICT (cache_key) DO UPDATE SET payload = $1, created_at = NOW()`,
+      [JSON.stringify(payload)]);
+    res.json(payload);
+  } catch (e) {
+    console.error('live-deals:', e.message);
+    res.json({ deals: [], error: 'temporarily unavailable' });
+  }
+});
+
+// ── Track record (Pro only) ─────────────────────────────────────────────
+// Flagged-deal receipts: snapshots ≥7 days old vs today's price, and the
+// average move of flagged deals vs the deal-band market median.
+app.get('/api/market/track-record', requireAuth, requirePro, async (req, res) => {
+  try {
+    res.set('Cache-Control', 'private, no-store');
+    const pool = await getPool();
+    if (!pool) return res.json({ items: [], summary: null });
+    await ensureDealTables(pool);
+    const [{ rows }, { rows: [first] }, currentMedian] = await Promise.all([
+      pool.query(
+        `SELECT s.snapshot_date, s.card_id, s.score, s.market_price, s.net_edge, s.market_median,
+                c.player, c.card_set, c.grader, c.grade, c.year, c.sport,
+                c.catalog_price AS current_price, c.ebay_thumb
+         FROM deal_snapshots s JOIN cards c ON c.id = s.card_id
+         WHERE s.snapshot_date <= CURRENT_DATE - 7
+         ORDER BY s.snapshot_date DESC, s.score DESC LIMIT 300`),
+      pool.query('SELECT MIN(snapshot_date) AS d FROM deal_snapshots'),
+      dealBandMedian(pool),
+    ]);
+    const items = rows
+      .filter(r => Number(r.market_price) > 0 && Number(r.current_price) > 0)
+      .map(r => ({
+        date: r.snapshot_date, cardId: r.card_id, score: r.score,
+        player: r.player, set: r.card_set, grader: normGrader(r.grader), grade: normGrade(r.grade),
+        year: r.year, sport: r.sport, thumbnail: r.ebay_thumb,
+        flaggedPrice: Number(r.market_price), currentPrice: Number(r.current_price),
+        netEdge: Number(r.net_edge) || 0,
+        movePct: +(((Number(r.current_price) - Number(r.market_price)) / Number(r.market_price)) * 100).toFixed(1),
+        marketMovePct: (r.market_median && currentMedian)
+          ? +(((currentMedian - Number(r.market_median)) / Number(r.market_median)) * 100).toFixed(1) : null,
+      }));
+    const avg = (xs) => xs.length ? +(xs.reduce((s, x) => s + x, 0) / xs.length).toFixed(1) : null;
+    const summary = items.length ? {
+      count: items.length,
+      avgMovePct: avg(items.map(i => i.movePct)),
+      avgMarketMovePct: avg(items.map(i => i.marketMovePct).filter(x => x !== null)),
+      winRate: +((items.filter(i => i.movePct >= 0).length / items.length) * 100).toFixed(0),
+    } : null;
+    res.json({ items, summary, trackingSince: first?.d || null });
+  } catch (e) {
+    console.error('track-record:', e.message);
+    res.json({ items: [], summary: null, trackingSince: null });
   }
 });
 
@@ -6212,26 +6726,41 @@ app.get('/api/subscription/status', requireAuth, async (req, res) => {
   }
 });
 
+// GEMLINE Pro checkout — $7.99/mo, 7-day free trial. Formerly "GEMLINE
+// Arbitrage Engine"; repurposed as THE Pro subscription that unlocks the
+// Deal Finder. Activation is webhook-driven (customer.subscription.*) with
+// the return handler below as the immediate-UX fallback.
 app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
   try {
     const { default: Stripe } = await import('stripe');
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) return res.status(400).json({ error: 'Stripe not configured' });
+    const pool = await getPool();
+    await ensureSubColumns(pool);
     const stripe = new Stripe(key);
+    // Reuse an existing Stripe customer for this user if we have one.
+    let customerId = null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT stripe_customer_id FROM subscriptions WHERE user_id = $1 AND stripe_customer_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`, [req.userId]);
+      customerId = rows[0]?.stripe_customer_id || null;
+    } catch { /* ignore */ }
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{
         price_data: {
           recurring: { interval: 'month' },
           currency: 'usd',
-          unit_amount: 799,
-          product_data: { name: 'GEMLINE Arbitrage Engine' },
+          unit_amount: Math.round(PRO_PRICE_MONTHLY * 100),
+          product_data: { name: 'GEMLINE Pro' },
         },
         quantity: 1,
       }],
-      subscription_data: { trial_period_days: 7 },
-      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/market?tab=deals&sub=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/market?tab=deals&sub=cancelled`,
+      ...(customerId ? { customer: customerId } : {}),
+      subscription_data: { trial_period_days: PRO_TRIAL_DAYS, metadata: { userId: req.userId, plan: 'pro_monthly' } },
+      metadata: { userId: req.userId, plan: 'pro_monthly' },
+      success_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/api/subscription/return?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/deal-finder?sub=cancelled`,
       client_reference_id: req.userId,
     });
     res.json({ url: session.url });
@@ -6241,30 +6770,67 @@ app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
   }
 });
 
+// Customer portal — manage/cancel GEMLINE Pro
+app.post('/api/subscription/portal', requireAuth, async (req, res) => {
+  try {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) return res.status(400).json({ error: 'Stripe not configured' });
+    const pool = await getPool();
+    await ensureSubColumns(pool);
+    const { rows } = await pool.query(
+      `SELECT stripe_customer_id FROM subscriptions WHERE user_id = $1 AND stripe_customer_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`, [req.userId]);
+    const customerId = rows[0]?.stripe_customer_id;
+    if (!customerId) return res.status(400).json({ error: 'No subscription to manage yet' });
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(key);
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${process.env.APP_URL || 'https://gemlinecards.com'}/deal-finder`,
+    });
+    res.json({ url: portal.url });
+  } catch (e) {
+    console.error('pro sub portal:', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.get('/api/subscription/return', async (req, res) => {
   try {
     const sessionId = req.query.session_id;
-    if (!sessionId) return res.redirect('/market?tab=deals');
+    if (!sessionId) return res.redirect('/deal-finder');
     const { default: Stripe } = await import('stripe');
     const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) return res.redirect('/market?tab=deals');
+    if (!key) return res.redirect('/deal-finder');
     const stripe = new Stripe(key);
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status === 'paid' || session.status === 'complete') {
-      const r = await getRepo();
-      const pool = r.pool;
-      if (pool && session.client_reference_id) {
+    const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['subscription'] });
+    const pool = await getPool();
+    await ensureSubColumns(pool);
+    const userId = session.client_reference_id || session.metadata?.userId;
+    if (pool && userId && (session.status === 'complete' || session.payment_status === 'paid')) {
+      const sub = session.subscription;
+      const subId = typeof sub === 'string' ? sub : sub?.id;
+      const status = (typeof sub === 'object' && sub?.status) ? sub.status : 'active';
+      const periodEnd = (typeof sub === 'object' && sub?.current_period_end)
+        ? new Date(sub.current_period_end * 1000) : new Date(Date.now() + 30 * 86400_000);
+      // Upsert-ish: one pro_monthly row per user, keep it current.
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM subscriptions WHERE user_id = $1 AND plan = ANY($2) ORDER BY created_at DESC LIMIT 1`, [userId, PRO_PLANS]);
+      if (existing.length) {
         await pool.query(
-          `INSERT INTO subscriptions (user_id, plan, status, stripe_subscription_id, current_period_end)
-           VALUES ($1, 'arb_monthly', 'active', $2, NOW() + INTERVAL '30 days')
-           ON CONFLICT DO NOTHING`,
-          [session.client_reference_id, session.subscription || session.id]
-        );
+          `UPDATE subscriptions SET plan = 'pro_monthly', status = $1, stripe_subscription_id = $2, current_period_end = $3, stripe_customer_id = $4 WHERE id = $5`,
+          [status === 'trialing' ? 'active' : status, subId, periodEnd, session.customer || null, existing[0].id]);
+      } else {
+        await pool.query(
+          `INSERT INTO subscriptions (user_id, plan, status, stripe_subscription_id, current_period_end, stripe_customer_id)
+           VALUES ($1, 'pro_monthly', $2, $3, $4, $5)`,
+          [userId, status === 'trialing' ? 'active' : status, subId, periodEnd, session.customer || null]);
       }
+      _proCache.delete(userId); // take effect immediately
     }
-    res.redirect('/market?tab=deals&sub=success');
+    res.redirect('/deal-finder?sub=success');
   } catch (e) {
-    res.redirect('/market?tab=deals');
+    console.error('pro sub return:', e.message);
+    res.redirect('/deal-finder');
   }
 });
 
@@ -7035,14 +7601,16 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
           if (rowCount === 0) {
             const plan = sub.metadata?.plan || null;
             const userId = sub.metadata?.userId || null;
-            if (plan === 'shop_monthly' && userId) {
+            if ((plan === 'shop_monthly' || plan === 'pro_monthly') && userId) {
               await ensureSubColumns(pool);
               await pool.query(
                 `INSERT INTO subscriptions (user_id, plan, status, stripe_subscription_id, current_period_end, stripe_customer_id)
-                 VALUES ($1, 'shop_monthly', $2, $3, $4, $5)`,
-                [userId, status, sub.id, periodEnd, customerId]);
+                 VALUES ($1, $6, $2, $3, $4, $5)`,
+                [userId, status, sub.id, periodEnd, customerId, plan]);
             }
           }
+          // Bust the Pro cache for this user so gate flips within a minute.
+          if (sub.metadata?.userId) _proCache.delete(sub.metadata.userId);
         } catch (e) { console.error('[webhook] sub update:', e.message); }
       }
       break;

@@ -129,7 +129,22 @@ export function appRouter(repo, stripe) {
     const incoming  = await Promise.all(incomingTrades.map(t => myView(t, userId)));
     const outgoing  = await Promise.all(outgoingTrades.map(t => myView(t, userId)));
     const me = await repo.users.get(userId);
-    return { me: { id: me.id, handle: me.handle }, balance, listings: cards, trades: { incoming, outgoing } };
+    // Plan for the frontend capability gate (ProGate): 'pro' when the user has
+    // an active GEMLINE Pro subscription (or is admin), else 'free'. Derived
+    // from the subscriptions table — webhook-driven, no users.plan column.
+    let plan = 'free';
+    try {
+      if (me.role === 'admin') plan = 'pro';
+      else if (repo.pool) {
+        const { rows } = await repo.pool.query(
+          `SELECT 1 FROM subscriptions
+           WHERE user_id = $1 AND plan IN ('pro_monthly', 'arb_monthly') AND status = 'active'
+             AND (current_period_end IS NULL OR current_period_end > NOW() - INTERVAL '1 day')
+           LIMIT 1`, [userId]);
+        if (rows.length) plan = 'pro';
+      }
+    } catch { /* default free */ }
+    return { me: { id: me.id, handle: me.handle, plan }, balance, listings: cards, trades: { incoming, outgoing } };
   }
 
   r.post('/session', wrap(async (req) => {
