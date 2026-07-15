@@ -19,7 +19,7 @@ const FAQS = [
   },
   {
     q: 'What is the Deal Finder?',
-    a: 'The Deal Finder (its own tab in the site navigation) surfaces cards listed below their fair market value, with the marketplace fee already accounted for, plus recent sales volume so you can judge how liquid a card really is.',
+    a: 'The Deal Finder is GEMLINE Pro\u2019s deal desk: cards priced below their fair market value with the marketplace fee already counted, a 0\u2013100 GEMLINE Score on every deal, live underpriced listings cross-checked against eBay, email deal alerts, and a public track record of how flagged deals performed. GEMLINE Pro is $7.99/month after a 7-day free trial.',
   },
   {
     q: 'How do live auctions work?',

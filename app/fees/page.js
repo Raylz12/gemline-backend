@@ -13,6 +13,7 @@ const ROWS = [
   ['Every sale after that', '7.5% of the sale price'],
   ['Buying a card', 'The listed price, no buyer surcharge from GEMLINE'],
   ['Shop / dealer accounts', '$9.99/mo to list unlimited cards'],
+  ['GEMLINE Pro (Deal Finder, deal alerts, live eBay deals)', '$7.99/mo after a 7-day free trial'],
 ];
 
 const STEPS = [
@@ -44,6 +45,16 @@ export default function FeesPage() {
         sale on it&apos;s 7.5% (you keep <b style={{ color: 'var(--up)' }}>$92.50</b> of that $100). The rate is locked in when
         each order is placed, and the sell flow shows your exact net payout before you list, no math required.
       </p>
+
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', marginTop: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: 'var(--txt)' }}>GEMLINE Pro</div>
+        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+          The <b style={{ color: 'var(--txt)' }}>Deal Finder</b> is a paid Pro feature: cards priced below their going rate with fees
+          already counted, a 0–100 GEMLINE Score on every deal, live underpriced eBay &amp; GEMLINE listings, email deal alerts, and our
+          public track record. <b style={{ color: 'var(--txt)' }}>$7.99/month</b> after a 7-day free trial — cancel anytime. Browsing,
+          buying, selling, and the price guide stay free.
+        </p>
+      </div>
 
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', marginTop: 14 }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: 'var(--txt)' }}>Running a shop?</div>
