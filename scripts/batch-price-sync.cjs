@@ -119,6 +119,10 @@ async function refreshMV() {
   try {
     process.stdout.write('\n  [MV] Refreshing mv_card_feed...');
     const t0 = Date.now();
+    // Neon: concurrent refresh diffs via temp table; default temp_buffers too small
+    // for 374K-family MV -> "no empty local buffer available". Bump before refresh.
+    await client.query("SET temp_buffers = '512MB'");
+    await client.query('SET statement_timeout = 0');
     await client.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_card_feed');
     process.stdout.write(` done (${Date.now() - t0}ms)\n`);
   } catch (e) {
