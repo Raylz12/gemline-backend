@@ -2196,6 +2196,16 @@ const EBAY_DENY_WORDS = [
   'proxy', 'custom', 'digital', 'repack', 'reprint', 'fake', 'altered', 'replica',
   'break', 'lot ', ' lot', 'bundle', 'choose', 'pick ', 'damaged', 'crease', 'creased',
   'miscut', 'misprint', 'possibl', 'read desc', 'as is', 'sticker', 'porcelain', 'novelty',
+  'off center', 'off-center', '(oc', 'oc)', 'qualifier', '(mk', '(st', '(pd',
+];
+// Parallel/insert language — if OUR card is the base version, a title selling
+// a refractor/color parallel is a different (differently priced) card.
+const EBAY_PARALLEL_WORDS = [
+  'refractor', 'xfractor', 'x-fractor', 'wave', 'shimmer', 'mojo', 'disco',
+  'cracked ice', 'fast break', 'pulsar', 'sapphire', 'velocity', 'hyper',
+  'tie dye', 'tie-dye', 'snakeskin', 'dragon scale', 'red white', 'blue ice',
+  'atomic', 'negative', 'camo', 'holo ', 'reverse holo', 'gold /', 'auto',
+  'autograph', 'patch', '/10', '/25', '/49', '/50', '/75', '/99', '/149', '/199', '/250',
 ];
 const EBAY_GENERIC_SET_WORDS = new Set([
   'card', 'cards', 'the', 'pokemon', 'basketball', 'football', 'baseball',
@@ -2228,6 +2238,16 @@ function ebayTitleMatches(c, title) {
     const gr = String(c.grade).toLowerCase().replace(/\.0$/, '');
     if (!t.includes(` ${g} `) || !t.includes(` ${gr} `)) return false;
   }
+  // Variant guard: base card → no parallel language in the title; named
+  // variant → at least one variant token must appear.
+  const ourVariant = String(c.variant || '').trim().toLowerCase();
+  const isBase = !ourVariant || ourVariant === 'base' || ourVariant === 'standard';
+  if (isBase) {
+    if (EBAY_PARALLEL_WORDS.some(w => rawTitle.includes(w))) return false;
+  } else {
+    const vTokens = tok(c.variant).filter(w => w.length >= 3 && !['base', 'card'].includes(w));
+    if (vTokens.length && !vTokens.some(w => t.includes(` ${w} `))) return false;
+  }
   // Card number: same player+set+grade can differ 3× in price between #276
   // and #277 (base vs SIR), so when OUR card has a number the title must
   // carry that exact number — listings that don't state it get dropped.
@@ -2252,7 +2272,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
     // Serve the shared 45-min cache (one eBay sweep serves every Pro user)
     const { rows: [hit] } = await pool.query(
       `SELECT payload, created_at FROM ebay_live_cache
-       WHERE cache_key = 'live_deals_v4' AND created_at > NOW() - INTERVAL '45 minutes'`);
+       WHERE cache_key = 'live_deals_v5' AND created_at > NOW() - INTERVAL '45 minutes'`);
     if (hit) return res.json({ ...hit.payload, cachedAt: hit.created_at });
 
     const FEE = 0.075;
@@ -2353,7 +2373,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
       ebayCalls,
     };
     await pool.query(
-      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v4', $1, NOW())
+      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v5', $1, NOW())
        ON CONFLICT (cache_key) DO UPDATE SET payload = $1, created_at = NOW()`,
       [JSON.stringify(payload)]);
     res.json(payload);
