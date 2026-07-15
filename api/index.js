@@ -1335,12 +1335,18 @@ app.get('/api/market/hot-board', async (req, res) => {
 // Everything computed from OUR catalog: no external calls, no pop faked (we
 // don't hold pop data yet — future enhancement). Client does the grading-cost
 // math (user-adjustable input); server ships the candidate pool, cached 10min.
-app.get('/api/market/worth-grading', async (req, res) => {
+// PRO-ONLY since July 2026: Worth Grading lives on the paywalled /deal-finder
+// page and its candidate pool IS deal data. 402 + upgrade pitch for non-Pro.
+// The 10-min in-memory candidate cache below is unchanged.
+app.get('/api/market/worth-grading', optionalAuth, async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1200');
+    res.set('Cache-Control', 'private, no-store');
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ candidates: [] });
+    if (!(await isProUser(pool, req.userId))) {
+      return res.status(402).json({ gated: true, error: 'GEMLINE Pro required', upgrade: PRO_UPGRADE, candidates: [] });
+    }
     const sport = (req.query.sport && req.query.sport !== 'All') ? String(req.query.sport).slice(0, 40) : null;
     const key = sport || 'All';
     if (!app._worthGrading) app._worthGrading = {};

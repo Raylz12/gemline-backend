@@ -52,7 +52,11 @@ export default function TrackRecord() {
   if (!items.length) {
     return (
       <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 34, marginBottom: 12 }}>📈</div>
+        <div style={{ marginBottom: 12 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#34D88A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block' }}>
+            <path d="M3 3v18h18" /><path d="m7 15 4-6 4 3 5-7" />
+          </svg>
+        </div>
         <div style={{ fontFamily: 'var(--disp)', fontSize: 20, fontWeight: 800, color: 'var(--txt)' }}>The receipts are coming</div>
         <p style={{ fontFamily: 'var(--ui)', fontSize: 14, color: 'rgba(255,255,255,.55)', maxWidth: 480, margin: '10px auto 0', lineHeight: 1.6 }}>
           Tracking started {since ? since.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'July 2026'}. Every price sync we snapshot the day&apos;s

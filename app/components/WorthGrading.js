@@ -35,7 +35,14 @@ export default function WorthGrading({ onSelect }) {
   useEffect(() => {
     let dead = false;
     setRaw(null);
-    fetch(`/api/market/worth-grading?sport=${encodeURIComponent(sport)}`)
+    // Pro-gated feed — send the token; non-Pro gets empty candidates behind
+    // the ProGate blur anyway.
+    let headers = {};
+    try {
+      const t = localStorage.getItem('gemline_token');
+      if (t) headers = { Authorization: `Bearer ${t}` };
+    } catch {}
+    fetch(`/api/market/worth-grading?sport=${encodeURIComponent(sport)}`, { headers })
       .then(r => r.json())
       .then(d => { if (!dead) setRaw(d.candidates || []); })
       .catch(() => { if (!dead) setRaw([]); });
