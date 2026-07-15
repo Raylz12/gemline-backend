@@ -1277,10 +1277,10 @@ app.get('/api/market/hot-board', async (req, res) => {
 // Worth Grading? — raw cards where the family also has PSA 10 (and 9) prices.
 // Everything computed from OUR catalog: no external calls, no pop faked (we
 // don't hold pop data yet — future enhancement). Client does the grading-cost
-// math (user-adjustable input); server ships the candidate pool, cached 15min.
+// math (user-adjustable input); server ships the candidate pool, cached 10min.
 app.get('/api/market/worth-grading', async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    res.set('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1200');
     const r = await getRepo();
     const pool = r.pool;
     if (!pool) return res.json({ candidates: [] });
@@ -1340,7 +1340,7 @@ app.get('/api/market/worth-grading', async (req, res) => {
       });
     }
     const data = { candidates: merged.slice(0, 1000), popAvailable: false };
-    app._worthGrading[key] = { data, expires: Date.now() + 15 * 60 * 1000 };
+    app._worthGrading[key] = { data, expires: Date.now() + 10 * 60 * 1000 };
     res.json(data);
   } catch (e) { console.error('worth-grading:', e.message); res.json({ candidates: [] }); }
 });
@@ -1731,6 +1731,27 @@ app.post('/api/cards/analyze', requireAuth, rateLimit({ max: 20, windowMs: 60_00
   } catch (e) {
     if (!e.status || e.status >= 500) console.error('analyze:', e.message);
     res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// GET /api/market/freshness — when card prices last synced (max ch_updated_at).
+// Powers the "Prices updated X ago" stamp on the Deal Finder. Cached 10min
+// in-memory + 5min CDN so the single seq-scan max() stays cheap.
+app.get('/api/market/freshness', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    if (app._freshnessCache?.expires > Date.now())
+      return res.json(app._freshnessCache.data);
+    const r = await getRepo();
+    const pool = r.pool;
+    if (!pool) return res.json({ updatedAt: null });
+    const { rows } = await pool.query(`SELECT max(ch_updated_at) AS u FROM cards`);
+    const data = { updatedAt: rows[0]?.u || null };
+    app._freshnessCache = { data, expires: Date.now() + 10 * 60 * 1000 };
+    res.json(data);
+  } catch (e) {
+    console.error('freshness:', e.message);
+    res.json({ updatedAt: null });
   }
 });
 
