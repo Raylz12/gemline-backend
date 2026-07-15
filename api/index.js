@@ -2228,6 +2228,15 @@ function ebayTitleMatches(c, title) {
     const gr = String(c.grade).toLowerCase().replace(/\.0$/, '');
     if (!t.includes(` ${g} `) || !t.includes(` ${gr} `)) return false;
   }
+  // Card-number conflict: if the title advertises a card number (#277 or
+  // 041/173 style) and it isn't OUR number, it's a different card — drop.
+  if (c.number) {
+    const ourNum = String(c.number).trim().replace(/^0+(?=.)/, '').toLowerCase();
+    const nums = [...rawTitle.matchAll(/#\s*([a-z0-9-]{1,8})|\b(\d{1,4})\s*\/\s*\d{1,4}\b/g)]
+      .map(m => (m[1] || m[2] || '').replace(/^0+(?=.)/, '').toLowerCase())
+      .filter(Boolean);
+    if (nums.length && !nums.includes(ourNum)) return false;
+  }
   return true;
 }
 
@@ -2241,7 +2250,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
     // Serve the shared 45-min cache (one eBay sweep serves every Pro user)
     const { rows: [hit] } = await pool.query(
       `SELECT payload, created_at FROM ebay_live_cache
-       WHERE cache_key = 'live_deals_v2' AND created_at > NOW() - INTERVAL '45 minutes'`);
+       WHERE cache_key = 'live_deals_v3' AND created_at > NOW() - INTERVAL '45 minutes'`);
     if (hit) return res.json({ ...hit.payload, cachedAt: hit.created_at });
 
     const FEE = 0.075;
@@ -2341,7 +2350,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
       ebayCalls,
     };
     await pool.query(
-      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v2', $1, NOW())
+      `INSERT INTO ebay_live_cache (cache_key, payload, created_at) VALUES ('live_deals_v3', $1, NOW())
        ON CONFLICT (cache_key) DO UPDATE SET payload = $1, created_at = NOW()`,
       [JSON.stringify(payload)]);
     res.json(payload);
