@@ -69,6 +69,11 @@ export default function WorthGrading({ onSelect }) {
 
   return (
     <div style={{ padding: '8px' }}>
+      {/* Plain-English explainer — visible, not hover-only */}
+      <p style={{ fontFamily: 'var(--ui)', fontSize: 13.5, lineHeight: 1.55, color: 'rgba(255,255,255,.6)', padding: '8px 4px 12px', maxWidth: 640 }}>
+        Is grading this card worth the fee? We compare each card's raw price to what it sells for
+        as a PSA 10 or PSA 9, then subtract your grading cost. Green means you come out ahead.
+      </p>
       {/* Controls */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 4px 10px' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '.06em' }}>
@@ -90,7 +95,7 @@ export default function WorthGrading({ onSelect }) {
           <option value="profit">Sort: Profit @ 10</option>
           <option value="price">Sort: Cheapest raw</option>
         </select>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', letterSpacing: '.06em' }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)', letterSpacing: '.05em' }}>
           {rows ? `${rows.length.toLocaleString()} CANDIDATES` : 'LOADING…'} · OUR PRICE GUIDE · SELLING FEES NOT INCLUDED
         </span>
       </div>
@@ -109,11 +114,11 @@ export default function WorthGrading({ onSelect }) {
         ))}
       </div>
       {activeChip && chip !== 'all' && (
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', padding: '0 6px 10px' }}>{activeChip.hint}, at ${g} grading cost</div>
+        <div style={{ fontFamily: 'var(--ui)', fontSize: 12.5, color: 'rgba(255,255,255,.55)', padding: '0 6px 10px' }}>{activeChip.hint}, at ${g} grading cost</div>
       )}
 
       {/* Column header (desktop) */}
-      <div className="wg-head" style={{ display: 'flex', gap: 8, padding: '6px 12px', fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '.1em', color: 'var(--dim)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+      <div className="wg-head" style={{ display: 'flex', gap: 8, padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.07em', color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
         <span style={{ flex: '1 1 200px' }}>Card (raw)</span>
         <span style={{ width: 70, textAlign: 'right' }}>Raw</span>
         <span style={{ width: 70, textAlign: 'right' }}>PSA 10</span>
@@ -134,25 +139,25 @@ export default function WorthGrading({ onSelect }) {
         <>
           {rows.slice(0, shown).map(c => (
             <div key={c.cardhedgeId} className="wg-row" onClick={() => onSelect?.({ id: c.cardId })}
-              style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.04)', cursor: 'pointer' }}>
+              style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,.05)', cursor: 'pointer' }}>
               <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CardThumb src={c.thumbnail} name={c.player} sport={c.sport} width={30} height={40} radius={3} />
+                <CardThumb src={c.thumbnail} name={c.player} sport={c.sport} width={32} height={44} radius={4} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {c.player}
-                    {c.rookie ? <span style={{ fontSize: 8, background: '#E8B339', color: '#000', borderRadius: 2, padding: '1px 3px', marginLeft: 4 }}>RC</span> : null}
+                    {c.rookie ? <span style={{ fontSize: 9, background: '#E8B339', color: '#000', borderRadius: 3, padding: '1px 4px', marginLeft: 4 }}>RC</span> : null}
                   </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
                     {[(c.year && !String(c.set || '').startsWith(String(c.year))) ? c.year : null, c.set, c.variant, c.number && `#${c.number}`].filter(Boolean).join(' · ')}
                   </div>
                 </div>
               </div>
-              <span className="wg-stat" data-l="Raw" style={{ width: 70, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 600 }}>{fmtP(c.raw)}</span>
-              <span className="wg-stat" data-l="PSA 10" style={{ width: 70, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: '#34D88A', fontWeight: 700 }}>{fmtP(c.psa10)}</span>
-              <span className="wg-stat" data-l="PSA 9" style={{ width: 70, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>{fmtP(c.psa9)}</span>
-              <span className="wg-stat" data-l="Net @10" style={{ width: 84, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: c.net10 >= 0 ? '#34D88A' : '#FF5C6C' }}>{fmtNet(c.net10)}</span>
-              <span className="wg-stat" data-l="Net @9" style={{ width: 84, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: c.net9 == null ? 'var(--dim)' : c.net9 >= 0 ? '#34D88A' : '#FF5C6C' }}>{c.net9 == null ? '—' : fmtNet(c.net9)}</span>
-              <span className="wg-stat" data-l="ROI" style={{ width: 64, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 800, color: '#E8B339' }}>{Math.round(c.roi10)}%</span>
+              <span className="wg-stat" data-l="Raw" style={{ width: 70, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--txt)', fontWeight: 600 }}>{fmtP(c.raw)}</span>
+              <span className="wg-stat" data-l="PSA 10" style={{ width: 70, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12.5, color: '#34D88A', fontWeight: 700 }}>{fmtP(c.psa10)}</span>
+              <span className="wg-stat" data-l="PSA 9" style={{ width: 70, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--muted)' }}>{fmtP(c.psa9)}</span>
+              <span className="wg-stat" data-l="Net @10" style={{ width: 84, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: c.net10 >= 0 ? '#34D88A' : '#FF5C6C' }}>{fmtNet(c.net10)}</span>
+              <span className="wg-stat" data-l="Net @9" style={{ width: 84, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: c.net9 == null ? 'var(--dim)' : c.net9 >= 0 ? '#34D88A' : '#FF5C6C' }}>{c.net9 == null ? '—' : fmtNet(c.net9)}</span>
+              <span className="wg-stat" data-l="ROI" style={{ width: 64, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 800, color: '#E8B339' }}>{Math.round(c.roi10)}%</span>
             </div>
           ))}
           {rows.length > shown && (
@@ -166,7 +171,7 @@ export default function WorthGrading({ onSelect }) {
         </>
       )}
 
-      <p style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--dim)', padding: '12px 6px 4px', letterSpacing: '.04em', lineHeight: 1.6 }}>
+      <p style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)', padding: '14px 6px 4px', letterSpacing: '.03em', lineHeight: 1.6 }}>
         NET = GRADE PRICE − RAW PRICE − ${g} GRADING COST. ASSUMES THE CARD GEMS. CONDITION IS YOUR CALL.
       </p>
 
@@ -176,7 +181,7 @@ export default function WorthGrading({ onSelect }) {
           .wg-row { flex-wrap: wrap; row-gap: 6px; }
           .wg-row > div:first-child { flex: 1 1 100%; }
           .wg-stat { width: auto !important; flex: 1 1 30%; text-align: left !important; }
-          .wg-stat::before { content: attr(data-l); display: block; font-size: 8px; letter-spacing: .1em; color: var(--dim); text-transform: uppercase; margin-bottom: 1px; }
+          .wg-stat::before { content: attr(data-l); display: block; font-size: 10px; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; margin-bottom: 2px; }
         }
       `}</style>
     </div>

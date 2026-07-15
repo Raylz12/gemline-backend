@@ -9,6 +9,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import CardDetail from './CardDetail';
+import CardThumb from './CardThumb';
 import AuthModal from './AuthModal';
 import ProGate, { hasCapability } from './ProGate';
 import WorthGrading from './WorthGrading';
@@ -38,6 +39,14 @@ const fmtPct = (n) => {
   return `${s}${Number(n).toFixed(1)}%`;
 };
 const fmtNum = (n) => n ? Number(n).toLocaleString('en-US') : '—';
+const fmtAgo = (d) => {
+  if (!d) return null;
+  const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+};
 
 // ─── Sparkline (mini price line for each card row) ────────────────────────────
 function Spark({ vals = [], up }) {
@@ -116,12 +125,12 @@ function TickerStrip({ cards }) {
           return (
             <span key={i} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 20px', borderRight: '1px solid rgba(255,255,255,.05)',
-              fontFamily: 'var(--mono)', fontSize: 11,
+              padding: '6px 20px', borderRight: '1px solid rgba(255,255,255,.05)',
+              fontFamily: 'var(--mono)', fontSize: 12,
             }}>
               <span style={{ color: 'var(--muted)' }}>{c.player.split(' ').pop()?.toUpperCase()}</span>
               <span style={{ color: 'var(--txt)', fontWeight: 600 }}>{fmtP(c.market)}</span>
-              <span style={{ color: up ? '#34D88A' : '#FF5C6C', fontSize: 10 }}>
+              <span style={{ color: up ? '#34D88A' : '#FF5C6C', fontSize: 11 }}>
                 {up ? '▲' : '▼'} {Math.abs(c.gain7d || 0).toFixed(1)}%
               </span>
             </span>
@@ -133,41 +142,132 @@ function TickerStrip({ cards }) {
 }
 
 // ─── Panel wrapper ────────────────────────────────────────────────────────────
-function Panel({ title, badge, badgeColor, right, children, style = {} }) {
+function Panel({ id, title, badge, badgeColor, right, help, children, style = {} }) {
   return (
-    <div style={{
+    <div id={id} style={{
       background: '#0d1117',
       border: '1px solid rgba(255,255,255,.07)',
-      borderRadius: 4,
+      borderRadius: 8,
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
+      scrollMarginTop: 116,
       ...style,
     }}>
       {/* Panel header bar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '7px 12px',
+        padding: '9px 12px',
         background: 'rgba(255,255,255,.03)',
         borderBottom: '1px solid rgba(255,255,255,.06)',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: badgeColor || '#34D88A', boxShadow: `0 0 6px ${badgeColor || '#34D88A'}` }} />
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.12em', color: 'rgba(255,255,255,.5)', textTransform: 'uppercase' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.6)', textTransform: 'uppercase', fontWeight: 600 }}>
             {title}
           </span>
           {badge && (
             <span style={{
-              fontFamily: 'var(--mono)', fontSize: 9, padding: '1px 5px',
-              borderRadius: 3, background: 'rgba(255,255,255,.06)',
+              fontFamily: 'var(--mono)', fontSize: 10, padding: '1px 6px',
+              borderRadius: 4, background: 'rgba(255,255,255,.06)',
               color: 'var(--muted)', letterSpacing: '.04em',
             }}>{badge}</span>
           )}
         </div>
-        {right && <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>{right}</div>}
+        {right && <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{right}</div>}
       </div>
+      {/* Visible plain-English helper (not hover-only — mobile matters) */}
+      {help && (
+        <div style={{ padding: '7px 12px', fontFamily: 'var(--ui)', fontSize: 12.5, lineHeight: 1.45, color: 'rgba(255,255,255,.52)', borderBottom: '1px solid rgba(255,255,255,.04)', flexShrink: 0 }}>
+          {help}
+        </div>
+      )}
       <div style={{ flex: 1, overflow: 'hidden' }}>{children}</div>
+    </div>
+  );
+}
+
+// ─── Today's Top Deals — the simple layer. Big friendly cards a 10-year-old
+// can read: what it is, what it costs, and what you save. Tap to open. ──────
+function TopDeals({ deals, onSelect }) {
+  if (!deals.length) return null;
+  return (
+    <div id="df-top" style={{ padding: '18px 12px 6px', scrollMarginTop: 116 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ fontFamily: 'var(--disp)', fontSize: 24, fontWeight: 800, color: 'var(--txt)', letterSpacing: 0 }}>
+          Today's Top Deals
+        </h2>
+        <span style={{ fontFamily: 'var(--ui)', fontSize: 13.5, color: 'rgba(255,255,255,.55)' }}>
+          Cards you can grab for less than they usually sell for. Fees already counted.
+        </span>
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+        gap: 12, marginTop: 14,
+      }}>
+        {deals.map(c => {
+          const up = (c.gain7d || 0) >= 5;
+          return (
+            <div key={c.id} onClick={() => onSelect(c)} className="df-topdeal" style={{
+              background: 'linear-gradient(160deg, #11161f, #0c1018)',
+              border: '1px solid rgba(52,216,138,.22)', borderRadius: 12,
+              padding: 14, cursor: 'pointer', display: 'flex', gap: 12,
+              transition: 'transform .15s, border-color .15s',
+            }}>
+              <CardThumb src={c.thumbnail} name={c.player} sport={c.sport} width={58} height={80} radius={6} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontFamily: 'var(--ui)', fontSize: 15, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {c.player}
+                  {c.rookie ? <span style={{ fontSize: 10, background: '#E8B339', color: '#000', borderRadius: 3, padding: '1px 5px', marginLeft: 6, fontWeight: 800, verticalAlign: 'middle' }}>RC</span> : null}
+                </div>
+                <div style={{ fontFamily: 'var(--ui)', fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {`${c.grader || 'Raw'} ${c.grade || ''}`.trim()} · {c.set?.slice(0, 30)}
+                </div>
+                <div style={{ fontFamily: 'var(--ui)', fontSize: 13, color: 'rgba(255,255,255,.75)', marginTop: 8, lineHeight: 1.45 }}>
+                  Buy at <b style={{ color: '#34D88A', fontFamily: 'var(--mono)' }}>{fmtP(c.lo)}</b>, usually sells for <b style={{ fontFamily: 'var(--mono)' }}>{fmtP(c.hi)}</b>{up ? <>, and it's up <b style={{ color: '#34D88A' }}>{c.gain7d.toFixed(0)}%</b> this week</> : null}
+                </div>
+                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,216,138,.12)', border: '1px solid rgba(52,216,138,.3)', borderRadius: 999, padding: '3px 10px' }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: '#34D88A' }}>You keep {fmtP(c.netEdge)}</span>
+                  <span style={{ fontFamily: 'var(--ui)', fontSize: 11, color: 'rgba(255,255,255,.5)' }}>after fees</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Jump chips — obvious in-page navigation, sticky under the site header ──
+const JUMPS = [
+  ['df-top', 'Top Deals'],
+  ['df-movers', 'Movers'],
+  ['df-volume', 'Most Traded'],
+  ['df-heat', 'Heatmap'],
+  ['df-board', 'Deal Board'],
+];
+function JumpChips() {
+  return (
+    <div style={{
+      position: 'sticky', top: 58, zIndex: 15,
+      display: 'flex', gap: 8, padding: '10px 12px',
+      background: 'rgba(8,11,18,.94)', backdropFilter: 'blur(8px)',
+      borderBottom: '1px solid rgba(255,255,255,.06)',
+      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+    }}>
+      <span style={{ fontFamily: 'var(--ui)', fontSize: 12.5, color: 'rgba(255,255,255,.4)', alignSelf: 'center', flexShrink: 0 }}>Jump to</span>
+      {JUMPS.map(([id, label]) => (
+        <button key={id}
+          onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          style={{
+            flexShrink: 0, padding: '6px 14px', borderRadius: 999,
+            fontFamily: 'var(--ui)', fontSize: 13, fontWeight: 600,
+            background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)',
+            color: 'rgba(255,255,255,.75)', cursor: 'pointer', transition: '.15s',
+          }}>{label}</button>
+      ))}
     </div>
   );
 }
@@ -177,11 +277,11 @@ function StatBox({ label, value, sub, color = 'var(--txt)', glow }) {
   return (
     <div style={{
       background: '#0d1117', border: '1px solid rgba(255,255,255,.07)',
-      borderRadius: 4, padding: '10px 14px', flex: 1,
+      borderRadius: 8, padding: '12px 14px', flex: 1, minWidth: 150,
     }}>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color, textShadow: glow ? `0 0 12px ${color}` : 'none' }}>{value}</div>
-      {sub && <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 21, fontWeight: 700, color, textShadow: glow ? `0 0 12px ${color}` : 'none' }}>{value}</div>
+      {sub && <div style={{ fontFamily: 'var(--ui)', fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }
@@ -205,13 +305,13 @@ function HeatCell({ card, onClick }) {
       padding: '6px 8px', cursor: 'pointer',
       transition: 'all .15s',
     }}>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'rgba(255,255,255,.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {card.player.split(' ').slice(-1)[0]}
       </div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: gain >= 0 ? '#34D88A' : '#FF5C6C', marginTop: 2 }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: gain >= 0 ? '#34D88A' : '#FF5C6C', marginTop: 2 }}>
         {gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
       </div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.35)', marginTop: 1 }}>{fmtP(card.market)}</div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,255,255,.4)', marginTop: 1 }}>{fmtP(card.market)}</div>
     </div>
   );
 }
@@ -221,24 +321,24 @@ function VolumeBars({ cards }) {
   const top = cards.slice(0, 12);
   const max = Math.max(...top.map(c => c.sales30d || 0), 1);
   return (
-    <div style={{ padding: '8px 10px', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div style={{ padding: '8px 10px', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
       {top.map((c, i) => {
         const pct = ((c.sales30d || 0) / max) * 100;
         const color = i < 3 ? '#E8B339' : i < 6 ? '#5B8DEF' : 'rgba(255,255,255,.25)';
         return (
           <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', width: 14, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-            <div style={{ flex: 1, height: 16, background: 'rgba(255,255,255,.04)', borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: color, borderRadius: 2, transition: 'width .4s ease' }} />
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', width: 16, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+            <div style={{ flex: 1, height: 18, background: 'rgba(255,255,255,.04)', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: color, borderRadius: 3, transition: 'width .4s ease' }} />
               <span style={{
                 position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)',
-                fontFamily: 'var(--mono)', fontSize: 9, color: pct > 20 ? 'rgba(0,0,0,.8)' : 'rgba(255,255,255,.6)',
-                whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '60%', textOverflow: 'ellipsis',
+                fontFamily: 'var(--mono)', fontSize: 10, color: pct > 20 ? 'rgba(0,0,0,.85)' : 'rgba(255,255,255,.7)',
+                whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '60%', textOverflow: 'ellipsis', fontWeight: 600,
               }}>
                 {c.player.split(' ').slice(-1)[0].toUpperCase()}
               </span>
             </div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', width: 36, textAlign: 'right', flexShrink: 0 }}>{fmtNum(c.sales30d)}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--muted)', width: 40, textAlign: 'right', flexShrink: 0 }}>{fmtNum(c.sales30d)}</span>
           </div>
         );
       })}
@@ -266,8 +366,8 @@ function SpreadMatrix({ cards, onSelect }) {
 
   const Th = ({ label, col, w }) => (
     <div onClick={() => onSort(col)} style={{
-      width: w, fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '.1em',
-      color: sortCol === col ? '#E8B339' : 'rgba(255,255,255,.3)',
+      width: w, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.06em',
+      color: sortCol === col ? '#E8B339' : 'rgba(255,255,255,.4)',
       cursor: 'pointer', userSelect: 'none', textTransform: 'uppercase',
       display: 'flex', alignItems: 'center', gap: 3,
     }}>
@@ -333,14 +433,14 @@ function SpreadMatrix({ cards, onSelect }) {
         flexShrink: 0,
       }}>
         <div style={{ width: 32 }} />
-        <div style={{ flex: 1, minWidth: 160, fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase' }}>CARD</div>
-        <Th label="BUY (LOW)" col="lo" w={72} />
-        <Th label="FMV (HIGH)" col="hi" w={72} />
-        <Th label="YOU SAVE $" col="netEdge" w={92} />
-        <Th label="NET % (AF 7.5% FEE)" col="netPct" w={116} />
+        <div style={{ flex: 1, minWidth: 160, fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase' }}>CARD</div>
+        <Th label="BUY AT" col="lo" w={72} />
+        <Th label="GOING RATE" col="hi" w={84} />
+        <Th label="YOU KEEP $" col="netEdge" w={92} />
+        <Th label="% AFTER FEES" col="netPct" w={116} />
         <Th label="7D %" col="gain7d" w={64} />
-        <Th label="7D VOL" col="sales7d" w={64} />
-        <Th label="30D VOL" col="sales30d" w={68} />
+        <Th label="7D SALES" col="sales7d" w={72} />
+        <Th label="30D SALES" col="sales30d" w={78} />
       </div>
       {/* Rows */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -356,14 +456,14 @@ function SpreadMatrix({ cards, onSelect }) {
               onMouseLeave={() => setHover(null)}
               style={{
                 display: 'flex', alignItems: 'center',
-                padding: '7px 12px',
-                borderBottom: '1px solid rgba(255,255,255,.03)',
-                background: hover === c.id ? 'rgba(255,255,255,.04)' : i % 2 === 0 ? 'rgba(255,255,255,.01)' : 'transparent',
+                padding: '9px 12px',
+                borderBottom: '1px solid rgba(255,255,255,.04)',
+                background: hover === c.id ? 'rgba(255,255,255,.05)' : i % 2 === 0 ? 'rgba(255,255,255,.015)' : 'transparent',
                 cursor: 'pointer', transition: 'background .1s',
               }}
             >
               {/* Rank */}
-              <span style={{ width: 32, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', textAlign: 'right', paddingRight: 8 }}>{i + 1}</span>
+              <span style={{ width: 32, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--dim)', textAlign: 'right', paddingRight: 8 }}>{i + 1}</span>
               {/* Card */}
               <div style={{ flex: 1, minWidth: 160, display: 'flex', alignItems: 'center', gap: 8 }}>
                 {c.thumbnail && (
@@ -374,36 +474,36 @@ function SpreadMatrix({ cards, onSelect }) {
                   }} />
                 )}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {c.player} {c.rookie ? <span style={{ fontSize: 8, background: '#E8B339', color: '#000', borderRadius: 2, padding: '1px 3px', marginLeft: 3 }}>RC</span> : null}
-                    {c.momentum ? <span title="Undervalued and trending up" style={{ fontSize: 8, background: 'rgba(52,216,138,.15)', color: '#34D88A', borderRadius: 2, padding: '1px 4px', marginLeft: 4, fontWeight: 700 }}>🔥 MOM</span> : null}
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {c.player} {c.rookie ? <span style={{ fontSize: 9, background: '#E8B339', color: '#000', borderRadius: 3, padding: '1px 4px', marginLeft: 3 }}>RC</span> : null}
+                    {c.momentum ? <span title="Priced below fair value and trending up" style={{ fontSize: 9, background: 'rgba(52,216,138,.15)', color: '#34D88A', borderRadius: 3, padding: '1px 5px', marginLeft: 4, fontWeight: 700 }}>🔥 HOT</span> : null}
                   </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', marginTop: 1 }}>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)', marginTop: 2 }}>
                     <span className="mchip mchip-grade" style={{ marginRight: 5 }}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</span>{c.set?.slice(0, 22)}{c.set?.length > 22 ? '…' : ''}
                   </div>
                 </div>
               </div>
               {/* Buy (low ask) */}
-              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: '#34D88A', fontWeight: 600 }}>{fmtP(c.lo)}</span>
-              {/* FMV (high) */}
-              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt)', fontWeight: 700 }}>{fmtP(c.hi)}</span>
+              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 12.5, color: '#34D88A', fontWeight: 600 }}>{fmtP(c.lo)}</span>
+              {/* Going rate (FMV high) */}
+              <span style={{ width: 84, fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--txt)', fontWeight: 700 }}>{fmtP(c.hi)}</span>
               {/* Net edge $ (after 7.5% fee) */}
-              <span style={{ width: 92, fontFamily: 'var(--mono)', fontSize: 11, color: netColor, fontWeight: 700 }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</span>
+              <span style={{ width: 92, fontFamily: 'var(--mono)', fontSize: 12.5, color: netColor, fontWeight: 700 }}>{(c.netEdge >= 0 ? '+' : '') + fmtP(Math.abs(c.netEdge))}</span>
               {/* Net % bar */}
               <div style={{ width: 116, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ width: `${netBarPct}%`, height: '100%', background: netColor, borderRadius: 2 }} />
+                <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,.06)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ width: `${netBarPct}%`, height: '100%', background: netColor, borderRadius: 3 }} />
                 </div>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: netColor, width: 40, textAlign: 'right' }}>{(c.netPct >= 0 ? '+' : '') + (c.netPct?.toFixed(0))}%</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: netColor, width: 44, textAlign: 'right' }}>{(c.netPct >= 0 ? '+' : '') + (c.netPct?.toFixed(0))}%</span>
               </div>
               {/* 7D change */}
-              <span style={{ width: 64, fontFamily: 'var(--mono)', fontSize: 10, color: isUp ? '#34D88A' : '#FF5C6C', textAlign: 'right' }}>
+              <span style={{ width: 64, fontFamily: 'var(--mono)', fontSize: 12, color: isUp ? '#34D88A' : '#FF5C6C', textAlign: 'right' }}>
                 {c.gain7d ? `${isUp ? '+' : ''}${Number(c.gain7d).toFixed(1)}%` : '—'}
               </span>
               {/* 7D vol */}
-              <span style={{ width: 64, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtNum(c.sales7d)}</span>
+              <span style={{ width: 72, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{fmtNum(c.sales7d)}</span>
               {/* 30D vol */}
-              <span style={{ width: 68, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtNum(c.sales30d)}</span>
+              <span style={{ width: 78, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{fmtNum(c.sales30d)}</span>
             </div>
           );
         })}
@@ -433,7 +533,18 @@ export default function DealFinder({ view = 'deals' }) {
   }, []);
 
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [pricesUpdatedAt, setPricesUpdatedAt] = useState(null);
   const arbIntervalRef = useRef(null);
+
+  // "Prices updated X ago" — max ch_updated_at across the catalog, cheap cached endpoint.
+  useEffect(() => {
+    let dead = false;
+    fetch('/api/market/freshness')
+      .then(r => r.json())
+      .then(d => { if (!dead && d.updatedAt) setPricesUpdatedAt(new Date(d.updatedAt)); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, []);
 
   const fetchArbData = useCallback(async () => {
     try {
@@ -557,6 +668,21 @@ export default function DealFinder({ view = 'deals' }) {
   const heatCards = useMemo(() => [...visible].filter(c => c.gain7d !== 0 && c.market > 0 && saneMove(c)).sort((a, b) => Math.abs(b.gain7d) - Math.abs(a.gain7d)).slice(0, 24), [visible]);
   const tickerCards = useMemo(() => [...gainers.slice(0, 8), ...losers.slice(0, 8)], [gainers, losers]);
 
+  // The simple layer: top 6 deals, one per player for variety, real liquidity only.
+  const topDeals = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const c of cardsWithEdge) {
+      if (c.netEdge <= 0) continue;
+      if ((c.sales30d || 0) < 3) continue;
+      if (seen.has(c.player)) continue;
+      seen.add(c.player);
+      out.push(c);
+      if (out.length === 6) break;
+    }
+    return out;
+  }, [cardsWithEdge]);
+
   const topGainer = gainers[0];
   const topLoser  = losers[0];
   const totalVolume = useMemo(() => visible.reduce((s, c) => s + (c.sales30d || 0), 0), [visible]);
@@ -591,25 +717,25 @@ export default function DealFinder({ view = 'deals' }) {
         borderBottom: '1px solid rgba(255,255,255,.07)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#E8B339', fontWeight: 700, letterSpacing: '.1em' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: '#E8B339', fontWeight: 700, letterSpacing: '.1em' }}>
             GEMLINE DEAL FINDER
           </span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', letterSpacing: '.08em' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', letterSpacing: '.08em' }}>
             POWERED BY CARDHEDGE
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>
             {cards.length.toLocaleString()} CARDS LOADED
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D88A', boxShadow: '0 0 6px #34D88A', animation: 'pulse 2s infinite' }} />
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: '#34D88A' }}>LIVE</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: '#34D88A' }}>LIVE</span>
           </div>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'rgba(255,255,255,.4)', letterSpacing: '.06em' }}>{now}</span>
-          {lastUpdated && (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,.3)', letterSpacing: '.06em' }}>
-              DATA {Math.round((Date.now() - lastUpdated.getTime()) / 1000)}s AGO · AUTO ↻2m
+          {(pricesUpdatedAt || lastUpdated) && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,255,255,.45)', letterSpacing: '.04em' }}>
+              PRICES UPDATED {fmtAgo(pricesUpdatedAt || lastUpdated).toUpperCase()}
             </span>
           )}
           <button
@@ -621,6 +747,12 @@ export default function DealFinder({ view = 'deals' }) {
 
       {/* ── Ticker strip ── */}
       <TickerStrip cards={tickerCards} />
+
+      {/* ── Jump chips (sticky in-page nav) ── */}
+      <JumpChips />
+
+      {/* ── Today's Top Deals — the simple layer ── */}
+      <TopDeals deals={topDeals} onSelect={setSelected} />
 
       {/* ── Play search ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 0', flexWrap: 'wrap' }}>
@@ -643,40 +775,41 @@ export default function DealFinder({ view = 'deals' }) {
       </div>
 
       {/* ── Stat row ── */}
-      <div style={{ display: 'flex', gap: 1, padding: '8px', background: '#080b12', flexWrap: 'wrap' }}>
-        <StatBox label="30D TOTAL VOLUME" value={fmtNum(totalVolume)} sub="transactions" color="#5B8DEF" />
-        <StatBox label="TOP GAINER · 7D" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || ''} color="#34D88A" glow />
-        <StatBox label="TOP LOSER · 7D" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || ''} color="#FF5C6C" glow />
+      <div style={{ display: 'flex', gap: 6, padding: '10px 8px', background: '#080b12', flexWrap: 'wrap' }}>
+        <StatBox label="CARDS SOLD · 30 DAYS" value={fmtNum(totalVolume)} sub="across the whole market" color="#5B8DEF" />
+        <StatBox label="TOP GAINER · 7 DAYS" value={topGainer ? `+${topGainer.gain7d.toFixed(1)}%` : '—'} sub={topGainer?.player || ''} color="#34D88A" glow />
+        <StatBox label="BIGGEST DROP · 7 DAYS" value={topLoser ? `${topLoser.gain7d.toFixed(1)}%` : '—'} sub={topLoser?.player || ''} color="#FF5C6C" glow />
         <StatBox label="AVG SAVINGS" value={avgNetEdge === '—' ? '—' : `$${avgNetEdge}`} sub={`across ${netPlays.length} live deals`} color="#E8B339" />
-        <StatBox label="DEALS TODAY" value={netPlays.length} sub="below fair value after the 7.5% fee" color="#9B7BFF" />
+        <StatBox label="LIVE DEALS" value={netPlays.length} sub="priced below fair value, fees counted" color="#9B7BFF" />
       </div>
 
       {/* ── Main 4-panel grid ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gridAutoRows: '260px',
-        gap: 1,
-        padding: '0 8px',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gridAutoRows: '320px',
+        gap: 10,
+        padding: '4px 8px',
         background: '#080b12',
       }}>
         {/* Panel 1: Gainers */}
-        <Panel title="7D GAINERS" badgeColor="#34D88A" badge={`${gainers.length}`} right="SORTED BY GAIN">
+        <Panel id="df-movers" title="PRICE GAINERS · 7 DAYS" badgeColor="#34D88A" badge={`${gainers.length}`}
+          help="Cards selling for more than they did a week ago.">
           <div style={{ overflowY: 'auto', height: '100%' }}>
             {gainers.map((c, i) => (
               <div key={c.id} onClick={() => setSelected(c)} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
-                borderBottom: '1px solid rgba(255,255,255,.03)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                borderBottom: '1px solid rgba(255,255,255,.04)', cursor: 'pointer',
               }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', width: 16, textAlign: 'right' }}>{i + 1}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', width: 16, textAlign: 'right' }}>{i + 1}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--dim)' }}>{c.grader} {c.grade}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{c.grader} {c.grade}</div>
                 </div>
                 <Spark vals={[50, 52, 49, 55, 53, 58, 57, 62, 60, 65]} up={true} />
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: '#34D88A' }}>+{c.gain7d.toFixed(1)}%</div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>{fmtP(c.market)}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: '#34D88A' }}>+{c.gain7d.toFixed(1)}%</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)' }}>{fmtP(c.market)}</div>
                 </div>
               </div>
             ))}
@@ -684,22 +817,23 @@ export default function DealFinder({ view = 'deals' }) {
         </Panel>
 
         {/* Panel 2: Losers */}
-        <Panel title="7D LOSERS" badgeColor="#FF5C6C" badge={`${losers.length}`} right="SORTED BY DROP">
+        <Panel title="PRICE DROPS · 7 DAYS" badgeColor="#FF5C6C" badge={`${losers.length}`}
+          help="Cards getting cheaper. A chance to buy in low.">
           <div style={{ overflowY: 'auto', height: '100%' }}>
             {losers.map((c, i) => (
               <div key={c.id} onClick={() => setSelected(c)} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
-                borderBottom: '1px solid rgba(255,255,255,.03)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                borderBottom: '1px solid rgba(255,255,255,.04)', cursor: 'pointer',
               }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)', width: 16, textAlign: 'right' }}>{i + 1}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)', width: 16, textAlign: 'right' }}>{i + 1}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--dim)' }}>{c.grader} {c.grade}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.player}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--dim)' }}>{c.grader} {c.grade}</div>
                 </div>
                 <Spark vals={[65, 60, 62, 57, 55, 53, 50, 48, 45, 43]} up={false} />
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: '#FF5C6C' }}>{c.gain7d.toFixed(1)}%</div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--dim)' }}>{fmtP(c.market)}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 700, color: '#FF5C6C' }}>{c.gain7d.toFixed(1)}%</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)' }}>{fmtP(c.market)}</div>
                 </div>
               </div>
             ))}
@@ -707,12 +841,14 @@ export default function DealFinder({ view = 'deals' }) {
         </Panel>
 
         {/* Panel 3: Volume bars */}
-        <Panel title="30D VOLUME LEADERS" badgeColor="#E8B339" badge="TOP 12" right="TRANSACTIONS">
+        <Panel id="df-volume" title="MOST TRADED · 30 DAYS" badgeColor="#E8B339" badge="TOP 12"
+          help="The cards changing hands the most right now.">
           <VolumeBars cards={byVolume} />
         </Panel>
 
         {/* Panel 4: Momentum heatmap */}
-        <Panel title="MOMENTUM HEATMAP" badgeColor="#9B7BFF" badge="7D CHANGE" right="CLICK TO DRILL">
+        <Panel id="df-heat" title="MOMENTUM HEATMAP" badgeColor="#9B7BFF" badge="7 DAY CHANGE"
+          help="What's heating up and cooling off. Green is up, red is down. Tap a tile to open the card.">
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
@@ -729,12 +865,14 @@ export default function DealFinder({ view = 'deals' }) {
       </div>
 
       {/* ── Spread matrix (full width) ── */}
-      <div style={{ margin: '1px 8px 8px', height: 480 }}>
+      <div style={{ margin: '10px 8px 10px', height: 560 }}>
         <Panel
+          id="df-board"
           title="DEAL BOARD"
           badgeColor="#E8B339"
           badge={`${netPlays.length} DEALS · FEES INCLUDED`}
-          right="CLICK COLUMN TO SORT · CLICK ROW TO DRILL"
+          right="CLICK A COLUMN TO SORT · CLICK A ROW TO OPEN"
+          help="Every live deal in one table: buy at the low price, and the gap to the going rate is yours after fees."
           style={{ height: '100%' }}
         >
           {cardsWithEdge.length > 0 ? (
