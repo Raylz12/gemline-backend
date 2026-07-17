@@ -1070,8 +1070,16 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
     if (!app._historyCache) app._historyCache = {};
     app._historyCache[cacheKey] = { expires: Date.now() + 30 * 60 * 1000, data: result };
 
-    // Fire-and-forget: reconcile catalog_price against real sales (>=3 sales, >4x rule)
-    if (prices.length >= 3) selfHealPrice(cardhedgeId, grade, prices).catch((e) => console.error('self-heal:', e.message));
+    // Reconcile catalog_price against real sales (>=3 sales, >4x rule). Awaited (not
+    // truly fire-and-forget): on Vercel the lambda can freeze right after res.json(),
+    // dropping a post-response async write — which would fix the price but lose the
+    // price_reconciliations guard row, letting the nightly sync re-clobber it. The
+    // work is one indexed SELECT (+ rare UPDATE/INSERT), trivial next to the two CH
+    // API calls above, and the result caches 30min. Never allowed to break the response.
+    if (prices.length >= 3) {
+      try { await selfHealPrice(cardhedgeId, grade, prices); }
+      catch (e) { console.error('self-heal:', e.message); }
+    }
 
     res.json(result);
   } catch (e) { console.error('history:', e.message); res.json({ prices: [], comps: [], stats: null }); }
