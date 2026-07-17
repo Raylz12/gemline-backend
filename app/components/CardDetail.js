@@ -840,7 +840,12 @@ export default function CardDetail({ card: cardProp, onClose }) {
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                         <button onClick={() => setChartGrade(null)} className={`cd-chip sm ${!chartGrade ? 'gold' : ''}`}>{`${c.grader || 'RAW'} ${c.grade || ''}`.trim()}</button>
                         {c.grades
-                          .filter(g => !(g.grader === c.grader && String(g.grade) === String(c.grade)))
+                          // Dedupe vs the card's own chip via normalized grade strings — raw tiers
+                          // arrive as grader='RAW' with grade ''/null/undefined depending on the
+                          // entry point, so strict grader/grade equality missed them (showed
+                          // RAW | PSA 10 | RAW). gradeParam() collapses all raw spellings to 'Raw'.
+                          .filter(g => gradeParam(g.grader, g.grade) !== gradeParam(c.grader, c.grade))
+                          .filter((g, i, arr) => arr.findIndex(x => gradeParam(x.grader, x.grade) === gradeParam(g.grader, g.grade)) === i)
                           .slice(0, 5)
                           .map((g, i) => {
                             const gValue = gradeParam(g.grader, g.grade);

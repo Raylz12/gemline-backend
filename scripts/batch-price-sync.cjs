@@ -35,6 +35,26 @@ const PRICE_DENYLIST = new Set([
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Reconciliation guard: rows fixed by scripts/reconcile-prices.cjs (or the history
+// endpoint self-heal) have a price_reconciliations record with the real sales median.
+// CH's stored price for those rows is known-garbage; don't let the sync clobber the
+// fix until upstream heals. card_id -> { median, reconId }
+let reconGuards = new Map();
+async function loadReconGuards() {
+  try {
+    const { rows } = await pool.query('SELECT id, card_id, sales_median FROM price_reconciliations');
+    reconGuards = new Map(rows.map((r) => [r.card_id, { median: Number(r.sales_median), reconId: r.id }]));
+    if (reconGuards.size) console.log(`[batch-sync] recon-guard active for ${reconGuards.size} reconciled rows`);
+  } catch (e) { console.error('[batch-sync] recon-guard load failed:', e.message); }
+}
+async function clearReconRows(ids) {
+  if (!ids.length) return;
+  try {
+    await pool.query('DELETE FROM price_reconciliations WHERE id = ANY($1::int[])', [ids]);
+    console.log(`  [recon-guard] upstream healed for ${ids.length} rows, guard removed`);
+  } catch (e) { console.error('[batch-sync] recon delete failed:', e.message); }
+}
+
 function gradeLabel(grader, grade) {
   if (!grader || !grade || grade === '' ||
       ['raw', 'ungraded'].includes((grader || '').toLowerCase()) ||
@@ -134,6 +154,7 @@ async function main() {
   const prog = loadProg();
   apiCalls = prog.apiCalls || 0;
   console.log(`\n[batch-sync] START | concurrency=${CONCURRENCY} | stale>${STALE_HOURS}h | resume lastId=${prog.lastId} | prev written=${prog.written}`);
+  await loadReconGuards();
 
   const { rows: [{ count: totalStr }] } = await pool.query(`
     SELECT COUNT(*) FROM cards
@@ -182,6 +203,7 @@ async function main() {
     const resultSets = await Promise.all(chunks.map((c) => batchFMV(c)));
 
     const toWrite = [];
+    const healedReconIds = [];
     let hits = 0;
     for (const results of resultSets) {
       for (const r of results) {
@@ -194,6 +216,21 @@ async function main() {
         if (!ids) continue;
         hits++;
         for (const dbId of ids) {
+          const guard = reconGuards.get(dbId);
+          if (guard && guard.median > 0) {
+            const ratio = Math.max(r.price / guard.median, guard.median / r.price);
+            if (ratio > 4) {
+              // CH stored price still bogus vs real sales median — keep the reconciled price.
+              process.stdout.write(`\n  [recon-guard] kept reconciled price for ${r.card_id}|${r.grade} (CH says ${r.price}, sales median ${guard.median})\n`);
+              continue;
+            }
+            if (Math.abs(r.price - guard.median) <= 0.25 * guard.median) {
+              // Upstream healed (within 25% of sales median) — accept and drop the guard.
+              healedReconIds.push(guard.reconId);
+              reconGuards.delete(dbId);
+            }
+            // 1.25x–4x band: accept the write but keep the guard in place.
+          }
           toWrite.push({ db_id: dbId, price: r.price, lo: r.price_low, hi: r.price_high, conf: r.confidence });
         }
       }
@@ -201,6 +238,7 @@ async function main() {
     errors += items.length - resultSets.reduce((n, s) => n + s.length, 0);
 
     const wrote = await writeBatch(toWrite);
+    await clearReconRows(healedReconIds);
     written += wrote;
     sinceLastMV += wrote;
     processed += rows.length;

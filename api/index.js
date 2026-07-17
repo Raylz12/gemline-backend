@@ -964,6 +964,50 @@ app.get('/api/cards/:cardhedgeId/fmv', async (req, res) => {
   } catch (e) { res.json({ error: e.message }); }
 });
 
+// ── Price self-heal ─────────────────────────────────────────────────────────────────
+// CardHedge's stored latest-price is occasionally garbage (e.g. Shough Prizm Blue Ice
+// RAW stored $18.99 while real sales run $899–$1,275). When the history endpoint sees
+// >=3 real sales whose median diverges >4x from our cards.catalog_price, fix the row
+// and record a price_reconciliations guard (batch-price-sync respects it). Same rule
+// as scripts/reconcile-prices.cjs. Fire-and-forget — never blocks the response.
+const _selfHealRecent = new Map(); // "chId|grade" -> ts (throttle repeat heals)
+async function selfHealPrice(cardhedgeId, gradeStr, prices) {
+  const key = `${cardhedgeId}|${gradeStr}`;
+  if ((_selfHealRecent.get(key) || 0) > Date.now() - 6 * 3600e3) return;
+  _selfHealRecent.set(key, Date.now());
+  // Map grade param -> cards row: "RAW"/"Raw" <-> grader='RAW', grade=''; "PSA 10" <-> grader='PSA', grade='10'
+  const g = String(gradeStr || '').trim();
+  let grader, grade;
+  if (!g || /^(raw|ungraded)$/i.test(g)) { grader = 'RAW'; grade = ''; }
+  else {
+    const m = g.match(/^([A-Za-z]+)\s+(.+)$/);
+    if (!m) return;
+    grader = m[1].toUpperCase(); grade = m[2].trim();
+  }
+  const vals = prices.map((p) => Number(p.price)).filter((p) => p > 0 && p < 15000000).sort((a, b) => a - b);
+  if (vals.length < 3) return;
+  const med = vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2;
+  const pool = await getPool();
+  const { rows } = await pool.query(
+    `SELECT id, catalog_price FROM cards
+     WHERE cardhedge_id=$1 AND UPPER(grader)=$2 AND COALESCE(grade,'')=$3 AND catalog_price > 0`,
+    [cardhedgeId, grader, grade]);
+  for (const row of rows) {
+    const old = Number(row.catalog_price);
+    const ratio = Math.max(med / Math.max(old, 0.01), old / Math.max(med, 0.01));
+    if (ratio <= 4) continue;
+    await pool.query(
+      'UPDATE cards SET catalog_price=$1, ch_price_lo=$2, ch_price_hi=$3, ch_updated_at=NOW() WHERE id=$4::uuid',
+      [med, vals[0], vals[vals.length - 1], row.id]);
+    await pool.query('DELETE FROM price_reconciliations WHERE card_id=$1::uuid', [row.id]);
+    await pool.query(
+      `INSERT INTO price_reconciliations (card_id, cardhedge_id, grader, grade, old_price, sales_median, sales_count, new_price, source)
+       VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,'history-self-heal')`,
+      [row.id, cardhedgeId, grader, grade, old, med, vals.length, med]);
+    console.log(`[self-heal] ${cardhedgeId} ${grader} ${grade || '(raw)'}: $${old} -> $${med} (${vals.length} sales)`);
+  }
+}
+
 // ── Card Hedge proxy: price history ───────────────────────────────────────────
 app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
   try {
@@ -1025,6 +1069,10 @@ app.get('/api/cards/:cardhedgeId/history', async (req, res) => {
     const result = { prices, comps, stats };
     if (!app._historyCache) app._historyCache = {};
     app._historyCache[cacheKey] = { expires: Date.now() + 30 * 60 * 1000, data: result };
+
+    // Fire-and-forget: reconcile catalog_price against real sales (>=3 sales, >4x rule)
+    if (prices.length >= 3) selfHealPrice(cardhedgeId, grade, prices).catch((e) => console.error('self-heal:', e.message));
+
     res.json(result);
   } catch (e) { console.error('history:', e.message); res.json({ prices: [], comps: [], stats: null }); }
 });
