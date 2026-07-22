@@ -48,7 +48,8 @@ export default async function SetPage({ params, searchParams }) {
 
   // Top cards by value (family-deduped in JS from tier rows)
   const topQ = db().query(
-    `SELECT id, player, variant, number, grader, grade, catalog_price, ebay_thumb, image_url, rookie, cardhedge_id
+    `SELECT id, player, variant, number, grader, grade, catalog_price,
+            COALESCE(r2_thumb, ebay_thumb) AS ebay_thumb, image_url, rookie, cardhedge_id
      FROM cards WHERE card_set = $1 AND catalog_price > 0 AND catalog_price <= 5000000
      ORDER BY catalog_price DESC LIMIT 40`, [set.name]);
 

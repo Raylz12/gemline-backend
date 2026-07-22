@@ -3,6 +3,7 @@
 // Users can list portfolio cards on the marketplace or offer them in trades.
 import { toCents } from '../store/repo.js';
 import { resolveCardId, UUID_RE } from './cardResolve.js';
+import { pickThumb } from '../../lib/img.js';
 
 export async function list(repo, userId) {
   // Fast path: single JOIN query when Postgres is available
@@ -12,7 +13,7 @@ export async function list(repo, userId) {
              p.is_listed, p.listing_id, p.acquired_at,
              p.verification_status, p.verification_method, p.verified_at,
              c.player, c.sport, c.card_set, c.variant, c.number,
-             c.grader, c.grade, c.image_url, c.ebay_thumb,
+             c.grader, c.grade, c.image_url, c.ebay_thumb, c.r2_thumb,
              c.catalog_price,
              (SELECT MIN(l.price) FROM listings l WHERE l.card_id = c.id AND l.status = 'active' AND l.kind = 'buy_now') AS market_value
       FROM portfolios p
@@ -36,7 +37,7 @@ export async function list(repo, userId) {
         num: item.number,
         grader: item.grader,
         grade: item.grade,
-        imageUrl: item.ebay_thumb || item.image_url || null,
+        imageUrl: pickThumb(item),
         certNumber: item.cert_number || null,
         notes: item.notes || null,
         purchasePrice: costBasis,

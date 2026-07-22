@@ -16,7 +16,8 @@ const getCard = cache(async (id) => {
   const { rows: [card] } = await db().query(
     `SELECT c.id, c.player, c.year, c.card_set, c.variant, c.number, c.sport, c.grader, c.grade,
             c.catalog_price, c.ch_price_lo, c.ch_price_hi, c.sales_7d, c.sales_30d, c.gain_7d,
-            c.rookie, c.psa_pop_10, c.psa_pop_total, c.ebay_thumb, c.image_url,
+            c.rookie, c.psa_pop_10, c.psa_pop_total,
+            COALESCE(c.r2_thumb, c.ebay_thumb) AS ebay_thumb, c.image_url,
             cs.slug AS set_slug
      FROM cards c LEFT JOIN card_sets cs ON cs.name = c.card_set
      WHERE c.id = $1`, [id]

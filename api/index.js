@@ -14,6 +14,7 @@ import * as escrowSvc from '../escrow.js';
 import { transition } from '../machine.js';
 import { emailUser, sendEmail, templates as emailTpl } from '../lib/email.js';
 import { computeDealScore } from '../lib/dealScore.js';
+import { rewriteImg, pickThumb } from '../lib/img.js';
 import { stripeClient, createPaymentIntent, createConnectAccount, createOnboardingLink, getAccountStatus, verifyWebhook } from '../src/adapters/stripe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -380,7 +381,7 @@ async function refreshMvHandler(req, res) {
                  min(catalog_price) FILTER (WHERE catalog_price > 0) AS price_min,
                  max(catalog_price) FILTER (WHERE catalog_price <= 5000000) AS price_max,
                  sum(COALESCE(sales_30d,0))::bigint AS sales_30d,
-                 (array_agg(ebay_thumb ORDER BY sales_30d DESC NULLS LAST) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS thumbnail
+                 (array_agg(COALESCE(r2_thumb, ebay_thumb) ORDER BY sales_30d DESC NULLS LAST) FILTER (WHERE COALESCE(r2_thumb, ebay_thumb) IS NOT NULL))[1] AS thumbnail
           FROM cards WHERE card_set IS NOT NULL AND card_set <> ''
           GROUP BY card_set
         ) a
@@ -1105,7 +1106,9 @@ app.get('/api/cards/:id', async (req, res) => {
       id = await resolveCardId(pool, id);
       if (!id) return res.status(404).json({ error: 'not found' });
     }
-    let { rows: [card] } = await pool.query('SELECT * FROM mv_card_feed WHERE id = $1', [id]);
+    // mv_card_feed has no r2_thumb — join cards (PK lookup) for the R2 image
+    let { rows: [card] } = await pool.query(
+      'SELECT f.*, c.r2_thumb FROM mv_card_feed f LEFT JOIN cards c ON c.id = f.id WHERE f.id = $1', [id]);
     if (!card) {
       // Not the family's display-tier row (or unpriced/new) — fall back to cards
       // + sibling grade tiers of the same family (player/set/variant/number).
@@ -1146,7 +1149,7 @@ app.get('/api/cards/:id', async (req, res) => {
       sales30d: Number(card.sales_30d) || 0,
       gain7d: Number(card.gain_7d) || 0,
       rookie: card.rookie || false,
-      thumbnail: card.ebay_thumb || card.image_url || null,
+      thumbnail: pickThumb(card),
       variant: card.variant || '', num: card.number || '',
       cardhedge_id: card.cardhedge_id || null,
       gradeCount: tiers.length || Number(card.grade_count) || 1,
@@ -1201,7 +1204,7 @@ app.get('/api/market/heatmap', async (req, res) => {
       const cols = `id AS "cardId", player, sport, card_set AS "set", grader, grade, year,
                variant, number AS num, catalog_price AS "marketPrice",
                ch_price_lo AS lo, ch_price_hi AS hi, ch_confidence AS confidence,
-               ebay_thumb AS thumbnail, image_url, rookie, cardhedge_id,
+               r2_thumb, ebay_thumb, image_url, rookie, cardhedge_id,
                sales_7d, sales_30d, gain_7d`;
       const sportClause = sport ? ` AND sport = $1` : '';
       const params = sport ? [sport] : [];
@@ -1220,6 +1223,7 @@ app.get('/api/market/heatmap', async (req, res) => {
         seen.add(key);
         c.grader = normGrader(c.grader);
         c.grade = normGrade(c.grade);
+        c.thumbnail = pickThumb(c); // R2-first
         return true;
       });
       cachedPool = { rows: deduped, expires: Date.now() + 5 * 60 * 1000 };
@@ -1304,7 +1308,7 @@ app.get('/api/market/hero', async (req, res) => {
         grader: normGrader(x.grader), grade: normGrade(x.grade),
         marketPrice: Number(x.catalog_price) || 0,
         gain7d: Number(x.gain_7d) || 0,
-        thumbnail: x.r2_thumb || ebay,
+        thumbnail: rewriteImg(x.r2_thumb) || ebay,
         thumbAlt: (x.r2_thumb && ebay) ? ebay : null,
       };
     };
@@ -1363,10 +1367,11 @@ app.get('/api/market/hot-board', async (req, res) => {
     let thumbs = new Map();
     if (rows.length) {
       const { rows: t } = await pool.query(`
-        SELECT DISTINCT ON (player, sport) player, sport, id, ebay_thumb, image_url
-        FROM mv_card_feed WHERE player = ANY($1)
-        ORDER BY player, sport, (ebay_thumb IS NOT NULL OR image_url IS NOT NULL) DESC,
-                 sales_7d DESC NULLS LAST`, [rows.map(x => x.player)]);
+        SELECT DISTINCT ON (f.player, f.sport) f.player, f.sport, f.id, f.ebay_thumb, f.image_url, c.r2_thumb
+        FROM mv_card_feed f LEFT JOIN cards c ON c.id = f.id
+        WHERE f.player = ANY($1)
+        ORDER BY f.player, f.sport, (c.r2_thumb IS NOT NULL OR f.ebay_thumb IS NOT NULL OR f.image_url IS NOT NULL) DESC,
+                 f.sales_7d DESC NULLS LAST`, [rows.map(x => x.player)]);
       thumbs = new Map(t.map(x => [`${x.player}|${x.sport}`, x]));
     }
 
@@ -1377,7 +1382,7 @@ app.get('/api/market/hot-board', async (req, res) => {
         sales7d: Number(p.s7) || 0, sales30d: Number(p.s30) || 0,
         gain7d: Number(p.wgain) || 0, families: Number(p.families) || 0,
         topPrice: Number(p.top_price) || 0,
-        thumbnail: t.ebay_thumb || t.image_url || null,
+        thumbnail: pickThumb(t),
         topCardId: t.id || null,
       };
     });
@@ -1431,7 +1436,7 @@ app.get('/api/market/worth-grading', optionalAuth, async (req, res) => {
            AND sum(COALESCE(sales_30d,0)) >= 1
       )
       SELECT c.id, c.player, c.card_set, c.year, c.variant, c.number, c.sport, c.rookie,
-             COALESCE(c.ebay_thumb, c.image_url) AS thumbnail,
+             COALESCE(c.r2_thumb, c.ebay_thumb, c.image_url) AS thumbnail,
              f.cardhedge_id, f.raw_price, f.psa10, f.psa9, f.s30, f.s7
       FROM fam f
       JOIN cards c ON c.cardhedge_id = f.cardhedge_id AND upper(coalesce(c.grader,'')) = 'RAW'
@@ -1452,7 +1457,7 @@ app.get('/api/market/worth-grading', optionalAuth, async (req, res) => {
         cardId: c.id, cardhedgeId: c.cardhedge_id,
         player: c.player, set: c.card_set, year: c.year || '',
         variant: c.variant || '', number: c.number || '', sport: c.sport,
-        rookie: c.rookie || false, thumbnail: c.thumbnail || null,
+        rookie: c.rookie || false, thumbnail: rewriteImg(c.thumbnail) || null,
         raw: Number(c.raw_price), psa10: Number(c.psa10),
         psa9: c.psa9 != null ? Number(c.psa9) : null,
         sales30d: Number(c.s30) || 0, sales7d: Number(c.s7) || 0,
@@ -1577,6 +1582,7 @@ app.get('/api/market/feed', async (req, res) => {
                  (array_agg(ch_price_lo ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS ch_price_lo,
                  (array_agg(ch_price_hi ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS ch_price_hi,
                  (array_agg(ch_confidence ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST))[1] AS ch_confidence,
+                 (array_agg(r2_thumb ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE r2_thumb IS NOT NULL))[1] AS r2_thumb,
                  (array_agg(ebay_thumb ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS ebay_thumb,
                  (array_agg(image_url ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url,
                  (array_agg(cardhedge_id ORDER BY m.sales_7d DESC NULLS LAST, m.catalog_price DESC NULLS LAST) FILTER (WHERE cardhedge_id IS NOT NULL))[1] AS cardhedge_id,
@@ -1608,6 +1614,16 @@ app.get('/api/market/feed', async (req, res) => {
         `SELECT COUNT(*) FROM mv_card_feed ${mvWhere}`,
         params
       ));
+
+      // mv_card_feed has no r2_thumb — hydrate this page's rows with our R2
+      // images via one indexed PK lookup (result is cached 5–15 min anyway).
+      const pageIds = cards.map(c => c.id).filter(Boolean);
+      if (pageIds.length) {
+        const { rows: r2rows } = await pool.query(
+          'SELECT id, r2_thumb FROM cards WHERE id = ANY($1) AND r2_thumb IS NOT NULL', [pageIds]);
+        const r2map = new Map(r2rows.map(x => [x.id, x.r2_thumb]));
+        for (const c of cards) c.r2_thumb = r2map.get(c.id) || null;
+      }
     }
 
     const feed = cards.map(card => {
@@ -1625,7 +1641,7 @@ app.get('/api/market/feed', async (req, res) => {
         sales30d: Number(card.sales_30d) || 0,
         gain7d: Number(card.gain_7d) || 0,
         rookie: card.rookie || false,
-        thumbnail: card.ebay_thumb || card.image_url || null,
+        thumbnail: pickThumb(card),
         label: card.ch_confidence ? `Card Hedge Grade ${card.ch_confidence}` : (mp ? 'Catalog price' : ''),
         variant: card.variant || '', num: card.number || '',
         cardhedge_id: card.cardhedge_id || null,
@@ -1713,7 +1729,7 @@ app.post('/api/catalog/search', async (req, res) => {
     const { rows: famRows } = await pool.query(
       `WITH m AS (
          SELECT id, player, card_set, year, variant, number, sport, grader, grade,
-                catalog_price, ebay_thumb, image_url, sales_30d,
+                catalog_price, r2_thumb, ebay_thumb, image_url, sales_30d,
                 ${REL} AS rel
          FROM cards
          WHERE ${conds.join(' AND ')}
@@ -1725,6 +1741,7 @@ app.post('/api/catalog/search', async (req, res) => {
               max(rel) AS rel,
               max(catalog_price) AS top_price,
               sum(coalesce(sales_30d,0)) AS liquidity,
+              (array_agg(r2_thumb) FILTER (WHERE r2_thumb IS NOT NULL))[1] AS r2_thumb,
               (array_agg(ebay_thumb) FILTER (WHERE ebay_thumb IS NOT NULL))[1] AS ebay_thumb,
               (array_agg(image_url) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url,
               json_agg(json_build_object('id', id, 'grader', grader, 'grade', grade,
@@ -1761,7 +1778,9 @@ app.post('/api/catalog/search', async (req, res) => {
         player: f.player, card_set: f.card_set, variant: f.variant || '',
         number: f.number || '', sport: f.sport || '', year: f.year || '',
         topPrice: Number(f.top_price) || 0, liquidity: Number(f.liquidity) || 0,
-        ebay_thumb: f.ebay_thumb || null, image_url: f.image_url || null,
+        // R2-first: clients render ebay_thumb || image_url, so surface our R2
+        // copy through the ebay_thumb field (host-rewritten via IMG_BASE).
+        ebay_thumb: rewriteImg(f.r2_thumb) || f.ebay_thumb || null, image_url: f.image_url || null,
         tiers,
       };
     });
@@ -1899,7 +1918,7 @@ app.get('/api/market/arb', optionalAuth, async (req, res) => {
 
     const arbCols = `id, player, sport, card_set, grader, grade, year, variant,
              catalog_price, ch_price_lo, ch_price_hi, gain_7d, sales_7d, sales_30d,
-             ebay_thumb, cardhedge_id, rookie, ch_confidence`;
+             r2_thumb, ebay_thumb, cardhedge_id, rookie, ch_confidence`;
 
     const mapCard = (c) => ({
       id: c.id, player: c.player, sport: c.sport, set: c.card_set,
@@ -1908,7 +1927,7 @@ app.get('/api/market/arb', optionalAuth, async (req, res) => {
       lo: Number(c.ch_price_lo) || 0, hi: Number(c.ch_price_hi) || 0,
       gain7d: Number(c.gain_7d) || 0, sales7d: Number(c.sales_7d) || 0,
       sales30d: Number(c.sales_30d) || 0,
-      thumbnail: c.ebay_thumb, cardhedge_id: c.cardhedge_id, rookie: c.rookie,
+      thumbnail: pickThumb(c), cardhedge_id: c.cardhedge_id, rookie: c.rookie,
       confidence: c.ch_confidence || null,
       // GEMLINE Score — 0–100 deal quality, computed server-side (lib/dealScore.js)
       score: computeDealScore(c),
@@ -2045,7 +2064,7 @@ async function fetchTopDealRows(pool, limit = 200) {
   const { rows } = await pool.query(
     `SELECT id, player, sport, card_set, grader, grade, year, variant, number,
             catalog_price, ch_price_lo, ch_price_hi, gain_7d, sales_7d, sales_30d,
-            ebay_thumb, ch_confidence, rookie
+            r2_thumb, ebay_thumb, ch_confidence, rookie
      FROM cards
      WHERE ch_price_lo > 0 AND ch_price_hi > 0
        AND ch_price_hi * 0.925 - ch_price_lo >= 5
@@ -2348,7 +2367,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
     try {
       const { rows: own } = await pool.query(
         `SELECT l.id AS listing_id, l.price, c.id AS card_id, c.player, c.card_set, c.grader, c.grade,
-                c.year, c.number, c.sport, c.catalog_price, c.ebay_thumb
+                c.year, c.number, c.sport, c.catalog_price, c.r2_thumb, c.ebay_thumb
          FROM listings l JOIN cards c ON c.id = l.card_id
          WHERE l.status = 'active' AND c.catalog_price > 0 AND l.price > 0
            AND l.price < 0.85 * c.catalog_price
@@ -2365,7 +2384,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
           margin: +(fmv * (1 - FEE) - price).toFixed(2),
           marginPct: +(((fmv * (1 - FEE) - price) / price) * 100).toFixed(1),
           url: `/card/${o.card_id}`,
-          image: o.ebay_thumb || null,
+          image: pickThumb(o),
           cardId: o.card_id,
         });
       }
@@ -2419,7 +2438,7 @@ app.get('/api/market/live-deals', requireAuth, requirePro, async (req, res) => {
                 goingRate: fmv,
                 margin, marginPct: +((margin / total) * 100).toFixed(1),
                 url: it.itemWebUrl,
-                image: it.image?.imageUrl || it.thumbnailImages?.[0]?.imageUrl || c.ebay_thumb || null,
+                image: it.image?.imageUrl || it.thumbnailImages?.[0]?.imageUrl || pickThumb(c),
                 cardId: c.id,
               });
             }
@@ -2462,7 +2481,7 @@ app.get('/api/market/track-record', requireAuth, requirePro, async (req, res) =>
       pool.query(
         `SELECT s.snapshot_date, s.card_id, s.score, s.market_price, s.net_edge, s.market_median,
                 c.player, c.card_set, c.grader, c.grade, c.year, c.sport,
-                c.catalog_price AS current_price, c.ebay_thumb
+                c.catalog_price AS current_price, c.r2_thumb, c.ebay_thumb
          FROM deal_snapshots s JOIN cards c ON c.id = s.card_id
          WHERE s.snapshot_date <= CURRENT_DATE - 7
          ORDER BY s.snapshot_date DESC, s.score DESC LIMIT 300`),
@@ -2474,7 +2493,7 @@ app.get('/api/market/track-record', requireAuth, requirePro, async (req, res) =>
       .map(r => ({
         date: r.snapshot_date, cardId: r.card_id, score: r.score,
         player: r.player, set: r.card_set, grader: normGrader(r.grader), grade: normGrade(r.grade),
-        year: r.year, sport: r.sport, thumbnail: r.ebay_thumb,
+        year: r.year, sport: r.sport, thumbnail: pickThumb(r),
         flaggedPrice: Number(r.market_price), currentPrice: Number(r.current_price),
         netEdge: Number(r.net_edge) || 0,
         movePct: +(((Number(r.current_price) - Number(r.market_price)) / Number(r.market_price)) * 100).toFixed(1),
@@ -2720,7 +2739,7 @@ app.get('/api/watchlist', requireAuth, async (req, res) => {
       SELECT w.card_id, w.ref_price, w.alert_pct, w.created_at,
              c.player, c.card_set, c.year, c.variant, c.number, c.sport,
              c.grader, c.grade, c.catalog_price, c.gain_7d, c.sales_30d,
-             c.ebay_thumb, c.image_url,
+             c.r2_thumb, c.ebay_thumb, c.image_url,
              (SELECT COUNT(*) FROM listings l WHERE l.card_id = w.card_id AND l.status = 'active') AS live_listings
       FROM watchlist w JOIN cards c ON c.id = w.card_id
       WHERE w.user_id = $1 ORDER BY w.created_at DESC LIMIT 200`, [req.userId]);
@@ -2729,7 +2748,7 @@ app.get('/api/watchlist', requireAuth, async (req, res) => {
       items: rows.map(x => ({
         cardId: x.card_id, player: x.player, cardSet: x.card_set, year: x.year,
         variant: x.variant, number: x.number, sport: x.sport, grader: x.grader, grade: x.grade,
-        thumbnail: x.ebay_thumb || x.image_url || null,
+        thumbnail: pickThumb(x),
         refPrice: x.ref_price != null ? Number(x.ref_price) : null,
         price: x.catalog_price != null ? Number(x.catalog_price) : null,
         gain7d: x.gain_7d != null ? Number(x.gain_7d) : null,
@@ -3003,7 +3022,7 @@ app.get('/api/auctions/live', async (req, res) => {
         l.created_at AS start_time, l.status,
         CASE WHEN l.ends_at > NOW() THEN 'live' ELSE 'ended' END AS computed_status,
         c.player, c.sport, c.card_set, c.grader, c.grade, c.variant,
-        c.ebay_thumb, c.image_url, c.catalog_price,
+        c.r2_thumb, c.ebay_thumb, c.image_url, c.catalog_price,
         u.handle AS seller_handle,
         (SELECT COUNT(*) FROM bids WHERE listing_id = l.id) AS bid_count,
         (SELECT MAX(amount) FROM bids WHERE listing_id = l.id) AS highest_bid,
@@ -3021,6 +3040,8 @@ app.get('/api/auctions/live', async (req, res) => {
       const reserve = a.reserve_price != null ? Number(a.reserve_price) : null;
       return {
         ...a,
+        // R2-first: live page renders a.ebay_thumb || a.image_url
+        ebay_thumb: rewriteImg(a.r2_thumb) || a.ebay_thumb,
         status: a.computed_status,
         current_price: currentPrice,
         bid_count: Number(a.bid_count || 0),
@@ -3740,7 +3761,7 @@ app.post('/api/collection/import/match', requireAuth, rateLimit({ max: 30, windo
       params.push(variant ? `%${variant}%` : null); const varIdx = params.length;
       let { rows: cands } = await pool.query(`
         SELECT id, player, card_set, year, variant, number, sport, grader, grade,
-               catalog_price, cardhedge_id, ebay_thumb, image_url, sales_30d,
+               catalog_price, cardhedge_id, r2_thumb, ebay_thumb, image_url, sales_30d,
                (COALESCE(number,'') = COALESCE($${numIdx}, '\u0001'))::int AS num_hit,
                (CASE WHEN $${varIdx}::text IS NOT NULL AND variant ILIKE $${varIdx} THEN 1 ELSE 0 END) AS var_hit
         FROM cards WHERE ${conds.join(' AND ')}
@@ -3754,7 +3775,7 @@ app.post('/api/collection/import/match', requireAuth, rateLimit({ max: 30, windo
         pParams.push(number || null);
         ({ rows: cands } = await pool.query(`
           SELECT id, player, card_set, year, variant, number, sport, grader, grade,
-                 catalog_price, cardhedge_id, ebay_thumb, image_url, sales_30d,
+                 catalog_price, cardhedge_id, r2_thumb, ebay_thumb, image_url, sales_30d,
                  (COALESCE(number,'') = COALESCE($${pParams.length}, '\u0001'))::int AS num_hit, 0 AS var_hit
           FROM cards WHERE ${pConds.join(' AND ')}
           ORDER BY num_hit DESC, (catalog_price IS NOT NULL AND catalog_price > 0) DESC, sales_30d DESC NULLS LAST
@@ -3798,7 +3819,7 @@ app.post('/api/collection/import/match', requireAuth, rateLimit({ max: 30, windo
           variant: row.variant, number: row.number, sport: row.sport,
           grader: row.grader || 'RAW', grade: row.grade || '',
           price: row.catalog_price != null ? Number(row.catalog_price) : null,
-          thumbnail: row.ebay_thumb || row.image_url || null,
+          thumbnail: pickThumb(row),
           gradeMatched,
         };
       };
@@ -3876,7 +3897,7 @@ app.get('/api/listings', async (req, res) => {
       SELECT l.id, l.card_id, l.price, l.kind, l.status, l.open_to_offers,
              l.listing_type, l.created_at, u.handle AS seller_handle,
              c.player, c.card_set, c.grader, c.grade, c.year, c.variant, c.sport,
-             c.ebay_thumb, c.image_url,
+             c.r2_thumb, c.ebay_thumb, c.image_url,
              (SELECT COUNT(*) FROM listing_offers o WHERE o.listing_id = l.id AND o.status = 'pending') AS offer_count
       FROM listings l
       LEFT JOIN users u ON u.id = l.seller_id
@@ -3896,7 +3917,7 @@ app.get('/api/listings', async (req, res) => {
         offer_count: Number(l.offer_count) || 0,
         player: l.player, card_set: l.card_set, grader: l.grader, grade: l.grade,
         year: l.year, variant: l.variant, sport: l.sport,
-        ebay_thumb: l.ebay_thumb, image_url: l.image_url,
+        ebay_thumb: rewriteImg(l.r2_thumb) || l.ebay_thumb, image_url: l.image_url,
         created_at: l.created_at,
       })),
     });
@@ -3915,7 +3936,7 @@ app.get('/api/listings/mine', requireAuth, async (req, res) => {
       SELECT l.id, l.card_id, l.price, l.kind, l.status, l.open_to_offers,
              l.listing_type, l.description, l.photo_urls, l.created_at,
              c.player, c.card_set, c.grader, c.grade, c.year, c.variant, c.sport,
-             c.ebay_thumb, c.image_url,
+             c.r2_thumb, c.ebay_thumb, c.image_url,
              (SELECT COUNT(*) FROM listing_offers o WHERE o.listing_id = l.id AND o.status = 'pending') AS offer_count
       FROM listings l
       LEFT JOIN cards c ON c.id = l.card_id
@@ -3935,7 +3956,7 @@ app.get('/api/listings/mine', requireAuth, async (req, res) => {
         offer_count: Number(l.offer_count) || 0,
         player: l.player, card_set: l.card_set, grader: l.grader, grade: l.grade,
         year: l.year, variant: l.variant, sport: l.sport,
-        ebay_thumb: l.ebay_thumb, image_url: l.image_url,
+        ebay_thumb: rewriteImg(l.r2_thumb) || l.ebay_thumb, image_url: l.image_url,
         created_at: l.created_at,
       })),
     });
@@ -4388,7 +4409,7 @@ app.get('/api/offers', requireAuth, async (req, res) => {
     const base = `
       SELECT o.id, o.listing_id, o.amount, o.status, o.created_at, o.counter_amount, o.countered_at,
              l.price AS listing_price, l.status AS listing_status, l.seller_id, o.buyer_id,
-             c.id AS card_id, c.player, c.card_set, c.grader, c.grade, c.ebay_thumb, c.image_url,
+             c.id AS card_id, c.player, c.card_set, c.grader, c.grade, c.r2_thumb, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle
       FROM listing_offers o
       JOIN listings l ON l.id = o.listing_id
@@ -4406,7 +4427,7 @@ app.get('/api/offers', requireAuth, async (req, res) => {
       counteredAt: o.countered_at || null,
       status: o.status, listingStatus: o.listing_status, createdAt: o.created_at,
       cardId: o.card_id, player: o.player, set: o.card_set, grader: o.grader, grade: o.grade,
-      thumbnail: o.ebay_thumb || o.image_url || null,
+      thumbnail: pickThumb(o),
       buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
     });
     res.json({ received: rec.rows.map(shape), sent: sent.rows.map(shape) });
@@ -4861,7 +4882,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
              (SELECT COUNT(*) FROM order_messages m2 WHERE m2.order_id = o.id) AS message_count,
              EXISTS (SELECT 1 FROM seller_reviews sr WHERE sr.order_id = o.id) AS reviewed,
              tl.timeline,
-             c.player, c.card_set, c.grader, c.grade, c.year, c.ebay_thumb, c.image_url,
+             c.player, c.card_set, c.grader, c.grade, c.year, c.r2_thumb, c.ebay_thumb, c.image_url,
              ub.handle AS buyer_handle, us.handle AS seller_handle,
              s.carrier, s.tracking_number, s.shipped_at, s.delivered_at AS ship_delivered_at
       FROM orders o
@@ -4889,7 +4910,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       paymentDueAt: o.payment_due_at || null,
       needsPayment: o.status === 'pending_payment',
       player: o.player, set: o.card_set, grader: o.grader, grade: o.grade, year: o.year,
-      thumbnail: o.ebay_thumb || o.image_url || null,
+      thumbnail: pickThumb(o),
       buyerHandle: o.buyer_handle || 'buyer', sellerHandle: o.seller_handle || 'seller',
       sellerId: o.seller_id, reviewed: !!o.reviewed,
       carrier: o.carrier || null, trackingNumber: o.tracking_number || null,
@@ -5006,7 +5027,7 @@ app.get('/api/wants', async (req, res) => {
 
     let query = `
       SELECT w.*, c.player, c.sport, c.card_set, c.grader, c.grade, c.year, c.variant,
-             c.ebay_thumb, c.image_url, c.catalog_price, u.handle as buyer_handle
+             COALESCE(c.r2_thumb, c.ebay_thumb) AS ebay_thumb, c.image_url, c.catalog_price, u.handle as buyer_handle
       FROM wants w
       JOIN cards c ON w.card_id = c.id
       JOIN users u ON w.user_id = u.id
@@ -5025,7 +5046,7 @@ app.get('/api/wants', async (req, res) => {
     }
     query += ' LIMIT 100';
     const { rows } = await pool.query(query, params);
-    res.json({ wants: rows });
+    res.json({ wants: rows.map(w => ({ ...w, ebay_thumb: rewriteImg(w.ebay_thumb) })) });
   } catch (e) { res.json({ wants: [] }); }
 });
 
@@ -5037,7 +5058,7 @@ app.get('/api/wants/top', async (req, res) => {
     expireWants(pool);
     const { rows } = await pool.query(`
       SELECT w.*, c.player, c.sport, c.card_set, c.grader, c.grade,
-             c.ebay_thumb, c.image_url, u.handle as buyer_handle
+             COALESCE(c.r2_thumb, c.ebay_thumb) AS ebay_thumb, c.image_url, u.handle as buyer_handle
       FROM wants w
       JOIN cards c ON w.card_id = c.id
       JOIN users u ON w.user_id = u.id
@@ -5045,7 +5066,7 @@ app.get('/api/wants/top', async (req, res) => {
       ORDER BY w.boost_credits DESC, w.bid_amount DESC
       LIMIT 6
     `);
-    res.json({ wants: rows });
+    res.json({ wants: rows.map(w => ({ ...w, ebay_thumb: rewriteImg(w.ebay_thumb) })) });
   } catch (e) { res.json({ wants: [] }); }
 });
 
@@ -5086,8 +5107,8 @@ app.post('/api/packs/rip', requireAuth, async (req, res) => {
     // Standard: 3 commons ($1-25), 2 mid ($25-100), 1 chase slot (30% $100+, 5% $500+, 1% $1500+)
     // Premium: 2 commons, 2 mid ($25-100), 1 guaranteed $100+, 1 chase (40% $200+, 10% $1000+)
     // Elite: 2 commons, 3 mid ($25-200), 2 guaranteed $200+, 2 chase (30% $500+, 10% $2000+)
-    const sel = `id, player, sport, card_set, grader, grade, variant, catalog_price, ebay_thumb, image_url, cardhedge_id, sales_7d, sales_30d, gain_7d, rookie`;
-    const hasImg = `(ebay_thumb IS NOT NULL OR image_url IS NOT NULL)`;
+    const sel = `id, player, sport, card_set, grader, grade, variant, catalog_price, r2_thumb, ebay_thumb, image_url, cardhedge_id, sales_7d, sales_30d, gain_7d, rookie`;
+    const hasImg = `(r2_thumb IS NOT NULL OR ebay_thumb IS NOT NULL OR image_url IS NOT NULL)`;
 
     async function pull(minPrice, maxPrice, count) {
       const { rows } = await pool.query(
@@ -5152,7 +5173,7 @@ app.post('/api/packs/rip', requireAuth, async (req, res) => {
       grade: c.grade || '',
       variant: c.variant || '',
       market: Number(c.catalog_price) || 0,
-      thumbnail: c.ebay_thumb || c.image_url || null,
+      thumbnail: pickThumb(c),
       cardhedge_id: c.cardhedge_id,
       rookie: c.rookie || false,
       sales7d: Number(c.sales_7d) || 0,
@@ -5194,7 +5215,7 @@ app.get('/api/packs/collection', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT pp.id, pp.pack_type, pp.pulled_at,
              c.id as card_id, c.player, c.sport, c.card_set, c.grader, c.grade, c.variant,
-             c.catalog_price as market, c.ebay_thumb as thumbnail, c.image_url,
+             c.catalog_price as market, COALESCE(c.r2_thumb, c.ebay_thumb) as thumbnail, c.image_url,
              c.cardhedge_id, c.rookie, c.sales_7d, c.sales_30d, c.gain_7d
       FROM pack_pulls pp
       JOIN cards c ON pp.card_id = c.id
@@ -5203,7 +5224,7 @@ app.get('/api/packs/collection', requireAuth, async (req, res) => {
       LIMIT 200
     `, [req.userId]);
 
-    res.json({ pulls: rows });
+    res.json({ pulls: rows.map(p => ({ ...p, thumbnail: rewriteImg(p.thumbnail) })) });
   } catch (e) {
     console.error('packs/collection:', e.message);
     res.json({ pulls: [] });
@@ -5418,7 +5439,7 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
         [user.id]),
       pool.query(`
         SELECT p.id as portfolio_id, p.card_id, p.verification_status, c.player, c.sport, c.card_set, c.grader, c.grade,
-               c.catalog_price, c.ebay_thumb, c.image_url, c.variant, c.year
+               c.catalog_price, c.r2_thumb, c.ebay_thumb, c.image_url, c.variant, c.year
         FROM portfolios p
         JOIN cards c ON c.id = p.card_id
         WHERE p.user_id = $1
@@ -5441,7 +5462,7 @@ app.get('/api/users/:handle/portfolio', async (req, res) => {
       cards: cards.map(c => ({
         id: c.card_id, portfolioId: c.portfolio_id, player: c.player, sport: c.sport,
         set: c.card_set, grader: c.grader || 'RAW', grade: c.grade || '',
-        price: Number(c.catalog_price) || 0, thumbnail: c.ebay_thumb || c.image_url || null,
+        price: Number(c.catalog_price) || 0, thumbnail: pickThumb(c),
         variant: c.variant || '', year: c.year || '',
         verified: c.verification_status === 'verified',
       })),
@@ -5525,14 +5546,14 @@ app.get('/api/trades/proposals', requireAuth, async (req, res) => {
     let cardMap = {};
     if (allCardIds.size > 0) {
       const { rows: cards } = await pool.query(
-        'SELECT id, player, sport, card_set, grader, grade, catalog_price, ebay_thumb, image_url FROM cards WHERE id = ANY($1)',
+        'SELECT id, player, sport, card_set, grader, grade, catalog_price, r2_thumb, ebay_thumb, image_url FROM cards WHERE id = ANY($1)',
         [Array.from(allCardIds)]
       );
       cards.forEach(c => { cardMap[c.id] = c; });
     }
     const enrichCards = (ids) => (ids || []).map(id => {
       const c = cardMap[id];
-      return c ? { id: c.id, player: c.player, sport: c.sport, set: c.card_set, grader: c.grader || 'RAW', grade: c.grade || '', market: Number(c.catalog_price) || 0, thumbnail: c.ebay_thumb || c.image_url || null } : { id, player: 'Unknown', market: 0 };
+      return c ? { id: c.id, player: c.player, sport: c.sport, set: c.card_set, grader: c.grader || 'RAW', grade: c.grade || '', market: Number(c.catalog_price) || 0, thumbnail: pickThumb(c) } : { id, player: 'Unknown', market: 0 };
     });
     res.json({
       incoming: incoming.map(tp => ({ ...tp, offered_cards: enrichCards(tp.offered_card_ids), requested_cards: enrichCards(tp.requested_card_ids) })),
@@ -5655,7 +5676,7 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT p.id, p.type, p.body, p.likes, p.created_at, p.card_id,
              u.id as user_id, u.handle, u.avatar_url,
-             c.player, c.grader, c.grade, c.catalog_price, c.sport, c.ebay_thumb, c.image_url,
+             c.player, c.grader, c.grade, c.catalog_price, c.sport, c.r2_thumb, c.ebay_thumb, c.image_url,
              (SELECT COUNT(*)::int FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
              ${req.userId ? `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $3) as user_liked` : `false as user_liked`}
       FROM posts p
@@ -5678,7 +5699,7 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
       card: p.card_id ? {
         id: p.card_id, player: p.player, grader: p.grader, grade: p.grade,
         value: Number(p.catalog_price) || 0, sport: p.sport,
-        thumbnail: p.ebay_thumb || p.image_url || null,
+        thumbnail: pickThumb(p),
       } : null,
     }));
 
@@ -5691,13 +5712,13 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
       const [lst, sold, joined] = await Promise.allSettled([
         pool.query(`
           SELECT l.id, l.price, l.created_at, u.handle, c.id AS card_id, c.player,
-                 c.grader, c.grade, c.sport, c.catalog_price, c.ebay_thumb, c.image_url
+                 c.grader, c.grade, c.sport, c.catalog_price, c.r2_thumb, c.ebay_thumb, c.image_url
           FROM listings l JOIN users u ON u.id = l.seller_id JOIN cards c ON c.id = l.card_id
           WHERE l.status = 'active' AND l.created_at > now() - interval '30 days' AND ${notTest}
           ORDER BY l.created_at DESC LIMIT 6`),
         pool.query(`
           SELECT o.id, o.amount, o.created_at, u.handle, c.id AS card_id, c.player,
-                 c.grader, c.grade, c.sport, c.catalog_price, c.ebay_thumb, c.image_url
+                 c.grader, c.grade, c.sport, c.catalog_price, c.r2_thumb, c.ebay_thumb, c.image_url
           FROM orders o JOIN users u ON u.id = o.seller_id JOIN cards c ON c.id = o.card_id
           WHERE o.status IN ('escrow_held','awaiting_shipment','shipped','delivered','inspection','settled')
             AND o.created_at > now() - interval '30 days' AND ${notTest}
@@ -5710,7 +5731,7 @@ app.get('/api/posts/feed', optionalAuth, async (req, res) => {
       const cardOf = (r) => ({
         id: r.card_id, player: r.player, grader: r.grader, grade: r.grade,
         value: Number(r.catalog_price) || 0, sport: r.sport,
-        thumbnail: r.ebay_thumb || r.image_url || null,
+        thumbnail: pickThumb(r),
       });
       const usd = (n) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
       const events = [];
@@ -6420,7 +6441,7 @@ app.post('/api/cards/identify', rateLimit({ max: 10, windowMs: 60_000 }), async 
       // Attempt to find recently added cards as a fallback sample
       const { rows } = await pool.query(`
         SELECT id, player, sport, card_set, grader, grade, year, variant,
-               catalog_price, ebay_thumb, cardhedge_id
+               catalog_price, r2_thumb, ebay_thumb, cardhedge_id
         FROM cards
         WHERE ebay_thumb IS NOT NULL
         ORDER BY RANDOM()
@@ -6436,7 +6457,7 @@ app.post('/api/cards/identify', rateLimit({ max: 10, windowMs: 60_000 }), async 
           grader: card.grader,
           grade: card.grade,
           cardId: card.id,
-          thumbnail: card.ebay_thumb,
+          thumbnail: pickThumb(card),
           confidence: 'low',
           message: 'Visual identification in beta — please verify the details.',
         };
@@ -6514,13 +6535,14 @@ app.get('/api/store/:handle', async (req, res) => {
     // Get active listings
     const { rows: listings } = await pool.query(`
       SELECT l.id, l.price AS ask_cents, l.created_at,
-             c.player, c.sport, c.card_set, c.year, c.grader, c.grade, c.ebay_thumb, c.variant
+             c.player, c.sport, c.card_set, c.year, c.grader, c.grade,
+             COALESCE(c.r2_thumb, c.ebay_thumb) AS ebay_thumb, c.variant
       FROM listings l
       JOIN cards c ON c.id = l.card_id
       WHERE l.seller_id = $1 AND l.status = 'active'
       ORDER BY l.created_at DESC LIMIT 24
     `, [rows[0].id]);
-    res.json({ store: rows[0], listings });
+    res.json({ store: rows[0], listings: listings.map(l => ({ ...l, ebay_thumb: rewriteImg(l.ebay_thumb) })) });
   } catch (e) {
     console.error('store profile error:', e.message);
     res.status(500).json({ error: 'Server error' });
@@ -7383,10 +7405,11 @@ app.get('/api/profile/:handle', async (req, res) => {
     // Showcase cards (split by type, max 3 each for public)
     const { rows: showcase } = await pool.query(
       `SELECT us.card_id, us.position, us.type, c.id, c.player, c.sport, c.card_set, c.grader, c.grade,
-              c.variant, c.catalog_price, c.ebay_thumb as thumbnail, c.image_url, c.cardhedge_id
+              c.variant, c.catalog_price, COALESCE(c.r2_thumb, c.ebay_thumb) as thumbnail, c.image_url, c.cardhedge_id
        FROM user_showcase us JOIN cards c ON us.card_id = c.id
        WHERE us.user_id = $1 ORDER BY us.type, us.position, us.added_at`, [user.id]
     );
+    for (const s of showcase) s.thumbnail = rewriteImg(s.thumbnail);
     const digitalShowcase = showcase.filter(s => s.type === 'digital').slice(0, 3);
     const physicalShowcase = showcase.filter(s => s.type === 'physical').slice(0, 5);
 
@@ -7400,31 +7423,31 @@ app.get('/api/profile/:handle', async (req, res) => {
       const { rows: pulls } = await pool.query(
         `SELECT pp.id, pp.pack_type, pp.pulled_at,
                 c.id as card_id, c.player, c.sport, c.card_set, c.grader, c.grade, c.variant,
-                c.catalog_price as market, c.ebay_thumb as thumbnail, c.image_url, c.cardhedge_id
+                c.catalog_price as market, COALESCE(c.r2_thumb, c.ebay_thumb) as thumbnail, c.image_url, c.cardhedge_id
          FROM pack_pulls pp JOIN cards c ON pp.card_id = c.id
          WHERE pp.user_id = $1 ORDER BY c.catalog_price DESC NULLS LAST`, [user.id]
       );
-      recentPulls = pulls;
+      recentPulls = pulls.map(p => ({ ...p, thumbnail: rewriteImg(p.thumbnail) }));
 
       // All physical portfolio cards
       const { rows: portfolio } = await pool.query(
         `SELECT p.id as portfolio_id, p.purchase_price, p.created_at as added_at,
                 c.id as card_id, c.player, c.sport, c.card_set, c.grader, c.grade, c.variant,
-                c.catalog_price, c.ebay_thumb as thumbnail, c.image_url, c.cardhedge_id
+                c.catalog_price, COALESCE(c.r2_thumb, c.ebay_thumb) as thumbnail, c.image_url, c.cardhedge_id
          FROM portfolios p JOIN cards c ON p.card_id = c.id
          WHERE p.user_id = $1 ORDER BY c.catalog_price DESC NULLS LAST`, [user.id]
       );
-      portfolioCards = portfolio;
+      portfolioCards = portfolio.map(p => ({ ...p, thumbnail: rewriteImg(p.thumbnail) }));
     }
 
     // Active listings (always public)
     const { rows: listingRows } = await pool.query(
       `SELECT l.id, l.price, l.status, c.id as card_id, c.player, c.sport, c.card_set, c.grader, c.grade,
-              c.catalog_price, c.ebay_thumb as thumbnail, c.image_url
+              c.catalog_price, COALESCE(c.r2_thumb, c.ebay_thumb) as thumbnail, c.image_url
        FROM listings l JOIN cards c ON l.card_id = c.id
        WHERE l.seller_id = $1 AND l.status = 'active' ORDER BY l.created_at DESC LIMIT 20`, [user.id]
     );
-    listings = listingRows;
+    listings = listingRows.map(l => ({ ...l, thumbnail: rewriteImg(l.thumbnail) }));
 
     // Stats — parallelized to reduce latency from 5 round-trips to 1
     const [pullCountRes, portfolioCountRes, tradeCountRes, digitalValRes, physicalValRes] = await Promise.allSettled([
