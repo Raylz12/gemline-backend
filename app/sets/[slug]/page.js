@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { db } from '../../lib/serverDb';
+import { rewriteImg } from '../../../lib/img.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -143,7 +144,7 @@ export default async function SetPage({ params, searchParams }) {
                   style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10, textDecoration: 'none', color: 'var(--txt)' }}>
                   <span style={{ display: 'grid', placeItems: 'center', height: 110, borderRadius: 7, background: 'var(--panel-2)', overflow: 'hidden', marginBottom: 8 }}>
                     {(c.ebay_thumb || c.image_url)
-                      ? <img src={c.ebay_thumb || c.image_url} alt={c.player} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                      ? <img src={rewriteImg(c.ebay_thumb) || c.image_url} alt={c.player} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                       : <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.4)' }}>{(c.player || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 3).toUpperCase()}</span>}
                   </span>
                   <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.player}</span>

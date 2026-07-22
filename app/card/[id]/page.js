@@ -5,6 +5,7 @@ import { cache } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '../../lib/serverDb';
+import { rewriteImg } from '../../../lib/img.js';
 
 export const revalidate = 86400; // 24h ISR
 export const dynamicParams = true;
@@ -88,7 +89,7 @@ export default async function CardPage({ params }) {
   const price = Number(card.catalog_price) > 0 ? Number(card.catalog_price) : null;
   const gain = card.gain_7d != null ? Number(card.gain_7d) : null;
   const lowestAsk = listings.length ? Number(listings[0].price) / 100 : null;
-  const img = card.ebay_thumb || card.image_url || null;
+  const img = rewriteImg(card.ebay_thumb) || card.image_url || null;
 
   const jsonLd = {
     '@context': 'https://schema.org',
